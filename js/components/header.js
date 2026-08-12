@@ -1,5 +1,5 @@
 // js/components/header.js
-// Barra superior con bloqueo de local y botón para regresar al Index
+// Barra superior con bloqueo de local, pestaña de clientes para encargados y botón para regresar al Index
 import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { authManager } from '../core/authManager.js';
@@ -123,6 +123,10 @@ export function renderHeader(container) {
                             <span class="tab-icon">📥</span>
                             <span class="tab-text">Solicitudes</span>
                             ${pendingCount > 0 ? `<span class="badge-counter glow-red animate-bounce">${pendingCount}</span>` : ''}
+                        </button>
+                        <button class="nav-tab ${currentView === 'CLIENTS' ? 'active' : ''}" data-view="CLIENTS">
+                            <span class="tab-icon">👥</span>
+                            <span class="tab-text">Clientes</span>
                         </button>
                         <button class="nav-tab ${currentView === 'BUSINESS' ? 'active' : ''}" data-view="BUSINESS">
                             <span class="tab-icon">⚙️</span>

@@ -6,7 +6,7 @@ import { authManager } from '../core/authManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 
-let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'MACHINES', 'STAFF', 'SETTINGS'
+let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'MACHINES', 'STAFF'
 
 export function renderSuperadminView(container) {
     const businesses = tenantManager.getAllBusinesses();
@@ -90,7 +90,28 @@ export function renderSuperadminView(container) {
 
     // Crear nuevo encargado
     container.querySelector('#btn-create-manager')?.addEventListener('click', () => {
-        openCreateManagerModal(container);
+        openStaffFormModal(null, container);
+    });
+
+    // Editar Encargado
+    container.querySelectorAll('.btn-edit-staff').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const staff = authManager.getStaffUsers().find(u => u.id === id);
+            if (staff) openStaffFormModal(staff, container);
+        });
+    });
+
+    // Eliminar Encargado
+    container.querySelectorAll('.btn-delete-staff').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            if (confirm("¿Eliminar esta cuenta de encargado?")) {
+                await authManager.deleteStaffManager(id);
+                toast.info("Cuenta de encargado eliminada.");
+                renderSuperadminView(container);
+            }
+        });
     });
 
     // Eliminar Negocio en Cascada
@@ -111,18 +132,6 @@ export function renderSuperadminView(container) {
                 } catch (e) {
                     toast.error(e.message);
                 }
-            }
-        });
-    });
-
-    // Eliminar Encargado
-    container.querySelectorAll('.btn-delete-staff').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            if (confirm("¿Eliminar esta cuenta de encargado?")) {
-                await authManager.deleteStaffManager(id);
-                toast.info("Cuenta de encargado eliminada.");
-                renderSuperadminView(container);
             }
         });
     });
@@ -222,7 +231,7 @@ function renderTabContent(tab, businesses, staffUsers, managers) {
                         <span class="t-icon">🕹️</span>
                         <div>
                             <h3>Catálogo de Máquinas de: ${currentBiz.name}</h3>
-                            <small>Pistas registradas en la sucursal actual</small>
+                            <small>Pistas registradas en la sucursal activa</small>
                         </div>
                     </div>
                 </div>
@@ -266,8 +275,8 @@ function renderTabContent(tab, businesses, staffUsers, managers) {
                     <div class="title-with-icon">
                         <span class="t-icon">👥</span>
                         <div>
-                            <h3>Catálogo de Cuentas de Encargados y Superadministradores</h3>
-                            <small>Administra quién tiene acceso a cada local</small>
+                            <h3>Catálogo de Cuentas de Encargados y Credenciales</h3>
+                            <small>Como Superadmin puedes editar usuarios, nombres, contraseñas/PINs y locales asignados</small>
                         </div>
                     </div>
                 </div>
@@ -278,7 +287,7 @@ function renderTabContent(tab, businesses, staffUsers, managers) {
                             <tr>
                                 <th>Nombre</th>
                                 <th>Usuario</th>
-                                <th>PIN de Acceso</th>
+                                <th>PIN / Contraseña</th>
                                 <th>Rol</th>
                                 <th>Local Asignado</th>
                                 <th>Acciones</th>
@@ -300,14 +309,19 @@ function renderTabContent(tab, businesses, staffUsers, managers) {
                                             </span>
                                         </td>
                                         <td>
-                                            ${isSuper ? '<span class="highlight-cyan">Acceso a Todos los Locales</span>' : (biz ? biz.name : 'Sin asignar')}
+                                            ${isSuper ? '<span class="highlight-cyan">Acceso Global</span>' : (biz ? biz.name : 'Sin asignar')}
                                         </td>
                                         <td>
-                                            ${!isSuper ? `
-                                                <button class="btn btn-danger btn-xs btn-delete-staff" data-id="${u.id}" title="Eliminar encargado">
-                                                    🗑️ Eliminar
+                                            <div style="display:flex; gap:6px;">
+                                                <button class="btn btn-outline btn-xs btn-edit-staff" data-id="${u.id}" title="Editar datos y contraseña">
+                                                    ✏️ Editar
                                                 </button>
-                                            ` : '<span style="color:var(--text-dimmed); font-size:0.75rem;">Protegido</span>'}
+                                                ${!isSuper ? `
+                                                    <button class="btn btn-danger btn-xs btn-delete-staff" data-id="${u.id}" title="Eliminar encargado">
+                                                        🗑️
+                                                    </button>
+                                                ` : ''}
+                                            </div>
                                         </td>
                                     </tr>
                                 `;
@@ -320,6 +334,97 @@ function renderTabContent(tab, businesses, staffUsers, managers) {
     }
 
     return '';
+}
+
+function openStaffFormModal(staff = null, container) {
+    const isEdit = !!staff;
+    const businesses = tenantManager.getAllBusinesses();
+    const isSuper = staff?.role === 'SUPERADMIN';
+
+    const bizOptions = businesses.map(b => `
+        <option value="${b.id}" ${staff?.businessId === b.id ? 'selected' : ''}>
+            ${b.name} (${b.city})
+        </option>
+    `).join('');
+
+    const contentHtml = `
+        <form id="form-staff-edit" class="cyber-form">
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="stf-name"><span class="neon-arrow">◆</span> Nombre Completo *</label>
+                    <input type="text" id="stf-name" class="cyber-input" value="${staff ? staff.name : ''}" placeholder="Ej. Roberto Martínez" required>
+                </div>
+                <div class="form-group">
+                    <label for="stf-user"><span class="neon-arrow">◆</span> Nombre de Usuario *</label>
+                    <input type="text" id="stf-user" class="cyber-input" value="${staff ? staff.username : ''}" placeholder="Ej. manager_norte" required>
+                </div>
+            </div>
+
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="stf-pin"><span class="neon-arrow">◆</span> PIN / Contraseña de Acceso *</label>
+                    <input type="text" id="stf-pin" class="cyber-input" value="${staff ? staff.pin : ''}" placeholder="Ej. 1234" maxlength="10" required>
+                </div>
+                <div class="form-group">
+                    <label for="stf-email"><span class="neon-arrow">◆</span> Correo Electrónico</label>
+                    <input type="email" id="stf-email" class="cyber-input" value="${staff ? (staff.email || '') : ''}" placeholder="staff@piuhub.com">
+                </div>
+            </div>
+
+            ${!isSuper ? `
+                <div class="form-group">
+                    <label for="stf-biz"><span class="neon-arrow">◆</span> Local / Sucursal Asignada *</label>
+                    <select id="stf-biz" class="cyber-select" required>
+                        ${bizOptions}
+                    </select>
+                </div>
+            ` : ''}
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-stf">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-save-stf">
+            ${isEdit ? '💾 Guardar Cambios' : '👤 Crear Encargado'}
+        </button>
+    `;
+
+    const modalEl = modal.open({
+        title: isEdit ? `Editar Encargado: ${staff.name}` : 'Crear Nuevo Encargado',
+        icon: '👤',
+        contentHtml,
+        footerHtml,
+        maxWidth: '520px'
+    });
+
+    modalEl.querySelector('#btn-cancel-stf').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-stf').onclick = async () => {
+        const name = modalEl.querySelector('#stf-name').value.trim();
+        const username = modalEl.querySelector('#stf-user').value.trim();
+        const pin = modalEl.querySelector('#stf-pin').value.trim();
+        const email = modalEl.querySelector('#stf-email').value.trim();
+        const businessId = isSuper ? null : modalEl.querySelector('#stf-biz').value;
+
+        if (!name || !username || !pin) {
+            toast.error("Por favor completa los campos requeridos.");
+            return;
+        }
+
+        try {
+            if (isEdit) {
+                await authManager.updateStaffManager(staff.id, { name, username, pin, email, businessId });
+                toast.success(`Datos y contraseña de "${name}" actualizados.`);
+            } else {
+                await authManager.createStaffManager({ name, username, pin, email, businessId });
+                toast.success(`Encargado "${name}" creado exitosamente.`);
+            }
+            modal.close();
+            renderSuperadminView(container);
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
 }
 
 function openCreateBusinessModal(container) {
@@ -392,75 +497,6 @@ function openCreateBusinessModal(container) {
             await tenantManager.createBusiness({ name, city, logoIcon, whatsapp, openingTime, closingTime });
             modal.close();
             toast.success(`¡Local "${name}" creado exitosamente!`);
-            renderSuperadminView(container);
-        } catch (e) {
-            toast.error(e.message);
-        }
-    };
-}
-
-function openCreateManagerModal(container) {
-    const businesses = tenantManager.getAllBusinesses();
-    const bizOptions = businesses.map(b => `<option value="${b.id}">${b.name} (${b.city})</option>`).join('');
-
-    const contentHtml = `
-        <form id="form-create-manager" class="cyber-form">
-            <div class="form-row grid-2">
-                <div class="form-group">
-                    <label for="mgr-name"><span class="neon-arrow">◆</span> Nombre del Encargado *</label>
-                    <input type="text" id="mgr-name" class="cyber-input" placeholder="Ej. Roberto Martínez" required>
-                </div>
-                <div class="form-group">
-                    <label for="mgr-user"><span class="neon-arrow">◆</span> Usuario de Acceso *</label>
-                    <input type="text" id="mgr-user" class="cyber-input" placeholder="Ej. manager_gdl" required>
-                </div>
-            </div>
-
-            <div class="form-row grid-2">
-                <div class="form-group">
-                    <label for="mgr-pin"><span class="neon-arrow">◆</span> PIN de Acceso *</label>
-                    <input type="password" id="mgr-pin" class="cyber-input" placeholder="Ej. 1234" maxlength="6" required>
-                </div>
-                <div class="form-group">
-                    <label for="mgr-biz"><span class="neon-arrow">◆</span> Local Asignado *</label>
-                    <select id="mgr-biz" class="cyber-select" required>
-                        ${bizOptions}
-                    </select>
-                </div>
-            </div>
-        </form>
-    `;
-
-    const footerHtml = `
-        <button type="button" class="btn btn-secondary" id="btn-cancel-mgr">Cancelar</button>
-        <button type="button" class="btn btn-primary glow-red" id="btn-save-mgr">👤 Crear Encargado</button>
-    `;
-
-    const modalEl = modal.open({
-        title: 'Crear Cuenta de Encargado',
-        icon: '👥',
-        contentHtml,
-        footerHtml,
-        maxWidth: '520px'
-    });
-
-    modalEl.querySelector('#btn-cancel-mgr').onclick = () => modal.close();
-
-    modalEl.querySelector('#btn-save-mgr').onclick = async () => {
-        const name = modalEl.querySelector('#mgr-name').value.trim();
-        const username = modalEl.querySelector('#mgr-user').value.trim();
-        const pin = modalEl.querySelector('#mgr-pin').value.trim();
-        const businessId = modalEl.querySelector('#mgr-biz').value;
-
-        if (!name || !username || !pin) {
-            toast.error("Por favor completa los campos requeridos.");
-            return;
-        }
-
-        try {
-            await authManager.createStaffManager({ name, username, pin, businessId });
-            modal.close();
-            toast.success(`Encargado "${name}" creado exitosamente.`);
             renderSuperadminView(container);
         } catch (e) {
             toast.error(e.message);

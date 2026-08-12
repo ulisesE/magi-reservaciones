@@ -10,6 +10,7 @@ import { renderWeekView } from './views/weekView.js';
 import { renderMonthView } from './views/monthView.js';
 import { renderMachinesView } from './views/machinesView.js';
 import { renderRequestsView } from './views/requestsView.js';
+import { renderClientsView } from './views/clientsView.js';
 import { renderBusinessView } from './views/businessView.js';
 import { renderSuperadminView } from './views/superadminView.js';
 import { isFirebaseAvailable } from './firebaseConfig.js';
@@ -41,7 +42,7 @@ class App {
         // 4. Renderizar Header y Vista Activa
         this.render();
 
-        // 5. Suscribirse a cambios del Store y TenantManager para reactividad
+        // 5. Suscribirse a cambios para reactividad instantánea
         store.subscribe(() => this.render());
         tenantManager.subscribe(() => this.render());
         authManager.subscribe(() => this.render());
@@ -78,13 +79,13 @@ class App {
             const isSuperAdmin = authManager.isSuperAdmin();
             const currentView = store.currentView;
 
-            // Si no ha elegido un local y no está en la vista de Superadmin -> Mostrar Landing de Selección de Local
+            // Si no ha elegido un local y no está en la vista de Superadmin -> Mostrar Landing
             if (!isLocalSelected && (!isSuperAdmin || currentView !== 'SUPERADMIN')) {
                 renderLandingView(this.mainContent);
                 return;
             }
 
-            // Si está dentro de un local o es Superadmin en su panel
+            // Renderizar la vista activa
             switch (currentView) {
                 case 'DAY':
                     renderDayView(this.mainContent);
@@ -100,6 +101,9 @@ class App {
                     break;
                 case 'REQUESTS':
                     renderRequestsView(this.mainContent);
+                    break;
+                case 'CLIENTS':
+                    renderClientsView(this.mainContent);
                     break;
                 case 'BUSINESS':
                     renderBusinessView(this.mainContent);
