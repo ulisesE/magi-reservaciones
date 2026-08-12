@@ -4,17 +4,19 @@ import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { authManager } from '../core/authManager.js';
 import { catalogsManager } from '../core/catalogsManager.js';
+import { clientDirManager, openClientFormModal } from './clientsView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 
-let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'CABINETS', 'VERSIONS', 'MACHINES', 'STAFF'
+let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'PLAYERS', 'CABINETS', 'VERSIONS', 'MACHINES', 'STAFF'
 
-export function renderSuperadminView(container) {
+export async function renderSuperadminView(container) {
     const businesses = tenantManager.getAllBusinesses();
     const staffUsers = authManager.getStaffUsers();
     const managers = staffUsers.filter(u => u.role === 'MANAGER');
     const cabinetModels = catalogsManager.getCabinetModels();
     const gameVersions = catalogsManager.getGameVersions();
+    const players = await clientDirManager.loadClients();
     const totalBusinesses = businesses.length;
 
     container.innerHTML = `
@@ -26,7 +28,7 @@ export function renderSuperadminView(container) {
                         <span style="font-size:1.8rem;">👑</span>
                         <h2 class="friendly-date-title">Consola Global de Super Administrador</h2>
                     </div>
-                    <p class="subtitle-text">Administración completa de todos los locales, modelos de gabinete, versiones de software y personal.</p>
+                    <p class="subtitle-text">Administración completa de todos los locales, jugadores globales, modelos de gabinete, versiones de software y personal.</p>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                     <button class="btn btn-outline" id="btn-create-manager">
@@ -42,6 +44,9 @@ export function renderSuperadminView(container) {
             <div class="requests-filter-bar" style="margin-bottom:20px; flex-wrap:wrap;">
                 <button class="filter-tab ${activeSuperTab === 'BUSINESSES' ? 'active' : ''}" data-tab="BUSINESSES">
                     <span>🏢 Locales (${totalBusinesses})</span>
+                </button>
+                <button class="filter-tab ${activeSuperTab === 'PLAYERS' ? 'active' : ''}" data-tab="PLAYERS">
+                    <span>🕺 Clientes / Jugadores (${players.length})</span>
                 </button>
                 <button class="filter-tab ${activeSuperTab === 'CABINETS' ? 'active' : ''}" data-tab="CABINETS">
                     <span>🖥️ Modelos de Gabinete (${cabinetModels.length})</span>
@@ -59,7 +64,7 @@ export function renderSuperadminView(container) {
 
             <!-- Contenido Dinámico de la Pestaña -->
             <div id="superadmin-tab-content">
-                ${renderTabContent(activeSuperTab, businesses, staffUsers, managers, cabinetModels, gameVersions)}
+                ${renderTabContent(activeSuperTab, businesses, staffUsers, managers, cabinetModels, gameVersions, players)}
             </div>
         </div>
     `;
@@ -146,6 +151,32 @@ export function renderSuperadminView(container) {
     });
 
     // ==========================================
+    // Eventos de Jugadores / Clientes Globales
+    // ==========================================
+    container.querySelector('#btn-add-global-player')?.addEventListener('click', () => {
+        openClientFormModal(null, null, () => renderSuperadminView(container));
+    });
+
+    container.querySelectorAll('.btn-edit-global-player').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const player = players.find(p => p.id === id);
+            if (player) openClientFormModal(player, null, () => renderSuperadminView(container));
+        });
+    });
+
+    container.querySelectorAll('.btn-delete-global-player').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            if (confirm("¿Eliminar este jugador del directorio global?")) {
+                await clientDirManager.deleteClient(id);
+                toast.info("Jugador eliminado del catálogo.");
+                renderSuperadminView(container);
+            }
+        });
+    });
+
+    // ==========================================
     // Eventos de Modelos de Gabinete (Global)
     // ==========================================
     container.querySelector('#btn-add-cabinet-model')?.addEventListener('click', () => {
@@ -198,7 +229,7 @@ export function renderSuperadminView(container) {
     });
 }
 
-function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, gameVersions) {
+function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, gameVersions, players) {
     if (tab === 'BUSINESSES') {
         return `
             <div class="settings-card">
@@ -269,6 +300,77 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                                                         🗑️ Eliminar
                                                     </button>
                                                 ` : ''}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    if (tab === 'PLAYERS') {
+        return `
+            <div class="settings-card">
+                <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div class="title-with-icon">
+                        <span class="t-icon">🕺</span>
+                        <div>
+                            <h3>Directorio Global de Clientes / Jugadores PIU</h3>
+                            <small>Base de datos unificada de jugadores registrados en la plataforma</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm glow-red" id="btn-add-global-player">
+                        <span>➕ Registrar Nuevo Jugador</span>
+                    </button>
+                </div>
+
+                <div class="catalogs-table-wrapper">
+                    <table class="catalogs-table">
+                        <thead>
+                            <tr>
+                                <th>Jugador / GamerTag</th>
+                                <th>Liga (Ligas Potosinas)</th>
+                                <th>Teléfono / WhatsApp</th>
+                                <th>Correo</th>
+                                <th>Modo Preferido</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${players.map(p => {
+                                const cleanPhone = (p.phone || '').replace(/\D/g, '');
+                                const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
+
+                                return `
+                                    <tr>
+                                        <td>
+                                            <div style="display:flex; align-items:center; gap:8px;">
+                                                <span style="font-size:1.3rem;">${p.avatar || '🕺'}</span>
+                                                <div>
+                                                    <strong style="color:#ffffff;">${p.name}</strong>
+                                                    ${p.username ? `<div style="font-size:0.72rem; color:var(--text-muted);">@${p.username}</div>` : ''}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td><span class="badge badge-primary">${p.skillLevel || 'Liga C'}</span></td>
+                                        <td>
+                                            <span>${p.phone || 'N/A'}</span>
+                                            ${cleanPhone ? `
+                                                <a href="${waLink}" target="_blank" rel="noopener noreferrer" style="margin-left:6px; color:#25D366; font-size:0.8rem; font-weight:700;">
+                                                    💬 WhatsApp
+                                                </a>
+                                            ` : ''}
+                                        </td>
+                                        <td><span style="font-size:0.82rem; color:var(--text-muted);">${p.email || 'N/A'}</span></td>
+                                        <td><span style="font-size:0.82rem; color:var(--piu-cyan);">${p.preferredMode || 'Single / Double'}</span></td>
+                                        <td>
+                                            <div style="display:flex; gap:6px;">
+                                                <button class="btn btn-outline btn-xs btn-edit-global-player" data-id="${p.id}">✏️ Editar</button>
+                                                <button class="btn btn-danger btn-xs btn-delete-global-player" data-id="${p.id}" title="Eliminar jugador">🗑️</button>
                                             </div>
                                         </td>
                                     </tr>

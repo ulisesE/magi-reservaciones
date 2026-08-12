@@ -187,14 +187,15 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
     }
 
     if (tab === 'RULES') {
+        const displayedBusinesses = isSuperAdmin ? businesses : [currentBusiness];
         return `
             <div class="settings-card">
                 <div class="card-title-bar">
                     <div class="title-with-icon">
                         <span class="t-icon">⏰</span>
                         <div>
-                            <h3>Catálogo de Horarios de Apertura y Duración por Negocio</h3>
-                            <small>Configuración de bloques horarios por cada sucursal</small>
+                            <h3>Horarios de Apertura y Duración ${isSuperAdmin ? 'por Negocio' : `de ${currentBusiness.name}`}</h3>
+                            <small>${isSuperAdmin ? 'Configuración de bloques horarios por cada sucursal' : 'Reglas operativas y horarios configurados para esta sucursal'}</small>
                         </div>
                     </div>
                 </div>
@@ -212,7 +213,7 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
                             </tr>
                         </thead>
                         <tbody>
-                            ${businesses.map(b => `
+                            ${displayedBusinesses.map(b => `
                                 <tr>
                                     <td><strong>${b.logoIcon || '🕹️'} ${b.name}</strong></td>
                                     <td>${b.city}</td>

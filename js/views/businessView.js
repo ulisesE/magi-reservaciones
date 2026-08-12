@@ -1,7 +1,6 @@
-// js/views/businessView.js
-// Vista de Administración Multi-Negocio, Catálogos y Configuración del Sistema
 import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
+import { authManager } from '../core/authManager.js';
 import { COLLECTIONS } from '../firebaseConfig.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
@@ -9,18 +8,21 @@ import { toast } from '../components/toast.js';
 export function renderBusinessView(container) {
     const business = store.currentBusiness;
     const allBusinesses = tenantManager.getAllBusinesses();
+    const isSuperAdmin = authManager.isSuperAdmin();
 
     container.innerHTML = `
         <div class="business-view-wrapper animate-fade-in">
             <!-- Header -->
             <div class="view-header-bar">
                 <div class="header-left">
-                    <h2 class="friendly-date-title">🏢 Gestión de Negocios y Configuración Multi-Sucursal</h2>
-                    <p class="subtitle-text">Cada negocio opera con sus propias máquinas, horarios y reservaciones de forma modular e independiente.</p>
+                    <h2 class="friendly-date-title">🏢 Configuración de la Sucursal: ${business.name}</h2>
+                    <p class="subtitle-text">Ajustes operativos, horarios de apertura y datos de contacto de esta sucursal.</p>
                 </div>
-                <button class="btn btn-primary glow-red" id="btn-create-biz">
-                    <span>➕ Registrar Nueva Sucursal / Negocio</span>
-                </button>
+                ${isSuperAdmin ? `
+                    <button class="btn btn-primary glow-red" id="btn-create-biz">
+                        <span>➕ Registrar Nueva Sucursal / Negocio</span>
+                    </button>
+                ` : ''}
             </div>
 
             <!-- Grid de Configuración -->
@@ -90,130 +92,132 @@ export function renderBusinessView(container) {
                     </form>
                 </div>
 
-                <!-- Tarjeta de Catálogos del Sistema -->
-                <div class="settings-card">
-                    <div class="card-title-bar">
-                        <div class="title-with-icon">
-                            <span class="t-icon">🗄️</span>
-                            <div>
-                                <h3>Catálogos del Sistema Aislados (Namespace PIU)</h3>
-                                <small>Colecciones de Firestore protegidas contra colisiones</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="catalogs-table-wrapper">
-                        <table class="catalogs-table">
-                            <thead>
-                                <tr>
-                                    <th>Colección en Firebase</th>
-                                    <th>Propósito / Contenido</th>
-                                    <th>Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td><code>${COLLECTIONS.BUSINESSES}</code></td>
-                                    <td>Catálogo de Negocios y Sucursales independientes</td>
-                                    <td><span class="badge badge-success">Activo (${allBusinesses.length})</span></td>
-                                </tr>
-                                <tr>
-                                    <td><code>${COLLECTIONS.MACHINES}</code></td>
-                                    <td>Catálogo de Gabinetes PIU (LX, TX, FX, sensores, tarifas)</td>
-                                    <td><span class="badge badge-success">Activo (${store.machines.length})</span></td>
-                                </tr>
-                                <tr>
-                                    <td><code>${COLLECTIONS.RESERVATIONS}</code></td>
-                                    <td>Catálogo de Reservaciones y Solicitudes de Pistas</td>
-                                    <td><span class="badge badge-success">Activo (${store.reservations.length})</span></td>
-                                </tr>
-                                <tr>
-                                    <td><code>${COLLECTIONS.OPERATING_RULES}</code></td>
-                                    <td>Horarios y Reglas Operativas por Día</td>
-                                    <td><span class="badge badge-primary">Configurado</span></td>
-                                </tr>
-                                <tr>
-                                    <td><code>${COLLECTIONS.GAME_VERSIONS}</code></td>
-                                    <td>Catálogo de Versiones (Phoenix 2024, XX, Prime 2)</td>
-                                    <td><span class="badge badge-primary">Estándar</span></td>
-                                </tr>
-                                <tr>
-                                    <td><code>${COLLECTIONS.PLAYERS}</code></td>
-                                    <td>Directorio de Jugadores y Gamertags</td>
-                                    <td><span class="badge badge-primary">Dinámico</span></td>
-                                </tr>
-                                <tr>
-                                    <td><code>${COLLECTIONS.AUDIT_LOGS}</code></td>
-                                    <td>Bitácora de Aprobaciones y Acciones de Encargados</td>
-                                    <td><span class="badge badge-primary">Automático</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Tarjeta de Gestión de Sucursales Registradas -->
-                <div class="settings-card">
-                    <div class="card-title-bar">
-                        <div class="title-with-icon">
-                            <span class="t-icon">🌐</span>
-                            <div>
-                                <h3>Todas las Sucursales (${allBusinesses.length})</h3>
-                                <small>Alterna o administra las sucursales existentes</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="biz-list-grid">
-                        ${allBusinesses.map(b => {
-                            const isCurrent = b.id === business.id;
-                            return `
-                                <div class="biz-item-card ${isCurrent ? 'biz-active-highlight' : ''}">
-                                    <div class="biz-item-logo">${b.logoIcon || '🕹️'}</div>
-                                    <div class="biz-item-info">
-                                        <h4>${b.name}</h4>
-                                        <p>${b.city} • ${b.openingTime} - ${b.closingTime}</p>
-                                    </div>
-                                    <div class="biz-item-actions">
-                                        ${isCurrent 
-                                            ? '<span class="badge badge-success">Activa Ahora</span>' 
-                                            : `<button class="btn btn-outline btn-xs btn-switch-biz" data-id="${b.id}">Cambiar</button>`
-                                        }
-                                        ${allBusinesses.length > 1 ? `
-                                            <button class="btn btn-danger btn-xs btn-del-biz" data-id="${b.id}" title="Eliminar Sucursal">🗑️</button>
-                                        ` : ''}
-                                    </div>
+                ${isSuperAdmin ? `
+                    <!-- Tarjeta de Catálogos del Sistema -->
+                    <div class="settings-card">
+                        <div class="card-title-bar">
+                            <div class="title-with-icon">
+                                <span class="t-icon">🗄️</span>
+                                <div>
+                                    <h3>Catálogos del Sistema Aislados (Namespace PIU)</h3>
+                                    <small>Colecciones de Firestore protegidas contra colisiones</small>
                                 </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-
-                <!-- Respaldo y Restauración -->
-                <div class="settings-card">
-                    <div class="card-title-bar">
-                        <div class="title-with-icon">
-                            <span class="t-icon">💾</span>
-                            <div>
-                                <h3>Respaldo y Mantenimiento de Datos</h3>
-                                <small>Exporta o restaura la base de datos completa en formato JSON</small>
                             </div>
+                        </div>
+
+                        <div class="catalogs-table-wrapper">
+                            <table class="catalogs-table">
+                                <thead>
+                                    <tr>
+                                        <th>Colección en Firebase</th>
+                                        <th>Propósito / Contenido</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>${COLLECTIONS.BUSINESSES}</code></td>
+                                        <td>Catálogo de Negocios y Sucursales independientes</td>
+                                        <td><span class="badge badge-success">Activo (${allBusinesses.length})</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>${COLLECTIONS.MACHINES}</code></td>
+                                        <td>Catálogo de Gabinetes PIU (LX, TX, FX, sensores, tarifas)</td>
+                                        <td><span class="badge badge-success">Activo (${store.machines.length})</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>${COLLECTIONS.RESERVATIONS}</code></td>
+                                        <td>Catálogo de Reservaciones y Solicitudes de Pistas</td>
+                                        <td><span class="badge badge-success">Activo (${store.reservations.length})</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>${COLLECTIONS.OPERATING_RULES}</code></td>
+                                        <td>Horarios y Reglas Operativas por Día</td>
+                                        <td><span class="badge badge-primary">Configurado</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>${COLLECTIONS.GAME_VERSIONS}</code></td>
+                                        <td>Catálogo de Versiones (Phoenix 2024, XX, Prime 2)</td>
+                                        <td><span class="badge badge-primary">Estándar</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>${COLLECTIONS.PLAYERS}</code></td>
+                                        <td>Directorio de Jugadores y Gamertags</td>
+                                        <td><span class="badge badge-primary">Dinámico</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>${COLLECTIONS.AUDIT_LOGS}</code></td>
+                                        <td>Bitácora de Aprobaciones y Acciones de Encargados</td>
+                                        <td><span class="badge badge-primary">Automático</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <div class="backup-actions-row">
-                        <button class="btn btn-outline" id="btn-export-backup">
-                            📥 Exportar Respaldo JSON
-                        </button>
-                        <label class="btn btn-outline" for="input-import-backup">
-                            📤 Importar Respaldo JSON
-                            <input type="file" id="input-import-backup" accept=".json" class="hidden">
-                        </label>
-                        <button class="btn btn-danger btn-outline" id="btn-reset-demo">
-                            🔄 Restaurar Datos Demo
-                        </button>
+                    <!-- Tarjeta de Gestión de Sucursales Registradas -->
+                    <div class="settings-card">
+                        <div class="card-title-bar">
+                            <div class="title-with-icon">
+                                <span class="t-icon">🌐</span>
+                                <div>
+                                    <h3>Todas las Sucursales (${allBusinesses.length})</h3>
+                                    <small>Alterna o administra las sucursales existentes</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="biz-list-grid">
+                            ${allBusinesses.map(b => {
+                                const isCurrent = b.id === business.id;
+                                return `
+                                    <div class="biz-item-card ${isCurrent ? 'biz-active-highlight' : ''}">
+                                        <div class="biz-item-logo">${b.logoIcon || '🕹️'}</div>
+                                        <div class="biz-item-info">
+                                            <h4>${b.name}</h4>
+                                            <p>${b.city} • ${b.openingTime} - ${b.closingTime}</p>
+                                        </div>
+                                        <div class="biz-item-actions">
+                                            ${isCurrent 
+                                                ? '<span class="badge badge-success">Activa Ahora</span>' 
+                                                : `<button class="btn btn-outline btn-xs btn-switch-biz" data-id="${b.id}">Cambiar</button>`
+                                            }
+                                            ${allBusinesses.length > 1 ? `
+                                                <button class="btn btn-danger btn-xs btn-del-biz" data-id="${b.id}" title="Eliminar Sucursal">🗑️</button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
                     </div>
-                </div>
+
+                    <!-- Respaldo y Restauración -->
+                    <div class="settings-card">
+                        <div class="card-title-bar">
+                            <div class="title-with-icon">
+                                <span class="t-icon">💾</span>
+                                <div>
+                                    <h3>Respaldo y Mantenimiento de Datos</h3>
+                                    <small>Exporta o restaura la base de datos completa en formato JSON</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="backup-actions-row">
+                            <button class="btn btn-outline" id="btn-export-backup">
+                                📥 Exportar Respaldo JSON
+                            </button>
+                            <label class="btn btn-outline" for="input-import-backup">
+                                📤 Importar Respaldo JSON
+                                <input type="file" id="input-import-backup" accept=".json" class="hidden">
+                            </label>
+                            <button class="btn btn-danger btn-outline" id="btn-reset-demo">
+                                🔄 Restaurar Datos Demo
+                            </button>
+                        </div>
+                    </div>
+                ` : ''}
             </div>
         </div>
     `;

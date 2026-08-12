@@ -101,24 +101,42 @@ class TenantManager {
 
         this.businesses = loaded;
 
-        // Comprobar si la URL trae un parámetro de local explícito (?local=id o ?business=id)
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlBizId = urlParams.get('local') || urlParams.get('business') || urlParams.get('sucursal');
+        // Comprobar si hay una sesión activa de Encargado bloqueada a una sucursal específica
+        const sessionRaw = localStorage.getItem('piu_active_user_session');
+        let managerBizId = null;
+        if (sessionRaw) {
+            try {
+                const sess = JSON.parse(sessionRaw);
+                if (sess && sess.role === 'MANAGER' && sess.businessId) {
+                    managerBizId = sess.businessId;
+                }
+            } catch (e) {}
+        }
 
-        if (urlBizId && this.businesses.some(b => b.id === urlBizId)) {
-            this.activeBusinessId = urlBizId;
+        if (managerBizId && this.businesses.some(b => b.id === managerBizId)) {
+            this.activeBusinessId = managerBizId;
             this.isLocalSelected = true;
-            localStorage.setItem(SESSION_LOCKED_KEY, urlBizId);
+            localStorage.setItem(SESSION_LOCKED_KEY, managerBizId);
         } else {
-            // Verificar si había un local seleccionado y bloqueado en sesión
-            const savedLocked = localStorage.getItem(SESSION_LOCKED_KEY);
-            if (savedLocked && this.businesses.some(b => b.id === savedLocked)) {
-                this.activeBusinessId = savedLocked;
+            // Comprobar si la URL trae un parámetro de local explícito (?local=id o ?business=id)
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlBizId = urlParams.get('local') || urlParams.get('business') || urlParams.get('sucursal');
+
+            if (urlBizId && this.businesses.some(b => b.id === urlBizId)) {
+                this.activeBusinessId = urlBizId;
                 this.isLocalSelected = true;
+                localStorage.setItem(SESSION_LOCKED_KEY, urlBizId);
             } else {
-                // No hay local seleccionado todavía -> Debe mostrar el index de bienvenida con selector
-                this.isLocalSelected = false;
-                this.activeBusinessId = this.businesses[0]?.id || null;
+                // Verificar si había un local seleccionado y bloqueado en sesión
+                const savedLocked = localStorage.getItem(SESSION_LOCKED_KEY);
+                if (savedLocked && this.businesses.some(b => b.id === savedLocked)) {
+                    this.activeBusinessId = savedLocked;
+                    this.isLocalSelected = true;
+                } else {
+                    // No hay local seleccionado todavía -> Debe mostrar el index de bienvenida con selector
+                    this.isLocalSelected = false;
+                    this.activeBusinessId = this.businesses[0]?.id || null;
+                }
             }
         }
 
@@ -145,6 +163,16 @@ class TenantManager {
      * El usuario selecciona un local desde la pantalla de bienvenida (Index)
      */
     async selectLocal(businessId) {
+        const sessionRaw = localStorage.getItem('piu_active_user_session');
+        if (sessionRaw) {
+            try {
+                const sess = JSON.parse(sessionRaw);
+                if (sess && sess.role === 'MANAGER' && sess.businessId) {
+                    businessId = sess.businessId; // Forzar sucursal asignada al encargado
+                }
+            } catch (e) {}
+        }
+
         if (this.businesses.some(b => b.id === businessId)) {
             this.activeBusinessId = businessId;
             this.isLocalSelected = true;
@@ -157,9 +185,20 @@ class TenantManager {
     }
 
     /**
-     * Regresar al Index para cambiar de local
+     * Regresar al Index para cambiar de local (Bloqueado para encargados)
      */
     clearSelectedLocal() {
+        const sessionRaw = localStorage.getItem('piu_active_user_session');
+        if (sessionRaw) {
+            try {
+                const sess = JSON.parse(sessionRaw);
+                if (sess && sess.role === 'MANAGER' && sess.businessId) {
+                    // El encargado no puede salir de su sucursal asignada
+                    return;
+                }
+            } catch (e) {}
+        }
+
         this.isLocalSelected = false;
         localStorage.removeItem(SESSION_LOCKED_KEY);
         // Limpiar query params de la URL sin recargar

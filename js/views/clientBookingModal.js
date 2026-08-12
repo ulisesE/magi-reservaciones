@@ -120,7 +120,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     const footerHtml = `
         <button type="button" class="btn btn-secondary" id="btn-cancel-book">Cancelar</button>
         <button type="button" class="btn btn-primary glow-red" id="btn-submit-book">
-            ${isAdmin ? '⚡ Confirmar y Agendar' : '🚀 Enviar Solicitud'}
+            ${isStaff ? '⚡ Confirmar y Agendar' : '🚀 Enviar Solicitud'}
         </button>
     `;
 
@@ -187,7 +187,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
             modal.close();
 
-            if (isAdmin) {
+            if (isStaff) {
                 toast.success(`Reservación asignada exitosamente para ${booking.clientName}`);
             } else {
                 toast.success("¡Solicitud enviada! Mostrando comprobante digital...");

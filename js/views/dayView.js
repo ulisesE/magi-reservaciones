@@ -1,6 +1,7 @@
 // js/views/dayView.js
 // Vista Día: Grid Interactivo de Horas x Máquinas con estado y nombre del cliente
 import { store } from '../core/store.js';
+import { authManager } from '../core/authManager.js';
 import { 
     formatDateKey, 
     formatFriendlyDate, 
@@ -18,7 +19,7 @@ export function renderDayView(container) {
     const machines = store.getMachines();
     const activeMachines = machines.filter(m => m.status !== 'OUT_OF_ORDER');
     const selectedDate = store.selectedDate || formatDateKey(new Date());
-    const isAdmin = store.userRole === 'ADMIN';
+    const isStaff = authManager.isStaff();
 
     // Generar slots horarios según configuración del negocio
     const slots = generateTimeSlots(
@@ -223,7 +224,7 @@ export function renderDayView(container) {
 function openReservationDetailModal(reservation) {
     const business = store.currentBusiness;
     const machine = store.getMachineById(reservation.machineId);
-    const isAdmin = store.userRole === 'ADMIN';
+    const isStaff = authManager.isStaff();
 
     const contentHtml = `
         <div class="res-detail-dialog">
@@ -280,7 +281,7 @@ function openReservationDetailModal(reservation) {
         <button type="button" class="btn btn-info" id="btn-view-ticket">🎟️ Ver Pase Digital</button>
     `;
 
-    if (isAdmin) {
+    if (isStaff) {
         footerHtml = `
             <button type="button" class="btn btn-danger btn-sm" id="btn-delete-res">🗑️ Eliminar</button>
             <div class="flex-spacer"></div>

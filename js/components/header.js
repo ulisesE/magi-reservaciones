@@ -73,9 +73,11 @@ export function renderHeader(container) {
             <div class="header-top-row">
                 <!-- Branding & Botón Regresar al Index -->
                 <div class="header-brand">
-                    <button id="btn-back-to-index" class="btn btn-outline btn-sm btn-back-hub" title="Regresar al inicio para cambiar de sucursal">
-                        <span>← Cambiar de Local</span>
-                    </button>
+                    ${!isManager ? `
+                        <button id="btn-back-to-index" class="btn btn-outline btn-sm btn-back-hub" title="Regresar al inicio para cambiar de sucursal">
+                            <span>← Cambiar de Local</span>
+                        </button>
+                    ` : ''}
                     
                     <div class="brand-badge-icon">${business?.logoIcon || '🕹️'}</div>
                     <div class="brand-text">
