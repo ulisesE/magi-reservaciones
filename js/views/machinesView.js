@@ -50,7 +50,10 @@ export function renderMachinesView(container) {
                         <div class="machine-card ${!isAvail ? 'card-dimmed' : ''}" data-mach-id="${m.id}">
                             <div class="mach-card-image-wrap">
                                 <img src="${m.imageUrl || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80'}" 
-                                     alt="${m.name}" class="mach-card-img" onerror="this.src='https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80'">
+                                     alt="${m.name}" 
+                                     referrerpolicy="no-referrer"
+                                     class="mach-card-img" 
+                                     onerror="this.src='https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80'">
                                 <div class="mach-rate-badge">${business.currencySymbol}${m.hourlyRate}/hr</div>
                                 <div class="mach-status-badge">${statusBadge}</div>
                             </div>

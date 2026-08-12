@@ -900,6 +900,7 @@ function openStaffFormModal(staff = null, container) {
 }
 
 function openCreateBusinessModal(container) {
+    const STOCK_ARCADE = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80';
     const contentHtml = `
         <form id="form-create-biz-global" class="cyber-form">
             <div class="form-row grid-2">
@@ -909,8 +910,14 @@ function openCreateBusinessModal(container) {
                 </div>
                 <div class="form-group">
                     <label for="new-b-icon"><span class="neon-arrow">◆</span> Emoji Logo</label>
-                    <input type="text" id="new-b-icon" class="cyber-input" value="⚡" style="max-width:80px;">
+                    <input type="text" id="new-b-icon" class="cyber-input" value="⚡" style="max-width:80px; text-align:center; font-size:1.2rem;">
                 </div>
+            </div>
+
+            <div class="form-group">
+                <label for="new-b-img"><span class="neon-arrow">◆</span> URL Pública de Imagen / Banner</label>
+                <input type="url" id="new-b-img" class="cyber-input" placeholder="https://scontent... o https://..." value="${STOCK_ARCADE}">
+                <small style="color:var(--text-muted); font-size:0.75rem;">Admite enlaces directos públicos de Facebook, Instagram, Imgur, Cloudinary, etc.</small>
             </div>
 
             <div class="form-row grid-2">
@@ -947,7 +954,7 @@ function openCreateBusinessModal(container) {
         icon: '🏢',
         contentHtml,
         footerHtml,
-        maxWidth: '520px'
+        maxWidth: '560px'
     });
 
     modalEl.querySelector('#btn-cancel-cb').onclick = () => modal.close();
@@ -956,6 +963,7 @@ function openCreateBusinessModal(container) {
         const name = modalEl.querySelector('#new-b-name').value.trim();
         const city = modalEl.querySelector('#new-b-city').value.trim();
         const logoIcon = modalEl.querySelector('#new-b-icon').value.trim() || '🕹️';
+        const imageUrl = modalEl.querySelector('#new-b-img').value.trim() || STOCK_ARCADE;
         const whatsapp = modalEl.querySelector('#new-b-wa').value.trim();
         const openingTime = modalEl.querySelector('#new-b-open').value;
         const closingTime = modalEl.querySelector('#new-b-close').value;
@@ -966,7 +974,7 @@ function openCreateBusinessModal(container) {
         }
 
         try {
-            await tenantManager.createBusiness({ name, city, logoIcon, whatsapp, openingTime, closingTime });
+            await tenantManager.createBusiness({ name, city, logoIcon, imageUrl, whatsapp, openingTime, closingTime });
             modal.close();
             toast.success(`¡Local "${name}" creado exitosamente!`);
             renderSuperadminView(container);

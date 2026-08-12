@@ -30,7 +30,10 @@ export function renderLandingView(container) {
                         <div class="venue-landing-card" data-biz-id="${b.id}">
                             <div class="venue-card-img-wrap">
                                 <img src="${b.imageUrl || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80'}" 
-                                     alt="${b.name}" class="venue-card-img" onerror="this.src='https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80'">
+                                     alt="${b.name}" 
+                                     referrerpolicy="no-referrer"
+                                     class="venue-card-img" 
+                                     onerror="this.src='https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80'">
                                 <div class="venue-icon-badge">${b.logoIcon || '🕹️'}</div>
                                 <div class="venue-city-pill">${b.city}</div>
                             </div>
