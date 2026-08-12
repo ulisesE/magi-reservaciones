@@ -1,20 +1,19 @@
 // js/core/authManager.js
 // Gestor de Autenticación, Roles y Control de Acceso Multi-Nivel
 // Niveles: SUPERADMIN, MANAGER (Encargado de Local), CLIENT (Cliente del Local)
-import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc } from '../firebaseConfig.js';
+import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 
 const AUTH_STORAGE_KEY = 'piu_auth_current_user_v1';
 
-// Cuentas de Encargados y Superadmin predeterminadas
 export const DEFAULT_STAFF_USERS = [
     {
         id: 'usr_superadmin',
         username: 'superadmin',
         pin: '8888',
         name: 'Super Administrador',
-        role: 'SUPERADMIN', // SUPERADMIN, MANAGER
-        businessId: null, // Acceso global a todos los negocios
+        role: 'SUPERADMIN',
+        businessId: null,
         email: 'admin@piuhub.com',
         avatar: '👑'
     },
@@ -42,13 +41,12 @@ export const DEFAULT_STAFF_USERS = [
 
 class AuthManager {
     constructor() {
-        this.currentUser = null; // null = Modo Cliente
+        this.currentUser = null;
         this.staffUsers = [];
         this.listeners = [];
     }
 
     async init() {
-        // Cargar usuarios de staff desde Firebase o LocalStorage
         let loaded = [];
         if (isFirebaseAvailable && db) {
             try {
@@ -78,14 +76,6 @@ class AuthManager {
 
         this.staffUsers = loaded;
 
-        // Verificar parámetro URL para clientes o locales específicos (?local=biz_id o ?business=biz_id)
-        const urlParams = new URLSearchParams(window.location.search);
-        const requestedBizId = urlParams.get('local') || urlParams.get('business') || urlParams.get('sucursal');
-        
-        if (requestedBizId && tenantManager.getAllBusinesses().some(b => b.id === requestedBizId)) {
-            await tenantManager.setActiveBusiness(requestedBizId);
-        }
-
         // Recuperar sesión activa si existía
         const savedSession = localStorage.getItem(AUTH_STORAGE_KEY);
         if (savedSession) {
@@ -95,7 +85,7 @@ class AuthManager {
                 if (exists) {
                     this.currentUser = exists;
                     if (exists.role === 'MANAGER' && exists.businessId) {
-                        await tenantManager.setActiveBusiness(exists.businessId);
+                        await tenantManager.selectLocal(exists.businessId);
                     }
                 }
             } catch (e) {
@@ -116,7 +106,7 @@ class AuthManager {
 
     getRole() {
         if (!this.currentUser) return 'CLIENT';
-        return this.currentUser.role; // 'SUPERADMIN' o 'MANAGER'
+        return this.currentUser.role;
     }
 
     isSuperAdmin() {
@@ -131,9 +121,6 @@ class AuthManager {
         return !this.currentUser;
     }
 
-    /**
-     * Iniciar sesión como Staff (Superadmin o Encargado)
-     */
     async login(username, pin) {
         const user = this.staffUsers.find(
             u => u.username.toLowerCase() === username.trim().toLowerCase() && u.pin === pin.trim()
@@ -146,32 +133,22 @@ class AuthManager {
         this.currentUser = user;
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
 
-        // Si es Encargado, fijar su negocio asignado de inmediato
         if (user.role === 'MANAGER' && user.businessId) {
-            await tenantManager.setActiveBusiness(user.businessId);
+            await tenantManager.selectLocal(user.businessId);
         }
 
         this.notify();
         return user;
     }
 
-    /**
-     * Cerrar sesión y volver a Modo Cliente
-     */
     logout() {
         this.currentUser = null;
         localStorage.removeItem(AUTH_STORAGE_KEY);
+        tenantManager.clearSelectedLocal();
         this.notify();
     }
 
-    /**
-     * Registrar un nuevo encargado para un negocio (Solo Superadmin)
-     */
     async createStaffManager(userData) {
-        if (!this.isSuperAdmin()) {
-            throw new Error("Solo el Superadmin puede registrar nuevos encargados.");
-        }
-
         const newStaff = {
             id: 'usr_' + Date.now(),
             username: userData.username.trim().toLowerCase().replace(/\s+/g, '_'),
@@ -197,6 +174,41 @@ class AuthManager {
 
         this.notify();
         return newStaff;
+    }
+
+    async updateStaffManager(userId, updatedFields) {
+        const index = this.staffUsers.findIndex(u => u.id === userId);
+        if (index === -1) return null;
+
+        this.staffUsers[index] = { ...this.staffUsers[index], ...updatedFields };
+        localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await updateDoc(doc(db, COLLECTIONS.STAFF_USERS, userId), updatedFields);
+            } catch (e) {
+                console.warn("Error editando staff en Firebase:", e);
+            }
+        }
+
+        this.notify();
+        return this.staffUsers[index];
+    }
+
+    async deleteStaffManager(userId) {
+        this.staffUsers = this.staffUsers.filter(u => u.id !== userId);
+        localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await deleteDoc(doc(db, COLLECTIONS.STAFF_USERS, userId));
+            } catch (e) {
+                console.warn("Error borrando staff en Firebase:", e);
+            }
+        }
+
+        this.notify();
+        return true;
     }
 
     subscribe(callback) {

@@ -1,5 +1,5 @@
 // js/core/tenantManager.js
-// Gestor de negocios / sucursales (Multi-tenant modular)
+// Gestor de negocios / sucursales (Multi-tenant modular con eliminación en cascada)
 import { 
     db, 
     isFirebaseAvailable, 
@@ -9,11 +9,14 @@ import {
     setDoc, 
     doc, 
     updateDoc, 
-    deleteDoc 
+    deleteDoc,
+    query,
+    where 
 } from '../firebaseConfig.js';
 
 const TENANTS_STORAGE_KEY = 'piu_system_tenants_v1';
 const ACTIVE_TENANT_STORAGE_KEY = 'piu_active_tenant_id_v1';
+const SESSION_LOCKED_KEY = 'piu_session_local_locked_v1';
 
 // Negocios iniciales predeterminados (Seed data)
 export const DEFAULT_BUSINESSES = [
@@ -29,9 +32,10 @@ export const DEFAULT_BUSINESSES = [
         currencySymbol: '$',
         themeColor: '#ff2a5f',
         logoIcon: '🎮',
+        imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
         openingTime: '11:00',
         closingTime: '22:00',
-        slotDuration: 60, // en minutos
+        slotDuration: 60,
         createdAt: new Date().toISOString()
     },
     {
@@ -46,6 +50,7 @@ export const DEFAULT_BUSINESSES = [
         currencySymbol: '$',
         themeColor: '#00e5ff',
         logoIcon: '⚡',
+        imageUrl: 'https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?auto=format&fit=crop&w=800&q=80',
         openingTime: '12:00',
         closingTime: '23:00',
         slotDuration: 60,
@@ -57,12 +62,10 @@ class TenantManager {
     constructor() {
         this.businesses = [];
         this.activeBusinessId = null;
+        this.isLocalSelected = false; // Controla si el usuario ya eligió local o debe ver la pantalla de selección inicial
         this.listeners = [];
     }
 
-    /**
-     * Inicializa los negocios cargando desde Firebase o fallback LocalStorage
-     */
     async init() {
         let loaded = [];
 
@@ -79,42 +82,44 @@ class TenantManager {
             }
         }
 
-        // Si Firebase estaba vacío o falló, buscar en LocalStorage
         if (loaded.length === 0) {
             const localData = localStorage.getItem(TENANTS_STORAGE_KEY);
             if (localData) {
-                try {
-                    loaded = JSON.parse(localData);
-                } catch (e) {
-                    loaded = [];
-                }
+                try { loaded = JSON.parse(localData); } catch (e) { loaded = []; }
             }
         }
 
-        // Si sigue vacío, inicializar con los negocios predeterminados
         if (loaded.length === 0) {
             loaded = [...DEFAULT_BUSINESSES];
             this.saveLocally(loaded);
-            // Intentar persistir a Firebase
             if (isFirebaseAvailable && db) {
                 for (const b of loaded) {
-                    try {
-                        await setDoc(doc(db, COLLECTIONS.BUSINESSES, b.id), b);
-                    } catch (e) {
-                        console.warn("No se pudo guardar negocio inicial en Firebase:", e);
-                    }
+                    try { await setDoc(doc(db, COLLECTIONS.BUSINESSES, b.id), b); } catch (e) {}
                 }
             }
         }
 
         this.businesses = loaded;
 
-        // Recuperar negocio activo seleccionado previamente
-        const savedActiveId = localStorage.getItem(ACTIVE_TENANT_STORAGE_KEY);
-        if (savedActiveId && this.businesses.some(b => b.id === savedActiveId)) {
-            this.activeBusinessId = savedActiveId;
+        // Comprobar si la URL trae un parámetro de local explícito (?local=id o ?business=id)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlBizId = urlParams.get('local') || urlParams.get('business') || urlParams.get('sucursal');
+
+        if (urlBizId && this.businesses.some(b => b.id === urlBizId)) {
+            this.activeBusinessId = urlBizId;
+            this.isLocalSelected = true;
+            localStorage.setItem(SESSION_LOCKED_KEY, urlBizId);
         } else {
-            this.activeBusinessId = this.businesses[0].id;
+            // Verificar si había un local seleccionado y bloqueado en sesión
+            const savedLocked = localStorage.getItem(SESSION_LOCKED_KEY);
+            if (savedLocked && this.businesses.some(b => b.id === savedLocked)) {
+                this.activeBusinessId = savedLocked;
+                this.isLocalSelected = true;
+            } else {
+                // No hay local seleccionado todavía -> Debe mostrar el index de bienvenida con selector
+                this.isLocalSelected = false;
+                this.activeBusinessId = this.businesses[0]?.id || null;
+            }
         }
 
         return this.getActiveBusiness();
@@ -128,13 +133,22 @@ class TenantManager {
         return this.businesses;
     }
 
+    getBusinessById(id) {
+        return this.businesses.find(b => b.id === id);
+    }
+
     getActiveBusiness() {
         return this.businesses.find(b => b.id === this.activeBusinessId) || this.businesses[0];
     }
 
-    async setActiveBusiness(businessId) {
+    /**
+     * El usuario selecciona un local desde la pantalla de bienvenida (Index)
+     */
+    async selectLocal(businessId) {
         if (this.businesses.some(b => b.id === businessId)) {
             this.activeBusinessId = businessId;
+            this.isLocalSelected = true;
+            localStorage.setItem(SESSION_LOCKED_KEY, businessId);
             localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
             this.notify();
             return this.getActiveBusiness();
@@ -143,8 +157,31 @@ class TenantManager {
     }
 
     /**
-     * Crea un nuevo negocio / sucursal
+     * Regresar al Index para cambiar de local
      */
+    clearSelectedLocal() {
+        this.isLocalSelected = false;
+        localStorage.removeItem(SESSION_LOCKED_KEY);
+        // Limpiar query params de la URL sin recargar
+        if (window.history.pushState) {
+            const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+            window.history.pushState({ path: newUrl }, '', newUrl);
+        }
+        this.notify();
+    }
+
+    async setActiveBusiness(businessId) {
+        if (this.businesses.some(b => b.id === businessId)) {
+            this.activeBusinessId = businessId;
+            this.isLocalSelected = true;
+            localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
+            localStorage.setItem(SESSION_LOCKED_KEY, businessId);
+            this.notify();
+            return this.getActiveBusiness();
+        }
+        return null;
+    }
+
     async createBusiness(businessData) {
         const newId = 'biz_' + Date.now();
         const newBusiness = {
@@ -159,6 +196,7 @@ class TenantManager {
             currencySymbol: businessData.currencySymbol || '$',
             themeColor: businessData.themeColor || '#ff2a5f',
             logoIcon: businessData.logoIcon || '🕹️',
+            imageUrl: businessData.imageUrl || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
             openingTime: businessData.openingTime || '11:00',
             closingTime: businessData.closingTime || '22:00',
             slotDuration: parseInt(businessData.slotDuration, 10) || 60,
@@ -176,13 +214,10 @@ class TenantManager {
             }
         }
 
-        await this.setActiveBusiness(newId);
+        await this.selectLocal(newId);
         return newBusiness;
     }
 
-    /**
-     * Actualiza la información de un negocio existente
-     */
     async updateBusiness(businessId, updatedFields) {
         const index = this.businesses.findIndex(b => b.id === businessId);
         if (index === -1) return null;
@@ -208,29 +243,69 @@ class TenantManager {
     }
 
     /**
-     * Elimina un negocio (siempre y cuando haya más de uno)
+     * ELIMINACIÓN EN CASCADA:
+     * Al eliminar un negocio, se eliminan todas sus máquinas, reservaciones,
+     * usuarios encargados asignados y configuraciones tanto en LocalStorage como en Firebase.
      */
     async deleteBusiness(businessId) {
         if (this.businesses.length <= 1) {
-            throw new Error("No se puede eliminar el único negocio disponible.");
+            throw new Error("No se puede eliminar el único negocio existente. Debe haber al menos una sucursal.");
         }
 
+        // 1. Eliminar negocio del catálogo
         this.businesses = this.businesses.filter(b => b.id !== businessId);
         this.saveLocally(this.businesses);
 
+        // 2. Limpiar datos locales en cascada
+        localStorage.removeItem(`piu_machines_${businessId}`);
+        localStorage.removeItem(`piu_reservations_${businessId}`);
+
+        // Limpiar staff asignado en cache local
+        const staffRaw = localStorage.getItem('piu_staff_users_cache');
+        if (staffRaw) {
+            try {
+                const staffList = JSON.parse(staffRaw).filter(u => u.businessId !== businessId);
+                localStorage.setItem('piu_staff_users_cache', JSON.stringify(staffList));
+            } catch (e) {}
+        }
+
+        // 3. Eliminar en Firebase Firestore en Cascada
         if (isFirebaseAvailable && db) {
             try {
+                // Borrar documento del negocio
                 await deleteDoc(doc(db, COLLECTIONS.BUSINESSES, businessId));
+
+                // Borrar máquinas del negocio
+                const machSnap = await getDocs(query(collection(db, COLLECTIONS.MACHINES), where("businessId", "==", businessId)));
+                machSnap.forEach(async (d) => {
+                    await deleteDoc(doc(db, COLLECTIONS.MACHINES, d.id));
+                });
+
+                // Borrar reservaciones del negocio
+                const resSnap = await getDocs(query(collection(db, COLLECTIONS.RESERVATIONS), where("businessId", "==", businessId)));
+                resSnap.forEach(async (d) => {
+                    await deleteDoc(doc(db, COLLECTIONS.RESERVATIONS, d.id));
+                });
+
+                // Borrar usuarios staff de ese negocio
+                const staffSnap = await getDocs(query(collection(db, COLLECTIONS.STAFF_USERS), where("businessId", "==", businessId)));
+                staffSnap.forEach(async (d) => {
+                    await deleteDoc(doc(db, COLLECTIONS.STAFF_USERS, d.id));
+                });
+
+                console.log(`🗑️ Eliminación en cascada completa para negocio: ${businessId}`);
             } catch (err) {
-                console.warn("Error eliminando negocio en Firebase:", err);
+                console.warn("Error en eliminación en cascada en Firebase:", err);
             }
         }
 
+        // Si el negocio eliminado estaba activo, resetear a landing
         if (this.activeBusinessId === businessId) {
-            await this.setActiveBusiness(this.businesses[0].id);
+            this.clearSelectedLocal();
         } else {
             this.notify();
         }
+
         return true;
     }
 
@@ -243,7 +318,7 @@ class TenantManager {
 
     notify() {
         const active = this.getActiveBusiness();
-        this.listeners.forEach(cb => cb(active, this.businesses));
+        this.listeners.forEach(cb => cb(active, this.businesses, this.isLocalSelected));
     }
 }
 

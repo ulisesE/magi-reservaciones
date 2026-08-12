@@ -4,15 +4,37 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## 👑 Arquitectura de 3 Niveles de Acceso y Roles
+## 🌟 Novedades y Flujo de Selección de Local
 
-El sistema cuenta con una estructura jerárquica clara para Superadministrador, Encargados por Local y Clientes:
+### 1. 🏢 Pantalla de Bienvenida / Index Obligatoria
+- Al entrar a `index.html` (sin un parámetro de local previo), el sistema **NO entra solo a ningún local**.
+- Muestra una pantalla de bienvenida donde el usuario debe **elegir explícitamente a qué sala o sucursal desea ingresar** (*Pump Zone Centro*, *Arcade Galaxy Norte*, etc.).
+- **Bloqueo de Local**: Una vez que el usuario selecciona su local, el sistema queda bloqueado a ese local específico para evitar confusiones o mezclas de reservas.
+- Para cambiar de sucursal, el usuario solo debe hacer clic en el botón superior **`← Cambiar de Local`**, el cual lo regresa al Index inicial.
+
+### 2. 🗑️ Eliminación en Cascada por Negocio (Superadmin)
+- Cuando el Superadministrador elimina un local desde el panel global, el sistema ejecuta una **eliminación en cascada completa**:
+  - Se eliminan todas las máquinas registradas de ese local (`piu_machines`).
+  - Se eliminan todas las reservaciones e historial de ese local (`piu_reservations`).
+  - Se eliminan todas las cuentas de encargados asignadas a ese local (`piu_staff_users`).
+  - Se limpia el almacenamiento en la nube en Firebase Firestore y la memoria local.
+
+### 3. 👑 Consola de Superadmin y Catálogos Globales
+- **Catálogo de Locales / Sucursales**: Alta, edición, eliminación en cascada y generación de enlaces directos para clientes.
+- **Catálogo de Máquinas por Negocio**: Control centralizado de gabinetes LX, TX, FX y estado de pads.
+- **Catálogo de Encargados / Staff**: Creación y asignación de cuentas de encargados con PIN de seguridad por local.
+- **Catálogo de Horarios y Reglas**: Configuración de horas de apertura y cierre por sucursal.
+
+---
+
+## 👑 Arquitectura de 3 Niveles de Acceso
 
 ```
                   ┌───────────────────────────────┐
                   │    SUPERADMINISTRADOR (Tú)    │
                   │  • Administra todos los locales│
                   │  • Asigna encargados y enlaces │
+                  │  • Eliminación en Cascada      │
                   └──────────────┬────────────────┘
                                  │
                  ┌───────────────┴───────────────┐
@@ -30,70 +52,33 @@ El sistema cuenta con una estructura jerárquica clara para Superadministrador, 
       └─────────────────────┘         └─────────────────────┘
 ```
 
-### 1. 👑 Superadmin (Tú)
-- **Panel Global**: Visualiza métricas de todos los locales de la plataforma.
-- **Gestión de Negocios**: Crea nuevos negocios, edita datos comerciales y tarifas generales.
-- **Gestión de Encargados**: Crea usuarios y asigna a cada encargado su local correspondiente con PIN de seguridad.
-- **Generador de Enlaces Directos**: Copia con 1 clic los enlaces directos para los clientes de cada sucursal (ej. `index.html?local=biz_piu_centro`).
-
-### 2. 🕹️ Encargados (Por Negocio / Local)
-- Inician sesión con su usuario y PIN (`🔐 Acceso Staff`).
-- El sistema entra **automáticamente con su local asignado cargado** con sus máquinas, horarios y reservaciones.
-- **Bandeja de Solicitudes**: Aprueba, rechaza (con motivo) o modifica horarios y pistas.
-- **Asignación Directa**: Agenda a jugadores presenciales o por llamada en el Grid del día.
-- **Catálogo de Pistas**: Cambia el estado de los gabinetes a *Mantenimiento* y registra nuevas máquinas.
-
-### 3. 👤 Clientes (Por Negocio / Local)
-- Acceden mediante el enlace personalizado de su local (ej. `?local=biz_piu_centro` o `?business=biz_arcade_galaxy`).
-- Visualizan únicamente la disponibilidad, máquinas y horarios de ese local.
-- Solicitan reservaciones ingresando su Gamertag y WhatsApp.
-- Obtienen su **Pase Digital / Ticket de Reservación** con botón para notificar y confirmar por WhatsApp.
-
 ---
 
-## 🔑 Credenciales Demo Preconfiguradas (Para Pruebas Inmediatas)
+## 🔑 Credenciales Demo Preconfiguradas (Botón `🔐 Acceso Staff`):
 
-| Perfil / Rol | Usuario | PIN | Negocio / Alcance |
+| Rol | Usuario | PIN | Negocio Asignado |
 |---|---|---|---|
 | 👑 **Superadmin** | `superadmin` | `8888` | Control global de todos los locales |
-| 🕹️ **Encargado Centro** | `encargado_centro` | `1234` | Solo local *Pump Zone Centro* |
-| ⚡ **Encargada Galaxy** | `encargado_galaxy` | `5678` | Solo local *Arcade Galaxy Norte* |
-| 👤 **Clientes** | *Sin login* | *N/A* | Acceso directo al portal del local |
+| 🕹️ **Encargado Centro** | `encargado_centro` | `1234` | Solo *Pump Zone Centro* |
+| ⚡ **Encargada Galaxy** | `encargado_galaxy` | `5678` | Solo *Arcade Galaxy Norte* |
+| 👤 **Clientes** | *Sin login* | *N/A* | Acceso al local vía selector o enlace directo |
 
 ---
 
 ## 📅 Vistas de Calendario Disponibles
 
-1. **⚡ Vista Día (Grid de Horas × Máquinas)**:
-   - Columnas: Gabinetes PIU disponibles en el local.
-   - Filas: Bloques horarios operativos.
-   - Celdas: Disponibles para reservar con 1 clic; Ocupadas mostrando nombre del cliente, horario y estado.
-2. **📊 Vista Semana**:
-   - Tarjetas de los 7 días con contador de reservaciones, desglose de estados (*Confirmadas* vs *Pendientes*) y acceso rápido.
-3. **🗓️ Vista Mes**:
-   - Calendario mensual con badges interactivos que indican el número de reservaciones por fecha y nivel de ocupación.
+1. **⚡ Vista Día (Grid de Horas × Máquinas)**: Matriz interactiva de horas (filas) vs máquinas (columnas). Celdas disponibles para reservar con 1 clic; celdas ocupadas con nombre del jugador y horario.
+2. **📊 Vista Semana**: Tarjetas de los 7 días con conteo de reservas, desglose de estados y atajo para reservar.
+3. **🗓️ Vista Mes**: Calendario mensual con badges numéricos de reservaciones por fecha.
 
 ---
 
-## 🗄️ Catálogos Aislados en Firebase Firestore (Namespace `piu_`)
-
-Para garantizar que **no se toquen ni se mezclen datos con las colecciones existentes** (`booking`, `settings`, `users`), toda la aplicación reside en un espacio de nombres seguro:
-
-- `piu_businesses`: Negocios y sucursales.
-- `piu_staff_users`: Cuentas de Superadmin y Encargados asignados por local.
-- `piu_machines`: Catálogo de gabinetes (LX 55", TX 50", FX, sensores FSR).
-- `piu_reservations`: Solicitudes y reservaciones.
-- `piu_operating_rules`: Horarios de apertura y reglas por día.
-- `piu_game_versions`: Versiones oficiales (*Phoenix 2024*, *XX*, *Prime 2*).
-- `piu_players`: Registro dinámico de jugadores y Gamertags.
-- `piu_audit_logs`: Bitácora de auditoría de encargados.
-
----
-
-## 🚀 Cómo Ejecutar la Aplicación
-
-Simplemente abre el archivo [`index.html`](file:///c:/Proyectos/Magi-Swit/Magi-reservaciones/index.html) en tu navegador preferido (Chrome, Edge, Firefox, Safari).
-
-- Para probar como **Cliente de Centro**: Abre `index.html?local=biz_piu_centro`
-- Para probar como **Cliente de Galaxy**: Abre `index.html?local=biz_arcade_galaxy`
-- Para probar como **Staff / Superadmin**: Haz clic en el botón `🔐 Acceso Staff` en la esquina superior derecha y selecciona uno de los accesos rápidos de 1-clic.
+## 🗄️ Catálogos Aislados en Firebase Firestore (Prefijo `piu_`):
+1. `piu_businesses`: Negocios y sucursales.
+2. `piu_staff_users`: Usuarios de Superadmin y Encargados asignados por negocio.
+3. `piu_machines`: Gabinetes PIU (LX 55", TX 50", FX, sensores FSR).
+4. `piu_reservations`: Solicitudes y reservaciones.
+5. `piu_operating_rules`: Horarios de apertura y reglas operativas por día.
+6. `piu_game_versions`: Versiones del juego (*Phoenix 2024*, *XX*, *Prime 2*).
+7. `piu_players`: Directorio de jugadores y Gamertags.
+8. `piu_audit_logs`: Bitácora de auditoría para encargados.

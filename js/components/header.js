@@ -1,5 +1,5 @@
 // js/components/header.js
-// Barra superior con autenticación de 3 niveles (Superadmin, Encargado, Cliente)
+// Barra superior con bloqueo de local y botón para regresar al Index
 import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { authManager } from '../core/authManager.js';
@@ -8,8 +8,8 @@ import { modal } from './modal.js';
 import { toast } from './toast.js';
 
 export function renderHeader(container) {
+    const isLocalSelected = tenantManager.isLocalSelected;
     const business = store.currentBusiness || tenantManager.getActiveBusiness();
-    const businesses = tenantManager.getAllBusinesses();
     const currentUser = authManager.getCurrentUser();
     const isSuperAdmin = authManager.isSuperAdmin();
     const isManager = authManager.isManager();
@@ -17,48 +17,66 @@ export function renderHeader(container) {
     const pendingCount = store.getPendingRequestsCount();
     const currentView = store.currentView;
 
-    const bizOptions = businesses.map(b => `
-        <option value="${b.id}" ${b.id === business.id ? 'selected' : ''}>
-            ${b.logoIcon || '🎮'} ${b.name} (${b.city})
-        </option>
-    `).join('');
+    // Si estamos en la pantalla de bienvenida (sin local seleccionado)
+    if (!isLocalSelected && !isSuperAdmin) {
+        container.innerHTML = `
+            <header class="app-header">
+                <div class="header-top-row">
+                    <div class="header-brand">
+                        <div class="brand-badge-icon pulse-glow">🕹️</div>
+                        <div class="brand-text">
+                            <div class="brand-title">
+                                <span class="piu-highlight">PUMP IT UP</span> HUB
+                            </div>
+                            <div class="brand-subtitle">Plataforma Modular de Reservaciones</div>
+                        </div>
+                    </div>
 
+                    <div class="header-actions">
+                        <button id="btn-open-login" class="btn btn-outline btn-sm">
+                            <span>🔐 Acceso Staff / Superadmin</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+        `;
+
+        container.querySelector('#btn-open-login')?.addEventListener('click', () => {
+            openLoginModal();
+        });
+        return;
+    }
+
+    // Cabecera dentro de un local específico
     container.innerHTML = `
         <header class="app-header">
             <div class="header-top-row">
-                <!-- Branding & Logo -->
+                <!-- Branding & Botón Regresar al Index -->
                 <div class="header-brand">
-                    <div class="brand-badge-icon pulse-glow">${business.logoIcon || '🕹️'}</div>
+                    <button id="btn-back-to-index" class="btn btn-outline btn-sm btn-back-hub" title="Regresar al inicio para cambiar de sucursal">
+                        <span>← Cambiar de Local</span>
+                    </button>
+                    
+                    <div class="brand-badge-icon">${business.logoIcon || '🕹️'}</div>
                     <div class="brand-text">
-                        <div class="brand-title">
-                            <span class="piu-highlight">PUMP IT UP</span> HUB
+                        <div class="brand-title" style="font-size:1.15rem;">
+                            <span class="piu-highlight">${business.name}</span>
                         </div>
-                        <div class="brand-subtitle">${business.name} • ${business.city}</div>
+                        <div class="brand-subtitle">${business.city}</div>
                     </div>
                 </div>
 
-                <!-- Selector de Negocio (Habilitado para Superadmin y Cliente si no viene fijado por URL) -->
-                ${(isSuperAdmin || isClient) ? `
-                    <div class="header-tenant-selector">
-                        <label for="select-active-tenant" class="tenant-label">
-                            <span class="icon">🏢</span> <span class="hide-mobile">Local:</span>
-                        </label>
-                        <select id="select-active-tenant" class="cyber-select-sm">
-                            ${bizOptions}
-                        </select>
-                    </div>
-                ` : `
-                    <div class="header-tenant-selector" style="border-color:rgba(0,255,136,0.3);">
-                        <span style="font-size:0.85rem; font-weight:700; color:var(--piu-green);">
-                            🏢 Local Asignado: ${business.name}
-                        </span>
-                    </div>
-                `}
+                <!-- Indicador de Local Bloqueado -->
+                <div class="header-tenant-selector" style="border-color:rgba(0, 229, 255, 0.4); background:rgba(0, 229, 255, 0.06);">
+                    <span style="font-size:0.85rem; font-weight:700; color:var(--piu-cyan);">
+                        📍 Sala Activa: <strong>${business.name}</strong>
+                    </span>
+                </div>
 
-                <!-- Acciones y Control de Acceso -->
+                <!-- Control de Acceso y Acciones -->
                 <div class="header-actions">
                     ${isClient ? `
-                        <button id="btn-open-login" class="btn btn-outline btn-sm" title="Iniciar sesión como Encargado o Administrador">
+                        <button id="btn-open-login" class="btn btn-outline btn-sm" title="Iniciar sesión como Encargado">
                             <span>🔐 Acceso Staff</span>
                         </button>
                     ` : `
@@ -80,7 +98,7 @@ export function renderHeader(container) {
                 </div>
             </div>
 
-            <!-- Barra de Pestañas y Vistas -->
+            <!-- Barra de Pestañas y Vistas del Local -->
             <div class="header-nav-row">
                 <nav class="view-nav-tabs">
                     <button class="nav-tab ${currentView === 'DAY' ? 'active' : ''}" data-view="DAY">
@@ -123,15 +141,12 @@ export function renderHeader(container) {
         </header>
     `;
 
-    // Eventos
-    const tenantSelect = container.querySelector('#select-active-tenant');
-    if (tenantSelect) {
-        tenantSelect.addEventListener('change', async (e) => {
-            const newBizId = e.target.value;
-            await tenantManager.setActiveBusiness(newBizId);
-            toast.info(`Cambiado al local: ${tenantManager.getActiveBusiness().name}`);
-        });
-    }
+    // Evento Regresar al Index para cambiar de local
+    container.querySelector('#btn-back-to-index')?.addEventListener('click', () => {
+        tenantManager.clearSelectedLocal();
+        store.setCurrentView('DAY');
+        toast.info("Regresando a la selección de locales...");
+    });
 
     const loginBtn = container.querySelector('#btn-open-login');
     if (loginBtn) {
@@ -145,7 +160,7 @@ export function renderHeader(container) {
         logoutBtn.addEventListener('click', () => {
             authManager.logout();
             store.setCurrentView('DAY');
-            toast.info("Sesión cerrada. Estás en Modo Cliente.");
+            toast.info("Sesión cerrada. Regresando a la pantalla de bienvenida.");
         });
     }
 
@@ -166,7 +181,7 @@ export function renderHeader(container) {
 }
 
 /**
- * Modal de Inicio de Sesión para Encargados y Superadmin
+ * Modal de Inicio de Sesión
  */
 export function openLoginModal() {
     const staffList = authManager.getStaffUsers();
@@ -187,7 +202,7 @@ export function openLoginModal() {
 
             <div id="login-error" class="form-error-msg hidden"></div>
 
-            <!-- Accesos Rápidos Demo para pruebas -->
+            <!-- Accesos Rápidos Demo -->
             <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); border:1px dashed var(--border-color); margin-top:8px;">
                 <span style="font-size:0.75rem; color:var(--piu-cyan); font-weight:700; display:block; margin-bottom:8px;">
                     ⚡ ACCESOS RÁPIDOS PARA PRUEBA (1-CLICK):
@@ -221,7 +236,6 @@ export function openLoginModal() {
     const pinInput = modalEl.querySelector('#login-pin');
     const errorMsg = modalEl.querySelector('#login-error');
 
-    // Botones de acceso rápido demo
     modalEl.querySelectorAll('.btn-quick-login').forEach(btn => {
         btn.addEventListener('click', () => {
             userInput.value = btn.dataset.user;

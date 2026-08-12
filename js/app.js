@@ -4,6 +4,7 @@ import { tenantManager } from './core/tenantManager.js';
 import { authManager } from './core/authManager.js';
 import { store } from './core/store.js';
 import { renderHeader } from './components/header.js';
+import { renderLandingView } from './views/landingView.js';
 import { renderDayView } from './views/dayView.js';
 import { renderWeekView } from './views/weekView.js';
 import { renderMonthView } from './views/monthView.js';
@@ -32,18 +33,18 @@ class App {
         // 3. Inicializar Store y datos de la sucursal activa
         await store.init();
 
-        // Si el usuario es Superadmin, abrir la vista de superadmin por defecto
-        if (authManager.isSuperAdmin() && store.currentView === 'DAY') {
+        // Si el usuario es Superadmin y no ha seleccionado vista, abrir la vista de superadmin
+        if (authManager.isSuperAdmin() && store.currentView === 'DAY' && !tenantManager.isLocalSelected) {
             store.currentView = 'SUPERADMIN';
         }
 
         // 4. Renderizar Header y Vista Activa
         this.render();
 
-        // 5. Suscribirse a cambios del Store para reactividad en tiempo real
-        store.subscribe(() => {
-            this.render();
-        });
+        // 5. Suscribirse a cambios del Store y TenantManager para reactividad
+        store.subscribe(() => this.render());
+        tenantManager.subscribe(() => this.render());
+        authManager.subscribe(() => this.render());
 
         // 6. Actualizar indicador de conexión
         this.updateSyncIndicator();
@@ -71,10 +72,19 @@ class App {
             renderHeader(this.headerContainer);
         }
 
-        // Renderizar Vista Seleccionada
+        // Renderizar Contenido
         if (this.mainContent) {
+            const isLocalSelected = tenantManager.isLocalSelected;
+            const isSuperAdmin = authManager.isSuperAdmin();
             const currentView = store.currentView;
 
+            // Si no ha elegido un local y no está en la vista de Superadmin -> Mostrar Landing de Selección de Local
+            if (!isLocalSelected && (!isSuperAdmin || currentView !== 'SUPERADMIN')) {
+                renderLandingView(this.mainContent);
+                return;
+            }
+
+            // Si está dentro de un local o es Superadmin en su panel
             switch (currentView) {
                 case 'DAY':
                     renderDayView(this.mainContent);
