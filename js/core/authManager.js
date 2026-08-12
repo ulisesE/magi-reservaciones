@@ -43,45 +43,73 @@ class AuthManager {
     constructor() {
         this.currentUser = null;
         this.staffUsers = [];
+        this.clientUsers = [];
         this.listeners = [];
     }
 
     async init() {
-        let loaded = [];
+        // 1. Cargar Usuarios de Staff (Superadmin y Encargados)
+        let loadedStaff = [];
         if (isFirebaseAvailable && db) {
             try {
                 const snap = await getDocs(collection(db, COLLECTIONS.STAFF_USERS));
-                snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                snap.forEach(d => loadedStaff.push({ id: d.id, ...d.data() }));
             } catch (err) {
                 console.warn("Error cargando staff de Firebase:", err);
             }
         }
 
-        if (loaded.length === 0) {
+        if (loadedStaff.length === 0) {
             const local = localStorage.getItem('piu_staff_users_cache');
             if (local) {
-                try { loaded = JSON.parse(local); } catch (e) { loaded = []; }
+                try { loadedStaff = JSON.parse(local); } catch (e) { loadedStaff = []; }
             }
         }
 
-        if (loaded.length === 0) {
-            loaded = [...DEFAULT_STAFF_USERS];
-            localStorage.setItem('piu_staff_users_cache', JSON.stringify(loaded));
+        if (loadedStaff.length === 0) {
+            loadedStaff = [...DEFAULT_STAFF_USERS];
+            localStorage.setItem('piu_staff_users_cache', JSON.stringify(loadedStaff));
             if (isFirebaseAvailable && db) {
-                for (const u of loaded) {
+                for (const u of loadedStaff) {
                     try { await setDoc(doc(db, COLLECTIONS.STAFF_USERS, u.id), u); } catch (e) {}
                 }
             }
         }
 
-        this.staffUsers = loaded;
+        this.staffUsers = loadedStaff;
 
-        // Recuperar sesión activa si existía
+        // 2. Cargar Clientes / Jugadores Registrados
+        let loadedClients = [];
+        if (isFirebaseAvailable && db) {
+            try {
+                const clientSnap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                clientSnap.forEach(d => loadedClients.push({ id: d.id, ...d.data() }));
+            } catch (err) {
+                console.warn("Error cargando jugadores de Firebase:", err);
+            }
+        }
+
+        if (loadedClients.length === 0) {
+            const localClients = localStorage.getItem('piu_registered_players_cache');
+            if (localClients) {
+                try { loadedClients = JSON.parse(localClients); } catch (e) { loadedClients = []; }
+            }
+        }
+
+        this.clientUsers = loadedClients;
+
+        // 3. Recuperar sesión activa si existía
         const savedSession = localStorage.getItem(AUTH_STORAGE_KEY);
         if (savedSession) {
             try {
                 const user = JSON.parse(savedSession);
-                const exists = this.staffUsers.find(u => u.username === user.username && u.pin === user.pin);
+                // Buscar en staff
+                let exists = this.staffUsers.find(u => u.username === user.username && u.pin === user.pin);
+                // Si no, buscar en clientes
+                if (!exists) {
+                    exists = this.clientUsers.find(u => (u.id === user.id || u.username === user.username) && u.pin === user.pin);
+                }
+
                 if (exists) {
                     this.currentUser = exists;
                     if (exists.role === 'MANAGER' && exists.businessId) {
@@ -100,34 +128,57 @@ class AuthManager {
         return this.staffUsers;
     }
 
+    getClientUsers() {
+        return this.clientUsers;
+    }
+
     getCurrentUser() {
         return this.currentUser;
     }
 
     getRole() {
         if (!this.currentUser) return 'CLIENT';
-        return this.currentUser.role;
+        return this.currentUser.role || 'CLIENT';
     }
 
     isSuperAdmin() {
-        return this.currentUser && this.currentUser.role === 'SUPERADMIN';
+        return !!(this.currentUser && this.currentUser.role === 'SUPERADMIN');
     }
 
     isManager() {
-        return this.currentUser && this.currentUser.role === 'MANAGER';
+        return !!(this.currentUser && this.currentUser.role === 'MANAGER');
+    }
+
+    isStaff() {
+        return !!(this.currentUser && (this.currentUser.role === 'SUPERADMIN' || this.currentUser.role === 'MANAGER'));
+    }
+
+    isClientUser() {
+        return !!(this.currentUser && this.currentUser.role === 'CLIENT');
     }
 
     isClient() {
-        return !this.currentUser;
+        return !this.currentUser || this.currentUser.role === 'CLIENT';
     }
 
     async login(username, pin) {
-        const user = this.staffUsers.find(
-            u => u.username.toLowerCase() === username.trim().toLowerCase() && u.pin === pin.trim()
+        const uTrim = username.trim().toLowerCase();
+        const pTrim = pin.trim();
+
+        // 1. Buscar en Staff (Superadmin y Encargados)
+        let user = this.staffUsers.find(
+            u => u.username.toLowerCase() === uTrim && u.pin === pTrim
         );
 
+        // 2. Si no es staff, buscar en Clientes / Jugadores Registrados
         if (!user) {
-            throw new Error("Usuario o PIN incorrecto. Verifica tus credenciales.");
+            user = this.clientUsers.find(
+                u => (u.username?.toLowerCase() === uTrim || u.phone?.replace(/\D/g, '') === uTrim.replace(/\D/g, '')) && u.pin === pTrim
+            );
+        }
+
+        if (!user) {
+            throw new Error("Usuario/GamerTag o PIN incorrecto. Verifica tus credenciales o regístrate como jugador.");
         }
 
         this.currentUser = user;
@@ -141,10 +192,93 @@ class AuthManager {
         return user;
     }
 
+    async registerClient(clientData) {
+        const cleanUsername = (clientData.username || clientData.name).trim().toLowerCase().replace(/\s+/g, '_');
+        const cleanPin = (clientData.pin || '').trim();
+
+        if (!clientData.name || !cleanPin) {
+            throw new Error("El nombre de jugador y el PIN de acceso son obligatorios.");
+        }
+
+        if (cleanPin.length < 4) {
+            throw new Error("El PIN de seguridad debe contener al menos 4 dígitos.");
+        }
+
+        // Verificar si el usuario ya existe en Staff o en Clientes
+        const staffExists = this.staffUsers.some(u => u.username.toLowerCase() === cleanUsername);
+        const clientExists = this.clientUsers.some(u => u.username?.toLowerCase() === cleanUsername);
+
+        if (staffExists || clientExists) {
+            throw new Error(`El nombre de usuario o GamerTag "${cleanUsername}" ya está registrado. Por favor elige otro.`);
+        }
+
+        const newPlayer = {
+            id: 'player_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            username: cleanUsername,
+            pin: cleanPin,
+            name: clientData.name.trim(),
+            role: 'CLIENT',
+            phone: clientData.phone?.trim() || '',
+            email: clientData.email?.trim() || '',
+            avatar: clientData.avatar || '🕺',
+            skillLevel: clientData.skillLevel || 'Intermedio (S8 - S15)',
+            preferredMode: clientData.preferredMode || 'Single / Double',
+            notes: clientData.notes?.trim() || 'Jugador de la comunidad Pump It Up',
+            createdAt: new Date().toISOString()
+        };
+
+        this.clientUsers.push(newPlayer);
+        localStorage.setItem('piu_registered_players_cache', JSON.stringify(this.clientUsers));
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await setDoc(doc(db, COLLECTIONS.PLAYERS, newPlayer.id), newPlayer);
+            } catch (e) {
+                console.warn("Error guardando jugador en Firebase:", e);
+            }
+        }
+
+        // Iniciar sesión automáticamente
+        this.currentUser = newPlayer;
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newPlayer));
+
+        this.notify();
+        return newPlayer;
+    }
+
+    async updateClientProfile(clientId, updatedFields) {
+        const index = this.clientUsers.findIndex(u => u.id === clientId);
+        if (index === -1) {
+            throw new Error("Perfil de cliente no encontrado.");
+        }
+
+        // Validar que no cambie su rol
+        delete updatedFields.role;
+        delete updatedFields.id;
+
+        this.clientUsers[index] = { ...this.clientUsers[index], ...updatedFields };
+        localStorage.setItem('piu_registered_players_cache', JSON.stringify(this.clientUsers));
+
+        if (this.currentUser && this.currentUser.id === clientId) {
+            this.currentUser = { ...this.currentUser, ...updatedFields };
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
+        }
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await updateDoc(doc(db, COLLECTIONS.PLAYERS, clientId), updatedFields);
+            } catch (e) {
+                console.warn("Error actualizando perfil en Firebase:", e);
+            }
+        }
+
+        this.notify();
+        return this.clientUsers[index];
+    }
+
     logout() {
         this.currentUser = null;
         localStorage.removeItem(AUTH_STORAGE_KEY);
-        tenantManager.clearSelectedLocal();
         this.notify();
     }
 

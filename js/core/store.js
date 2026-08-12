@@ -418,10 +418,15 @@ class Store {
         const totalCost = Math.round(hours * (machine ? machine.hourlyRate : 100));
         const isStaff = this.userRole === 'MANAGER' || this.userRole === 'SUPERADMIN';
 
+        const isClient = authManager.isClientUser();
+        const activeUser = authManager.getCurrentUser();
+
         const newReservation = {
             id: 'res_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
             businessId: this.currentBusiness.id,
             machineId: bookingData.machineId,
+            clientId: bookingData.clientId || (isClient ? activeUser.id : null),
+            clientUsername: bookingData.clientUsername || (isClient ? activeUser.username : null),
             clientName: bookingData.clientName.trim(),
             clientPhone: bookingData.clientPhone ? bookingData.clientPhone.trim() : '',
             clientEmail: bookingData.clientEmail ? bookingData.clientEmail.trim() : '',
@@ -445,6 +450,29 @@ class Store {
 
         this.notify();
         return newReservation;
+    }
+
+    async cancelReservationByClient(reservationId) {
+        const res = this.reservations.find(r => r.id === reservationId);
+        if (!res) throw new Error("Reservación no encontrada");
+
+        res.status = 'CANCELLED';
+        res.adminNotes = 'Cancelada por el jugador.';
+        res.updatedAt = new Date().toISOString();
+
+        this.saveLocalReservations(this.currentBusiness.id, this.reservations);
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), {
+                    status: 'CANCELLED',
+                    adminNotes: res.adminNotes,
+                    updatedAt: res.updatedAt
+                });
+            } catch (e) {}
+        }
+        this.notify();
+        return res;
     }
 
     async approveReservation(reservationId, adminNotes = '') {

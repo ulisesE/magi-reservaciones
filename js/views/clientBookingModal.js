@@ -4,6 +4,7 @@ import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { authManager } from '../core/authManager.js';
 import { formatFriendlyDate, format12Hour, generateTimeSlots, addMinutesToTime } from '../core/timeUtils.js';
 
 /**
@@ -12,7 +13,9 @@ import { formatFriendlyDate, format12Hour, generateTimeSlots, addMinutesToTime }
 export function openBookingModal({ machineId = null, date = null, startTime = null } = {}) {
     const business = store.currentBusiness;
     const machines = store.getActiveMachines();
-    const isAdmin = store.userRole === 'ADMIN';
+    const isStaff = authManager.isStaff();
+    const currentUser = authManager.getCurrentUser();
+    const isClientUser = authManager.isClientUser();
 
     if (machines.length === 0) {
         toast.warning("No hay máquinas disponibles en este momento para reservar.");
@@ -38,11 +41,21 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         </option>
     `).join('');
 
-    const modalTitle = isAdmin ? 'Asignar Reservación Directa' : 'Solicitar Reservación de Máquina';
-    const modalIcon = isAdmin ? '👑' : '🕹️';
+    const modalTitle = isStaff ? 'Asignar Reservación Directa' : 'Solicitar Reservación de Máquina';
+    const modalIcon = isStaff ? '👑' : '🕹️';
+
+    const clientNameVal = isClientUser ? currentUser.name : (isStaff ? '' : '');
+    const clientPhoneVal = isClientUser ? (currentUser.phone || '') : '';
 
     const contentHtml = `
         <form id="form-booking" class="cyber-form">
+            ${isClientUser ? `
+                <div style="background:rgba(104,242,5,0.08); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-sm); padding:8px 12px; font-size:0.82rem; color:var(--color-neon-lime); display:flex; align-items:center; gap:8px;">
+                    <span>${currentUser.avatar || '🕺'}</span>
+                    <span>Reservando con tu perfil de jugador: <strong>${currentUser.name}</strong> (@${currentUser.username})</span>
+                </div>
+            ` : ''}
+
             <div class="form-row">
                 <div class="form-group flex-1">
                     <label for="book-machine"><span class="neon-arrow">◆</span> Máquina Pump It Up</label>
@@ -87,17 +100,17 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             <div class="form-row grid-2">
                 <div class="form-group">
                     <label for="book-name"><span class="neon-arrow">◆</span> Nombre / GamerTag *</label>
-                    <input type="text" id="book-name" class="cyber-input" placeholder="Ej. Alex Step / PIU_Pro99" required>
+                    <input type="text" id="book-name" class="cyber-input" value="${clientNameVal}" placeholder="Ej. Alex Step / PIU_Pro99" required>
                 </div>
                 <div class="form-group">
                     <label for="book-phone"><span class="neon-arrow">◆</span> Teléfono / WhatsApp *</label>
-                    <input type="tel" id="book-phone" class="cyber-input" placeholder="Ej. 5512345678" required>
+                    <input type="tel" id="book-phone" class="cyber-input" value="${clientPhoneVal}" placeholder="Ej. 5512345678" required>
                 </div>
             </div>
 
             <div class="form-group">
                 <label for="book-notes"><span class="neon-arrow">◆</span> Notas / Nivel / Modo (Opcional)</label>
-                <textarea id="book-notes" class="cyber-textarea" rows="2" placeholder="Ej. Práctica Single S21, uso de barra, stream..."></textarea>
+                <textarea id="book-notes" class="cyber-textarea" rows="2" placeholder="Ej. Práctica Single S21, uso de barra, stream...">${isClientUser && currentUser.preferredMode ? `Modo: ${currentUser.preferredMode}` : ''}</textarea>
             </div>
 
             <div id="booking-error" class="form-error-msg hidden"></div>

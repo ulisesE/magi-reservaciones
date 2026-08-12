@@ -65,15 +65,20 @@ export function renderLandingView(container) {
                 }).join('')}
             </div>
 
-            <!-- Acceso para Personal / Superadmin -->
-            <div class="landing-staff-banner">
+            <!-- Acceso para Jugadores y Personal -->
+            <div class="landing-staff-banner" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
                 <div class="staff-banner-text">
-                    <strong>¿Eres Encargado de sucursal o Super Administrador?</strong>
-                    <p>Inicia sesión con tu cuenta para gestionar tus máquinas, reservaciones o la plataforma global.</p>
+                    <strong>¿Eres Jugador o Personal del Local?</strong>
+                    <p>Crea tu perfil de jugador para agendar más rápido y gestionar tus horarios, o inicia sesión con tu cuenta.</p>
                 </div>
-                <button id="btn-landing-staff-login" class="btn btn-outline">
-                    <span>🔐 Iniciar Sesión de Staff</span>
-                </button>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button id="btn-landing-player-register" class="btn btn-primary glow-red">
+                        <span>✨ Crear Perfil de Jugador</span>
+                    </button>
+                    <button id="btn-landing-staff-login" class="btn btn-outline">
+                        <span>🔐 Iniciar Sesión</span>
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -97,8 +102,13 @@ export function renderLandingView(container) {
         });
     });
 
-    // Botón de Login para Staff
+    // Botón de Crear Perfil
+    container.querySelector('#btn-landing-player-register')?.addEventListener('click', () => {
+        openLoginModal('register');
+    });
+
+    // Botón de Login
     container.querySelector('#btn-landing-staff-login')?.addEventListener('click', () => {
-        openLoginModal();
+        openLoginModal('login');
     });
 }

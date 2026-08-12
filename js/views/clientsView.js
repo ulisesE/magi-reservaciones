@@ -1,6 +1,7 @@
 // js/views/clientsView.js
 // Directorio y Administración de Clientes / Jugadores para el Encargado del Local
 import { store } from '../core/store.js';
+import { authManager } from '../core/authManager.js';
 import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc, query, where } from '../firebaseConfig.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
@@ -14,13 +15,25 @@ class ClientDirectoryManager {
         let loaded = [];
         if (isFirebaseAvailable && db) {
             try {
-                const q = query(collection(db, COLLECTIONS.PLAYERS), where("businessId", "==", businessId));
-                const snap = await getDocs(q);
-                snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                snap.forEach(d => {
+                    const data = d.data();
+                    if (!data.businessId || data.businessId === businessId) {
+                        loaded.push({ id: d.id, ...data });
+                    }
+                });
             } catch (e) {
                 console.warn("Error cargando clientes de Firebase:", e);
             }
         }
+
+        // Combinar con jugadores de authManager
+        const authPlayers = authManager.getClientUsers() || [];
+        authPlayers.forEach(ap => {
+            if (!loaded.some(l => l.id === ap.id || l.username === ap.username)) {
+                loaded.push(ap);
+            }
+        });
 
         if (loaded.length === 0) {
             const local = localStorage.getItem(`piu_clients_${businessId}`);
