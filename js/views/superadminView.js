@@ -3,15 +3,18 @@
 import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { authManager } from '../core/authManager.js';
+import { catalogsManager } from '../core/catalogsManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 
-let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'MACHINES', 'STAFF'
+let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'CABINETS', 'VERSIONS', 'MACHINES', 'STAFF'
 
 export function renderSuperadminView(container) {
     const businesses = tenantManager.getAllBusinesses();
     const staffUsers = authManager.getStaffUsers();
     const managers = staffUsers.filter(u => u.role === 'MANAGER');
+    const cabinetModels = catalogsManager.getCabinetModels();
+    const gameVersions = catalogsManager.getGameVersions();
     const totalBusinesses = businesses.length;
 
     container.innerHTML = `
@@ -23,9 +26,9 @@ export function renderSuperadminView(container) {
                         <span style="font-size:1.8rem;">👑</span>
                         <h2 class="friendly-date-title">Consola Global de Super Administrador</h2>
                     </div>
-                    <p class="subtitle-text">Administración completa de todos los locales, máquinas, encargados y catálogos de la plataforma.</p>
+                    <p class="subtitle-text">Administración completa de todos los locales, modelos de gabinete, versiones de software y personal.</p>
                 </div>
-                <div style="display:flex; gap:10px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
                     <button class="btn btn-outline" id="btn-create-manager">
                         <span>👤 Nuevo Encargado</span>
                     </button>
@@ -36,9 +39,15 @@ export function renderSuperadminView(container) {
             </div>
 
             <!-- Navegación de Pestañas de Superadmin -->
-            <div class="requests-filter-bar" style="margin-bottom:20px;">
+            <div class="requests-filter-bar" style="margin-bottom:20px; flex-wrap:wrap;">
                 <button class="filter-tab ${activeSuperTab === 'BUSINESSES' ? 'active' : ''}" data-tab="BUSINESSES">
                     <span>🏢 Locales (${totalBusinesses})</span>
+                </button>
+                <button class="filter-tab ${activeSuperTab === 'CABINETS' ? 'active' : ''}" data-tab="CABINETS">
+                    <span>🖥️ Modelos de Gabinete (${cabinetModels.length})</span>
+                </button>
+                <button class="filter-tab ${activeSuperTab === 'VERSIONS' ? 'active' : ''}" data-tab="VERSIONS">
+                    <span>💿 Versiones de Software (${gameVersions.length})</span>
                 </button>
                 <button class="filter-tab ${activeSuperTab === 'MACHINES' ? 'active' : ''}" data-tab="MACHINES">
                     <span>🕹️ Máquinas por Local</span>
@@ -50,7 +59,7 @@ export function renderSuperadminView(container) {
 
             <!-- Contenido Dinámico de la Pestaña -->
             <div id="superadmin-tab-content">
-                ${renderTabContent(activeSuperTab, businesses, staffUsers, managers)}
+                ${renderTabContent(activeSuperTab, businesses, staffUsers, managers, cabinetModels, gameVersions)}
             </div>
         </div>
     `;
@@ -135,9 +144,61 @@ export function renderSuperadminView(container) {
             }
         });
     });
+
+    // ==========================================
+    // Eventos de Modelos de Gabinete (Global)
+    // ==========================================
+    container.querySelector('#btn-add-cabinet-model')?.addEventListener('click', () => {
+        openCabinetModal(null, container);
+    });
+
+    container.querySelectorAll('.btn-edit-cabinet').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const cab = catalogsManager.getCabinetModels().find(c => c.id === id);
+            if (cab) openCabinetModal(cab, container);
+        });
+    });
+
+    container.querySelectorAll('.btn-delete-cabinet').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            if (confirm("¿Eliminar este modelo de gabinete del catálogo global?")) {
+                await catalogsManager.deleteCabinetModel(id);
+                toast.info("Modelo de gabinete eliminado.");
+                renderSuperadminView(container);
+            }
+        });
+    });
+
+    // ==========================================
+    // Eventos de Versiones de Software (Global)
+    // ==========================================
+    container.querySelector('#btn-add-global-version')?.addEventListener('click', () => {
+        openGameVersionModal(null, container);
+    });
+
+    container.querySelectorAll('.btn-edit-global-ver').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const ver = catalogsManager.getGameVersions().find(v => v.id === id);
+            if (ver) openGameVersionModal(ver, container);
+        });
+    });
+
+    container.querySelectorAll('.btn-delete-global-ver').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            if (confirm("¿Eliminar esta versión del catálogo global?")) {
+                await catalogsManager.deleteGameVersion(id);
+                toast.info("Versión eliminada.");
+                renderSuperadminView(container);
+            }
+        });
+    });
 }
 
-function renderTabContent(tab, businesses, staffUsers, managers) {
+function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, gameVersions) {
     if (tab === 'BUSINESSES') {
         return `
             <div class="settings-card">
@@ -213,6 +274,124 @@ function renderTabContent(tab, businesses, staffUsers, managers) {
                                     </tr>
                                 `;
                             }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    if (tab === 'CABINETS') {
+        return `
+            <div class="settings-card">
+                <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div class="title-with-icon">
+                        <span class="t-icon">🖥️</span>
+                        <div>
+                            <h3>Catálogo Global de Modelos de Gabinete Pump It Up</h3>
+                            <small>Estándares oficiales de gabinetes (LX, TX, FX, CX, SD) disponibles para todos los locales</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm glow-red" id="btn-add-cabinet-model">
+                        <span>➕ Agregar Modelo de Gabinete</span>
+                    </button>
+                </div>
+
+                <div class="catalogs-table-wrapper">
+                    <table class="catalogs-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre del Modelo</th>
+                                <th>Tipo</th>
+                                <th>Tamaño de Pantalla</th>
+                                <th>Dimensiones</th>
+                                <th>Descripción</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${cabinetModels.map(c => `
+                                <tr>
+                                    <td><strong style="color:#ffffff;">${c.name}</strong></td>
+                                    <td><span class="badge badge-primary">${c.type}</span></td>
+                                    <td><code style="color:var(--piu-cyan);">${c.screenSize}</code></td>
+                                    <td style="font-size:0.8rem; color:var(--text-muted);">${c.dimensions || 'N/A'}</td>
+                                    <td style="font-size:0.82rem; color:var(--text-secondary); max-width:240px;">${c.description}</td>
+                                    <td>
+                                        <span class="badge ${c.status === 'ACTIVE' ? 'badge-success' : 'badge-warning'}">
+                                            ${c.status === 'ACTIVE' ? 'ACTIVO' : 'INACTIVO'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style="display:flex; gap:6px;">
+                                            <button class="btn btn-outline btn-xs btn-edit-cabinet" data-id="${c.id}">✏️ Editar</button>
+                                            <button class="btn btn-danger btn-xs btn-delete-cabinet" data-id="${c.id}" title="Eliminar modelo">🗑️</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    if (tab === 'VERSIONS') {
+        return `
+            <div class="settings-card">
+                <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div class="title-with-icon">
+                        <span class="t-icon">💿</span>
+                        <div>
+                            <h3>Catálogo Maestro Global de Versiones de Software PIU</h3>
+                            <small>Versiones registradas a nivel sistema para asociar a las máquinas</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm glow-red" id="btn-add-global-version">
+                        <span>➕ Agregar Versión Oficial</span>
+                    </button>
+                </div>
+
+                <div class="catalogs-table-wrapper">
+                    <table class="catalogs-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre de Versión</th>
+                                <th>Año</th>
+                                <th>Último Parche</th>
+                                <th>Modos Soportados</th>
+                                <th>Gabinete Mínimo</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${gameVersions.map(v => `
+                                <tr>
+                                    <td><strong style="color:#ffffff;">${v.name}</strong></td>
+                                    <td>${v.releaseYear}</td>
+                                    <td><code>${v.latestPatch}</code></td>
+                                    <td>
+                                        <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                                            ${(v.supportedModes || []).map(m => `<span class="badge badge-dark" style="font-size:0.68rem;">${m}</span>`).join('')}
+                                        </div>
+                                    </td>
+                                    <td><span class="badge badge-primary">${v.minCabinet || 'Todos'}</span></td>
+                                    <td>
+                                        <span class="badge ${v.status === 'CURRENT' ? 'badge-success' : 'badge-warning'}">
+                                            ${v.status === 'CURRENT' ? 'OFICIAL / VIGENTE' : 'LEGACY'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style="display:flex; gap:6px;">
+                                            <button class="btn btn-outline btn-xs btn-edit-global-ver" data-id="${v.id}">✏️ Editar</button>
+                                            <button class="btn btn-danger btn-xs btn-delete-global-ver" data-id="${v.id}" title="Eliminar versión">🗑️</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -334,6 +513,197 @@ function renderTabContent(tab, businesses, staffUsers, managers) {
     }
 
     return '';
+}
+
+// ==========================================
+// Modales de Gestión de Superadmin
+// ==========================================
+function openCabinetModal(cabinet = null, container) {
+    const isEdit = !!cabinet;
+
+    const contentHtml = `
+        <form id="form-cabinet" class="cyber-form">
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="cab-name"><span class="neon-arrow">◆</span> Nombre del Gabinete *</label>
+                    <input type="text" id="cab-name" class="cyber-input" value="${cabinet ? cabinet.name : ''}" placeholder="Ej. LX 55\" LED Cabinet (Pro Stage)" required>
+                </div>
+                <div class="form-group">
+                    <label for="cab-type"><span class="neon-arrow">◆</span> Tipo / Serie *</label>
+                    <select id="cab-type" class="cyber-select">
+                        <option value="LX" ${cabinet?.type === 'LX' ? 'selected' : ''}>Serie LX (55" LED)</option>
+                        <option value="TX" ${cabinet?.type === 'TX' ? 'selected' : ''}>Serie TX (50" HD)</option>
+                        <option value="FX" ${cabinet?.type === 'FX' ? 'selected' : ''}>Serie FX (42" HD)</option>
+                        <option value="CX" ${cabinet?.type === 'CX' ? 'selected' : ''}>Serie CX (43" Wide)</option>
+                        <option value="SD" ${cabinet?.type === 'SD' ? 'selected' : ''}>Serie SD (29" Retro CRT)</option>
+                        <option value="CUSTOM" ${cabinet?.type === 'CUSTOM' ? 'selected' : ''}>Gabinete Custom / Especial</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="cab-screen"><span class="neon-arrow">◆</span> Pantalla / Resolución</label>
+                    <input type="text" id="cab-screen" class="cyber-input" value="${cabinet ? cabinet.screenSize : '55\" 120Hz 4K/FHD'}" placeholder="Ej. 55\" 120Hz Full HD">
+                </div>
+                <div class="form-group">
+                    <label for="cab-dims"><span class="neon-arrow">◆</span> Dimensiones Físicas</label>
+                    <input type="text" id="cab-dims" class="cyber-input" value="${cabinet ? (cabinet.dimensions || '') : ''}" placeholder="Ej. 210cm x 175cm x 240cm">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="cab-desc"><span class="neon-arrow">◆</span> Descripción / Características Técnicas</label>
+                <textarea id="cab-desc" class="cyber-textarea" rows="2" placeholder="Gabinete oficial de competición con barras pro y sonido 2.1...">${cabinet ? cabinet.description : ''}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="cab-status"><span class="neon-arrow">◆</span> Estado en Catálogo</label>
+                <select id="cab-status" class="cyber-select">
+                    <option value="ACTIVE" ${cabinet?.status === 'ACTIVE' ? 'selected' : ''}>Activo (Disponible para seleccionar en locales)</option>
+                    <option value="INACTIVE" ${cabinet?.status === 'INACTIVE' ? 'selected' : ''}>Inactivo</option>
+                </select>
+            </div>
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-cab">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-save-cab">
+            ${isEdit ? '💾 Guardar Cambios' : '➕ Guardar Modelo'}
+        </button>
+    `;
+
+    const modalEl = modal.open({
+        title: isEdit ? `Editar Gabinete: ${cabinet.name}` : 'Registrar Nuevo Modelo de Gabinete',
+        icon: '🖥️',
+        contentHtml,
+        footerHtml,
+        maxWidth: '540px'
+    });
+
+    modalEl.querySelector('#btn-cancel-cab').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-cab').onclick = async () => {
+        const name = modalEl.querySelector('#cab-name').value.trim();
+        const type = modalEl.querySelector('#cab-type').value;
+        const screenSize = modalEl.querySelector('#cab-screen').value.trim();
+        const dimensions = modalEl.querySelector('#cab-dims').value.trim();
+        const description = modalEl.querySelector('#cab-desc').value.trim();
+        const status = modalEl.querySelector('#cab-status').value;
+
+        if (!name) {
+            toast.error("Por favor ingresa el nombre del gabinete.");
+            return;
+        }
+
+        try {
+            if (isEdit) {
+                await catalogsManager.updateCabinetModel(cabinet.id, {
+                    name, type, screenSize, dimensions, description, status
+                });
+                toast.success("Modelo de gabinete actualizado.");
+            } else {
+                await catalogsManager.addCabinetModel({
+                    name, type, screenSize, dimensions, description, status
+                });
+                toast.success("Nuevo modelo de gabinete agregado al catálogo global.");
+            }
+            modal.close();
+            renderSuperadminView(container);
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
+}
+
+function openGameVersionModal(version = null, container) {
+    const isEdit = !!version;
+
+    const contentHtml = `
+        <form id="form-game-ver" class="cyber-form">
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="ver-name"><span class="neon-arrow">◆</span> Nombre de la Versión *</label>
+                    <input type="text" id="ver-name" class="cyber-input" value="${version ? version.name : ''}" placeholder="Ej. Pump It Up Phoenix" required>
+                </div>
+                <div class="form-group">
+                    <label for="ver-year"><span class="neon-arrow">◆</span> Año de Lanzamiento *</label>
+                    <input type="number" id="ver-year" class="cyber-input" value="${version ? version.releaseYear : new Date().getFullYear()}" required>
+                </div>
+            </div>
+
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="ver-patch"><span class="neon-arrow">◆</span> Versión / Parche Actual</label>
+                    <input type="text" id="ver-patch" class="cyber-input" value="${version ? version.latestPatch : 'v1.00.0'}" placeholder="v1.08.0">
+                </div>
+                <div class="form-group">
+                    <label for="ver-status"><span class="neon-arrow">◆</span> Estado en Catálogo</label>
+                    <select id="ver-status" class="cyber-select">
+                        <option value="CURRENT" ${version?.status === 'CURRENT' ? 'selected' : ''}>Oficial / Vigente (Actual)</option>
+                        <option value="LEGACY" ${version?.status === 'LEGACY' ? 'selected' : ''}>Legacy / Versión Anterior</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="ver-min-cab"><span class="neon-arrow">◆</span> Gabinete Recomendado / Mínimo</label>
+                <input type="text" id="ver-min-cab" class="cyber-input" value="${version ? (version.minCabinet || 'LX 55" / TX 50"') : 'LX 55" / TX 50"'}" placeholder="Ej. LX 55\" / TX 50\"">
+            </div>
+
+            <div class="form-group">
+                <label for="ver-modes"><span class="neon-arrow">◆</span> Modos Soportados (separados por coma)</label>
+                <input type="text" id="ver-modes" class="cyber-input" value="${version ? (version.supportedModes || []).join(', ') : 'Single, Double, Co-Op, UCS (Custom Steps), Premium Mode'}" placeholder="Single, Double, Co-Op">
+            </div>
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-ver">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-save-ver">
+            ${isEdit ? '💾 Guardar Cambios' : '➕ Agregar al Catálogo'}
+        </button>
+    `;
+
+    const modalEl = modal.open({
+        title: isEdit ? `Editar Versión: ${version.name}` : 'Registrar Nueva Versión de Software',
+        icon: '💿',
+        contentHtml,
+        footerHtml,
+        maxWidth: '520px'
+    });
+
+    modalEl.querySelector('#btn-cancel-ver').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-ver').onclick = async () => {
+        const name = modalEl.querySelector('#ver-name').value.trim();
+        const releaseYear = modalEl.querySelector('#ver-year').value;
+        const latestPatch = modalEl.querySelector('#ver-patch').value.trim();
+        const status = modalEl.querySelector('#ver-status').value;
+        const minCabinet = modalEl.querySelector('#ver-min-cab').value.trim();
+        const modesRaw = modalEl.querySelector('#ver-modes').value.trim();
+        const supportedModes = modesRaw ? modesRaw.split(',').map(m => m.trim()).filter(Boolean) : ['Single', 'Double'];
+
+        if (!name) {
+            toast.error("Por favor ingresa el nombre de la versión.");
+            return;
+        }
+
+        try {
+            if (isEdit) {
+                await catalogsManager.updateGameVersion(version.id, { name, releaseYear, latestPatch, status, minCabinet, supportedModes });
+                toast.success("Versión de software actualizada.");
+            } else {
+                await catalogsManager.addGameVersion({ name, releaseYear, latestPatch, status, minCabinet, supportedModes });
+                toast.success("Nueva versión de software registrada en el catálogo global.");
+            }
+            modal.close();
+            renderSuperadminView(container);
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
 }
 
 function openStaffFormModal(staff = null, container) {

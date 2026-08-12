@@ -221,7 +221,7 @@ class AuthManager {
             phone: clientData.phone?.trim() || '',
             email: clientData.email?.trim() || '',
             avatar: clientData.avatar || '🕺',
-            skillLevel: clientData.skillLevel || 'Intermedio (S8 - S15)',
+            skillLevel: clientData.skillLevel || 'Liga C',
             preferredMode: clientData.preferredMode || 'Single / Double',
             notes: clientData.notes?.trim() || 'Jugador de la comunidad Pump It Up',
             createdAt: new Date().toISOString()

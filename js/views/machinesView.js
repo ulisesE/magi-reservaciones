@@ -108,15 +108,15 @@ export function renderMachinesView(container) {
 
     // Eventos
     if (isStaff) {
-        container.querySelector('#btn-add-machine')?.addEventListener('click', () => {
-            openMachineFormModal();
+        container.querySelector('#btn-add-machine')?.addEventListener('click', async () => {
+            await openMachineFormModal();
         });
 
         container.querySelectorAll('.btn-edit-mach').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
                 const id = btn.dataset.id;
                 const mach = store.getMachineById(id);
-                if (mach) openMachineFormModal(mach);
+                if (mach) await openMachineFormModal(mach);
             });
         });
 
@@ -166,16 +166,47 @@ export function renderMachinesView(container) {
 }
 
 /**
- * Modal de Creación / Edición de Máquinas PIU
+ * Modal de Creación / Edición de Máquinas PIU con Catálogos Dinámicos
  */
-function openMachineFormModal(machine = null) {
+async function openMachineFormModal(machine = null) {
     const isEdit = !!machine;
     const business = store.currentBusiness;
+    const cabinetModels = catalogsManager.getCabinetModels();
     const gameVersions = catalogsManager.getGameVersions();
+    const features = await catalogsManager.getFeaturesByBusiness(business.id);
+
+    const modelOptions = cabinetModels.map(c => `
+        <option value="${c.name}" ${machine?.model === c.name || (machine?.model?.includes(c.shortName)) ? 'selected' : ''}>
+            ${c.name} (${c.screenSize})
+        </option>
+    `).join('');
 
     const versionOptions = gameVersions.map(v => `
-        <option value="${v.name}" ${machine?.version === v.name ? 'selected' : ''}>${v.name}</option>
+        <option value="${v.name}" ${machine?.version === v.name ? 'selected' : ''}>
+            ${v.name} (${v.latestPatch})
+        </option>
     `).join('');
+
+    const currentFeatures = machine?.features || [];
+    const activeFeatures = features.filter(f => f.status === 'ACTIVE');
+
+    const featureCheckboxesHtml = activeFeatures.length === 0 ? `
+        <p style="font-size:0.85rem; color:var(--text-muted); font-style:italic;">
+            No hay accesorios configurados en el catálogo local. Puedes agregarlos desde la pestaña "Catálogos".
+        </p>
+    ` : `
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:8px; max-height:180px; overflow-y:auto; padding:4px; background:var(--bg-dark-900); border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+            ${activeFeatures.map(f => {
+                const isChecked = currentFeatures.includes(f.name) || currentFeatures.some(cf => cf.toLowerCase() === f.name.toLowerCase());
+                return `
+                    <label style="display:flex; align-items:center; gap:8px; background:var(--bg-dark-700); padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border-color); cursor:pointer; font-size:0.82rem;">
+                        <input type="checkbox" class="mach-feat-checkbox" value="${f.name}" ${isChecked ? 'checked' : ''} style="accent-color:var(--color-neon-lime); width:16px; height:16px; cursor:pointer;">
+                        <span>${f.icon || '⚡'} <strong>${f.name}</strong></span>
+                    </label>
+                `;
+            }).join('')}
+        </div>
+    `;
 
     const contentHtml = `
         <form id="form-machine" class="cyber-form">
@@ -185,20 +216,17 @@ function openMachineFormModal(machine = null) {
                     <input type="text" id="mach-name" class="cyber-input" value="${machine ? machine.name : ''}" placeholder="Ej. PIU Phoenix LX #1" required>
                 </div>
                 <div class="form-group">
-                    <label for="mach-model"><span class="neon-arrow">◆</span> Tipo de Gabinete *</label>
+                    <label for="mach-model"><span class="neon-arrow">◆</span> Modelo de Gabinete (Catálogo Global) *</label>
                     <select id="mach-model" class="cyber-select">
-                        <option value="LX 55\" LED Cabinet" ${machine?.model?.includes('LX') ? 'selected' : ''}>LX 55" LED Cabinet (Pro)</option>
-                        <option value="TX 50\" HD Cabinet" ${machine?.model?.includes('TX') ? 'selected' : ''}>TX 50" HD Cabinet</option>
-                        <option value="FX 42\" Cabinet" ${machine?.model?.includes('FX') ? 'selected' : ''}>FX 42" Cabinet</option>
-                        <option value="CX 43\" Cabinet" ${machine?.model?.includes('CX') ? 'selected' : ''}>CX 43" Cabinet</option>
-                        <option value="SD 29\" CRT Cabinet" ${machine?.model?.includes('SD') ? 'selected' : ''}>SD 29" Retro Cabinet</option>
+                        ${modelOptions}
+                        <option value="Gabinete Personalizado" ${!modelOptions.includes(machine?.model) ? 'selected' : ''}>Gabinete Personalizado...</option>
                     </select>
                 </div>
             </div>
 
             <div class="form-row grid-2">
                 <div class="form-group">
-                    <label for="mach-version"><span class="neon-arrow">◆</span> Versión de Software *</label>
+                    <label for="mach-version"><span class="neon-arrow">◆</span> Versión de Software (Catálogo Global) *</label>
                     <select id="mach-version" class="cyber-select">
                         ${versionOptions}
                         <option value="Otra Versión" ${!versionOptions.includes(machine?.version) ? 'selected' : ''}>Otra Versión...</option>
@@ -208,6 +236,15 @@ function openMachineFormModal(machine = null) {
                     <label for="mach-rate"><span class="neon-arrow">◆</span> Tarifa por Hora (${business.currencySymbol}) *</label>
                     <input type="number" id="mach-rate" class="cyber-input" value="${machine ? machine.hourlyRate : 100}" min="1" required>
                 </div>
+            </div>
+
+            <!-- Accesorios y Componentes de Hardware -->
+            <div class="form-group">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label><span class="neon-arrow">◆</span> Accesorios y Periféricos Instalados (Catálogo Local)</label>
+                    <small style="color:var(--color-neon-lime); font-size:0.75rem;">(Selecciona los componentes presentes)</small>
+                </div>
+                ${featureCheckboxesHtml}
             </div>
 
             <div class="form-row grid-2">
@@ -244,7 +281,7 @@ function openMachineFormModal(machine = null) {
         icon: '🕹️',
         contentHtml,
         footerHtml,
-        maxWidth: '560px'
+        maxWidth: '580px'
     });
 
     modalEl.querySelector('#btn-cancel-mach').onclick = () => modal.close();
@@ -258,6 +295,12 @@ function openMachineFormModal(machine = null) {
         const imageUrl = modalEl.querySelector('#mach-img').value.trim() || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80';
         const padsCondition = modalEl.querySelector('#mach-pads').value.trim();
 
+        // Obtener accesorios marcados
+        const selectedFeatures = [];
+        modalEl.querySelectorAll('.mach-feat-checkbox:checked').forEach(cb => {
+            selectedFeatures.push(cb.value);
+        });
+
         if (!name) {
             toast.error("Por favor ingresa el nombre de la máquina.");
             return;
@@ -266,12 +309,12 @@ function openMachineFormModal(machine = null) {
         try {
             if (isEdit) {
                 await store.updateMachine(machine.id, {
-                    name, model, version, hourlyRate, status, imageUrl, padsCondition
+                    name, model, version, hourlyRate, status, imageUrl, padsCondition, features: selectedFeatures
                 });
                 toast.success("Máquina actualizada correctamente.");
             } else {
                 await store.addMachine({
-                    name, model, version, hourlyRate, status, imageUrl, padsCondition
+                    name, model, version, hourlyRate, status, imageUrl, padsCondition, features: selectedFeatures
                 });
                 toast.success("Nueva máquina registrada en el catálogo.");
             }

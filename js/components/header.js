@@ -309,12 +309,15 @@ export function openLoginModal(initialTab = 'login') {
                             <input type="email" id="reg-email" class="cyber-input" placeholder="jugador@correo.com">
                         </div>
                         <div class="form-group">
-                            <label for="reg-level"><span class="neon-arrow">◆</span> Nivel de Juego</label>
+                            <label for="reg-level"><span class="neon-arrow">◆</span> Nivel / Liga (Ligas Potosinas)</label>
                             <select id="reg-level" class="cyber-select">
-                                <option value="Principiante (S1 - S7)">Principiante (S1 - S7)</option>
-                                <option value="Intermedio (S8 - S15)" selected>Intermedio (S8 - S15)</option>
-                                <option value="Avanzado (S16 - S21)">Avanzado (S16 - S21)</option>
-                                <option value="Experto / Pro (S22+ / D23+)">Experto / Pro (S22+ / D23+)</option>
+                                <option value="Liga D">Liga D</option>
+                                <option value="Liga C" selected>Liga C</option>
+                                <option value="Liga B">Liga B</option>
+                                <option value="Liga A">Liga A</option>
+                                <option value="Liga S">Liga S</option>
+                                <option value="Liga SS">Liga SS</option>
+                                <option value="Liga SSS">Liga SSS</option>
                             </select>
                         </div>
                     </div>

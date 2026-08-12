@@ -75,7 +75,7 @@ export function renderClientProfileView(container) {
                                 @${currentUser.username || 'gamertag'}
                             </div>
                             <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
-                                <span class="badge badge-primary" style="font-size:0.75rem;">⭐ ${currentUser.skillLevel || 'Intermedio'}</span>
+                                <span class="badge badge-primary" style="font-size:0.75rem;">⭐ ${currentUser.skillLevel || 'Liga C'}</span>
                                 <span class="badge" style="background:rgba(255,255,255,0.08); font-size:0.75rem; color:var(--text-secondary);">🎮 ${currentUser.preferredMode || 'Single'}</span>
                             </div>
                         </div>
@@ -219,12 +219,15 @@ export function renderClientProfileView(container) {
 
                         <div class="form-row grid-2">
                             <div class="form-group">
-                                <label for="edit-level"><span class="neon-arrow">◆</span> Nivel de Juego</label>
+                                <label for="edit-level"><span class="neon-arrow">◆</span> Nivel / Liga (Ligas Potosinas)</label>
                                 <select id="edit-level" class="cyber-select">
-                                    <option value="Principiante (S1 - S7)" ${currentUser.skillLevel?.includes('Principiante') ? 'selected' : ''}>Principiante (S1 - S7)</option>
-                                    <option value="Intermedio (S8 - S15)" ${currentUser.skillLevel?.includes('Intermedio') ? 'selected' : ''}>Intermedio (S8 - S15)</option>
-                                    <option value="Avanzado (S16 - S21)" ${currentUser.skillLevel?.includes('Avanzado') ? 'selected' : ''}>Avanzado (S16 - S21)</option>
-                                    <option value="Experto / Pro (S22+ / D23+)" ${currentUser.skillLevel?.includes('Experto') ? 'selected' : ''}>Experto / Pro (S22+ / D23+)</option>
+                                    <option value="Liga D" ${currentUser.skillLevel === 'Liga D' ? 'selected' : ''}>Liga D</option>
+                                    <option value="Liga C" ${currentUser.skillLevel === 'Liga C' || !currentUser.skillLevel ? 'selected' : ''}>Liga C</option>
+                                    <option value="Liga B" ${currentUser.skillLevel === 'Liga B' ? 'selected' : ''}>Liga B</option>
+                                    <option value="Liga A" ${currentUser.skillLevel === 'Liga A' ? 'selected' : ''}>Liga A</option>
+                                    <option value="Liga S" ${currentUser.skillLevel === 'Liga S' ? 'selected' : ''}>Liga S</option>
+                                    <option value="Liga SS" ${currentUser.skillLevel === 'Liga SS' ? 'selected' : ''}>Liga SS</option>
+                                    <option value="Liga SSS" ${currentUser.skillLevel === 'Liga SSS' ? 'selected' : ''}>Liga SSS</option>
                                 </select>
                             </div>
                             <div class="form-group">

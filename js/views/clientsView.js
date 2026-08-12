@@ -55,7 +55,7 @@ class ClientDirectoryManager {
                         name: r.clientName,
                         phone: r.clientPhone || '',
                         email: r.clientEmail || '',
-                        skillLevel: 'Intermedio / Avanzado',
+                        skillLevel: 'Liga B',
                         preferredMode: 'Single / Double',
                         notes: r.notes || 'Jugador habitual del local.',
                         createdAt: new Date().toISOString()
@@ -72,7 +72,7 @@ class ClientDirectoryManager {
                         name: 'Alex "StepMaster"',
                         phone: '5511223344',
                         email: 'alex.piu@gmail.com',
-                        skillLevel: 'Experto (S23 / D24)',
+                        skillLevel: 'Liga SSS',
                         preferredMode: 'Single Speed & Stream',
                         notes: 'Jugador competitivo nacional. Usa barra.',
                         createdAt: new Date().toISOString()
@@ -83,7 +83,7 @@ class ClientDirectoryManager {
                         name: 'Valeria G.',
                         phone: '5599887766',
                         email: 'valeria.dance@outlook.com',
-                        skillLevel: 'Intermedio (S15 / D16)',
+                        skillLevel: 'Liga A',
                         preferredMode: 'Co-Op & K-Pop Songs',
                         notes: 'Viene los fines de semana en grupo.',
                         createdAt: new Date().toISOString()
@@ -108,7 +108,7 @@ class ClientDirectoryManager {
             name: clientData.name.trim(),
             phone: clientData.phone?.trim() || '',
             email: clientData.email?.trim() || '',
-            skillLevel: clientData.skillLevel || 'Intermedio',
+            skillLevel: clientData.skillLevel || 'Liga C',
             preferredMode: clientData.preferredMode || 'Single',
             notes: clientData.notes?.trim() || '',
             createdAt: new Date().toISOString()
@@ -297,12 +297,15 @@ function openClientFormModal(businessId, client = null, mainContainer) {
                     <input type="email" id="cli-email" class="cyber-input" value="${client ? client.email : ''}" placeholder="jugador@email.com">
                 </div>
                 <div class="form-group">
-                    <label for="cli-level"><span class="neon-arrow">◆</span> Nivel de Juego</label>
+                    <label for="cli-level"><span class="neon-arrow">◆</span> Nivel / Liga (Ligas Potosinas)</label>
                     <select id="cli-level" class="cyber-select">
-                        <option value="Principiante (S1 - S7)" ${client?.skillLevel?.includes('Principiante') ? 'selected' : ''}>Principiante (S1 - S7)</option>
-                        <option value="Intermedio (S8 - S15)" ${client?.skillLevel?.includes('Intermedio') ? 'selected' : ''}>Intermedio (S8 - S15)</option>
-                        <option value="Avanzado (S16 - S21)" ${client?.skillLevel?.includes('Avanzado') ? 'selected' : ''}>Avanzado (S16 - S21)</option>
-                        <option value="Experto / Pro (S22+ / D23+)" ${client?.skillLevel?.includes('Experto') ? 'selected' : ''}>Experto / Pro (S22+ / D23+)</option>
+                        <option value="Liga D" ${client?.skillLevel === 'Liga D' ? 'selected' : ''}>Liga D</option>
+                        <option value="Liga C" ${client?.skillLevel === 'Liga C' || !client?.skillLevel ? 'selected' : ''}>Liga C</option>
+                        <option value="Liga B" ${client?.skillLevel === 'Liga B' ? 'selected' : ''}>Liga B</option>
+                        <option value="Liga A" ${client?.skillLevel === 'Liga A' ? 'selected' : ''}>Liga A</option>
+                        <option value="Liga S" ${client?.skillLevel === 'Liga S' ? 'selected' : ''}>Liga S</option>
+                        <option value="Liga SS" ${client?.skillLevel === 'Liga SS' ? 'selected' : ''}>Liga SS</option>
+                        <option value="Liga SSS" ${client?.skillLevel === 'Liga SSS' ? 'selected' : ''}>Liga SSS</option>
                     </select>
                 </div>
             </div>

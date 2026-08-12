@@ -68,6 +68,8 @@ export const COLLECTIONS = {
     OPERATING_RULES: `${FIRESTORE_PREFIX}_operating_rules`,
     GAME_VERSIONS: `${FIRESTORE_PREFIX}_game_versions`,
     PLAYERS: `${FIRESTORE_PREFIX}_players`,
+    CABINET_MODELS: `${FIRESTORE_PREFIX}_cabinet_models`,
+    MACHINE_FEATURES: `${FIRESTORE_PREFIX}_machine_features`,
     AUDIT_LOGS: `${FIRESTORE_PREFIX}_audit_logs`
 };
 
