@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sistema de gestión y reservación de pistas y maquinitas de baile Pump It Up (PIU) con vistas de Mes, Semana y Día (Grid Horas x Máquinas), perfiles de cliente y encargado, y soporte Multi-Negocio.">
+    <meta name="theme-color" content="#080a0f">
+    <title>Pump It Up Hub • Sistema de Reservaciones de Maquinitas</title>
+
+    <!-- Hojas de Estilo Cyberpunk / Arcade -->
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/views.css">
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕹️</text></svg>">
+</head>
+<body>
+    <div id="app">
+        <!-- Barra de Encabezado Superior (Renderizada dinámicamente) -->
+        <div id="header-container"></div>
+
+        <!-- Contenedor Principal de Vistas -->
+        <main id="main-content" class="main-content-container" role="main">
+            <div class="empty-state">
+                <div class="empty-icon pulse-glow">🕹️</div>
+                <h3>Cargando sistema Pump It Up Hub...</h3>
+            </div>
+        </main>
+
+        <!-- Pie de página con estado de conexión -->
+        <footer class="app-footer" style="padding: 16px 24px; text-align: center; font-size: 0.78rem; color: var(--text-dimmed); border-top: 1px solid var(--border-color); background: var(--bg-dark-900);">
+            <div style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <strong>PUMP IT UP HUB</strong> • Plataforma Modular de Reservaciones Multi-Negocio
+                </div>
+                <div id="cloud-sync-status" style="display: flex; align-items: center; gap: 6px;">
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 8px #00ff88;"></span>
+                    <span>Firebase Firestore Activo (Namespace: <code>piu_app_v1</code>)</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modales y Notificaciones Toast -->
+    <div id="modal-root"></div>
+    <div id="toast-container"></div>
+
+    <!-- Entrada Principal JavaScript (ES Modules) -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

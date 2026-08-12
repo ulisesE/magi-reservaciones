@@ -1,0 +1,1115 @@
+/* css/views.css */
+/* Estilos específicos de las vistas: Día (Grid Horas x Máquinas), Semana, Mes, Máquinas, Solicitudes y Negocios */
+
+/* ==========================================================================
+   BARRA COMÚN DE ENCABEZADO DE VISTAS Y NAVEGACIÓN DE FECHA
+   ========================================================================== */
+.view-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 22px;
+    background: var(--bg-glass-card);
+    padding: 16px 20px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.date-navigator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.current-date-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cyber-input-date {
+    background: var(--bg-dark-700);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-main);
+    font-size: 0.88rem;
+    outline: none;
+}
+
+.friendly-date-title {
+    font-size: 1.3rem;
+    margin: 0;
+    color: #ffffff;
+}
+
+.subtitle-text {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* ==========================================================================
+   VISTA DÍA: GRID INTERACTIVO HORAS X MÁQUINAS (MATRIZ)
+   ========================================================================== */
+.grid-container-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+}
+
+.matrix-table-responsive {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.grid-matrix-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 720px;
+}
+
+/* Encabezados del Grid */
+.col-time-header {
+    width: 130px;
+    min-width: 130px;
+    background: var(--bg-dark-800);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    padding: 16px 12px;
+    border-bottom: 2px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.col-machine-header {
+    background: var(--bg-dark-800);
+    padding: 14px 16px;
+    border-bottom: 2px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.machine-header-card .mach-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 4px;
+}
+
+.mach-badge-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* Filas y Celdas */
+.grid-time-row {
+    transition: background-color 0.15s ease;
+}
+
+.cell-time-label {
+    background: var(--bg-dark-800);
+    border-bottom: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    padding: 12px 14px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.time-block-label strong {
+    display: block;
+    font-size: 0.95rem;
+    color: #ffffff;
+    font-family: var(--font-mono);
+}
+
+.time-block-label small {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.cell-slot {
+    border-bottom: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    padding: 8px 10px;
+    vertical-align: middle;
+    height: 70px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+/* Slot Disponible */
+.cell-available {
+    background: rgba(8, 10, 15, 0.4);
+    cursor: pointer;
+}
+
+.cell-available:hover {
+    background: rgba(0, 229, 255, 0.08);
+}
+
+.slot-book-btn {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    color: var(--text-dimmed);
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.cell-available:hover .slot-book-btn {
+    border-color: var(--piu-cyan);
+    color: var(--piu-cyan);
+    background: rgba(0, 229, 255, 0.06);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+}
+
+/* Slot Ocupado / Reservado */
+.cell-slot.slot-confirmed {
+    background: rgba(0, 255, 136, 0.1);
+    border-left: 3px solid var(--piu-green);
+    cursor: pointer;
+}
+.cell-slot.slot-confirmed:hover {
+    background: rgba(0, 255, 136, 0.18);
+}
+
+.cell-slot.slot-pending {
+    background: rgba(255, 208, 0, 0.12);
+    border-left: 3px solid var(--piu-gold);
+    cursor: pointer;
+}
+.cell-slot.slot-pending:hover {
+    background: rgba(255, 208, 0, 0.2);
+}
+
+.cell-maintenance {
+    background: rgba(255, 42, 95, 0.06);
+}
+
+.slot-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 100%;
+}
+
+.slot-occupant {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-indicator-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--piu-green);
+    box-shadow: 0 0 6px var(--piu-green);
+}
+.slot-pending .status-indicator-dot {
+    background: var(--piu-gold);
+    box-shadow: 0 0 6px var(--piu-gold);
+}
+
+.occupant-name {
+    font-size: 0.92rem;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.slot-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+}
+
+.slot-hours {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.slot-status-pill {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.slot-confirmed .slot-status-pill { color: var(--piu-green); }
+.slot-pending .slot-status-pill { color: var(--piu-gold); }
+
+.slot-locked {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--text-dimmed);
+    font-size: 0.8rem;
+}
+
+/* Leyenda */
+.grid-legend {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+.dot-available { background: var(--bg-dark-600); border: 1px dashed var(--text-muted); }
+.dot-pending { background: var(--piu-gold); }
+.dot-confirmed { background: var(--piu-green); }
+.dot-maintenance { background: var(--piu-red); }
+
+/* Detalle Dialog */
+.res-detail-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.detail-header-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--bg-dark-700);
+    padding: 14px;
+    border-radius: var(--radius-sm);
+}
+.client-avatar {
+    font-size: 2rem;
+}
+.detail-client-name {
+    font-size: 1.15rem;
+    margin: 0;
+}
+.detail-phone {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    background: var(--bg-dark-700);
+    padding: 14px;
+    border-radius: var(--radius-sm);
+}
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.d-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+.detail-notes-box {
+    background: var(--bg-dark-700);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+}
+.detail-notes-box p {
+    color: var(--text-main);
+    font-size: 0.88rem;
+    margin-top: 4px;
+}
+
+/* ==========================================================================
+   VISTA SEMANA: TARJETAS DE LOS 7 DÍAS CON CONTEO
+   ========================================================================== */
+.week-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 14px;
+}
+
+.week-day-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+}
+
+.week-day-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--piu-cyan);
+    box-shadow: 0 6px 20px rgba(0, 229, 255, 0.2);
+}
+
+.week-day-card.card-today {
+    border-color: var(--piu-red);
+    background: linear-gradient(180deg, rgba(255, 42, 95, 0.12), var(--bg-glass-card));
+    box-shadow: 0 0 15px rgba(255, 42, 95, 0.25);
+}
+
+.week-day-card.card-selected {
+    outline: 2px solid var(--piu-cyan);
+}
+
+.day-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.day-card-name {
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.day-card-number {
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.badge-mini {
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.badge-today {
+    background: var(--piu-red);
+    color: #ffffff;
+}
+
+.day-booking-counter {
+    background: var(--bg-dark-800);
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.counter-number {
+    font-family: var(--font-heading);
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.counter-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+
+.day-status-breakdown {
+    display: flex;
+    gap: 6px;
+    font-size: 0.72rem;
+}
+.breakdown-tag {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+.tag-conf { background: rgba(0, 255, 136, 0.15); color: var(--piu-green); }
+.tag-pend { background: rgba(255, 208, 0, 0.15); color: var(--piu-gold); }
+
+.day-preview-list {
+    min-height: 55px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.preview-res-item {
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-dark-800);
+    padding: 3px 6px;
+    border-radius: 4px;
+    border-left: 2px solid var(--piu-green);
+}
+.preview-res-item.item-pending {
+    border-left-color: var(--piu-gold);
+}
+.res-time {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+.res-client {
+    color: #ffffff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.day-empty-hint {
+    font-size: 0.78rem;
+    color: var(--text-dimmed);
+    text-align: center;
+    margin: auto 0;
+}
+
+.day-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+}
+
+.day-card-actions button {
+    flex: 1;
+}
+
+.week-kpis {
+    display: flex;
+    gap: 10px;
+}
+.kpi-pill {
+    background: var(--bg-dark-800);
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    font-size: 0.85rem;
+    border: 1px solid var(--border-color);
+}
+
+/* ==========================================================================
+   VISTA MES: CALENDARIO MENSUAL CON CONTADOR DE RESERVAS
+   ========================================================================== */
+.calendar-month-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+}
+
+.month-weekdays-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: var(--bg-dark-800);
+    border-bottom: 2px solid var(--border-color);
+    text-align: center;
+}
+
+.weekday-cell {
+    padding: 12px 6px;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.month-days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+}
+
+.month-day-cell {
+    min-height: 105px;
+    padding: 8px;
+    border-bottom: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    background: rgba(8, 10, 15, 0.35);
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.month-day-cell:hover {
+    background: rgba(0, 229, 255, 0.08);
+}
+
+.month-day-cell.other-month {
+    opacity: 0.35;
+}
+
+.month-day-cell.is-today {
+    background: rgba(255, 42, 95, 0.08);
+    border-top: 2px solid var(--piu-red);
+}
+
+.month-day-cell.is-selected {
+    box-shadow: inset 0 0 0 2px var(--piu-cyan);
+}
+
+.cell-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.day-num {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #ffffff;
+}
+
+.today-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--piu-red);
+    box-shadow: 0 0 6px var(--piu-red);
+}
+
+.cell-day-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.res-count-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 4px;
+}
+
+.badge-has-res {
+    background: rgba(0, 229, 255, 0.15);
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    color: var(--piu-cyan);
+}
+
+.badge-high-res {
+    background: rgba(255, 42, 95, 0.2);
+    border: 1px solid rgba(255, 42, 95, 0.5);
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(255, 42, 95, 0.3);
+}
+
+.res-badge-val {
+    font-size: 0.95rem;
+    font-family: var(--font-heading);
+}
+
+.res-badge-text {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+}
+
+.mini-players-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mini-player-item {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mini-more {
+    font-size: 0.65rem;
+    color: var(--piu-cyan);
+}
+
+.no-bookings-hint {
+    font-size: 0.72rem;
+    color: var(--text-dimmed);
+    text-align: center;
+}
+
+.month-legend {
+    display: flex;
+    gap: 14px;
+}
+.legend-badge-sample {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+/* ==========================================================================
+   VISTA MÁQUINAS: CATÁLOGO
+   ========================================================================== */
+.machines-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.machine-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.25s ease;
+}
+
+.machine-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--piu-red);
+    box-shadow: 0 8px 25px rgba(255, 42, 95, 0.2);
+}
+
+.card-dimmed {
+    opacity: 0.75;
+}
+
+.mach-card-image-wrap {
+    height: 180px;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-dark-800);
+}
+
+.mach-card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+.machine-card:hover .mach-card-img {
+    transform: scale(1.04);
+}
+
+.mach-rate-badge {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(8, 10, 15, 0.85);
+    border: 1px solid var(--piu-gold);
+    color: var(--piu-gold);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+}
+
+.mach-status-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+}
+
+.mach-card-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+
+.mach-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.mach-title {
+    font-size: 1.15rem;
+    margin: 0;
+}
+
+.mach-version-pill {
+    font-size: 0.75rem;
+    background: var(--bg-dark-600);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    color: var(--piu-cyan);
+    white-space: nowrap;
+}
+
+.mach-spec-row {
+    display: flex;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+.spec-label { color: var(--text-muted); }
+.spec-value { color: #ffffff; }
+
+.mach-pads-box {
+    display: flex;
+    gap: 10px;
+    background: var(--bg-dark-700);
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+}
+.pads-icon { font-size: 1.2rem; }
+.pads-text p {
+    color: var(--text-main);
+    margin-top: 2px;
+}
+
+.mach-features-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.feature-tag {
+    font-size: 0.72rem;
+    background: rgba(0, 229, 255, 0.08);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    color: var(--piu-cyan);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.mach-card-actions {
+    padding: 12px 16px;
+    background: var(--bg-dark-700);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 8px;
+}
+.mach-card-actions button { flex: 1; }
+
+/* ==========================================================================
+   VISTA SOLICITUDES: BANDEJA DEL ENCARGADO
+   ========================================================================== */
+.requests-filter-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+}
+
+.filter-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-dark-800);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.filter-tab:hover {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.filter-tab.active {
+    background: var(--bg-dark-600);
+    border-color: var(--piu-cyan);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+}
+
+.filter-pill {
+    padding: 1px 7px;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+.pill-warning { background: var(--piu-gold); color: #080a0f; }
+.pill-success { background: var(--piu-green); color: #080a0f; }
+.pill-danger { background: var(--piu-red); color: #ffffff; }
+
+.requests-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.request-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+
+.border-warning {
+    border-color: rgba(255, 208, 0, 0.4);
+}
+
+.req-main-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.req-client-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.req-avatar {
+    font-size: 1.8rem;
+    background: var(--bg-dark-700);
+    padding: 6px;
+    border-radius: var(--radius-sm);
+}
+
+.req-client-name-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.req-client-name {
+    font-size: 1.15rem;
+    margin: 0;
+}
+
+.req-contact-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.btn-contact-wa {
+    color: #25D366;
+    font-weight: 700;
+}
+
+.req-created-time {
+    color: var(--text-dimmed);
+}
+
+.req-total-cost {
+    text-align: right;
+}
+.cost-lbl { font-size: 0.75rem; color: var(--text-muted); }
+.cost-num { font-size: 1.25rem; font-family: var(--font-mono); font-weight: 700; }
+
+.req-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    background: var(--bg-dark-700);
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+}
+
+.req-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.rd-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; }
+
+.req-notes-box {
+    background: rgba(0, 229, 255, 0.06);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--text-main);
+}
+.req-reject-reason {
+    background: rgba(255, 42, 95, 0.1);
+    border-color: rgba(255, 42, 95, 0.3);
+}
+
+.req-actions-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 10px;
+}
+
+/* ==========================================================================
+   VISTA NEGOCIOS Y AJUSTES
+   ========================================================================== */
+.settings-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.settings-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.card-title-bar {
+    padding: 16px 20px;
+    background: var(--bg-dark-700);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.title-with-icon {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.t-icon { font-size: 1.5rem; }
+.title-with-icon h3 { font-size: 1.15rem; margin: 0; }
+.title-with-icon small { color: var(--text-muted); }
+
+.settings-form-body {
+    padding: 20px;
+}
+
+.input-duo {
+    display: flex;
+    gap: 8px;
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
+.catalogs-table-wrapper {
+    padding: 16px 20px;
+    overflow-x: auto;
+}
+
+.catalogs-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.catalogs-table th, .catalogs-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.88rem;
+}
+.catalogs-table th {
+    color: var(--text-muted);
+    font-weight: 700;
+    background: var(--bg-dark-800);
+}
+.catalogs-table code {
+    font-family: var(--font-mono);
+    color: var(--piu-cyan);
+    background: rgba(0, 229, 255, 0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.biz-list-grid {
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+}
+
+.biz-item-card {
+    background: var(--bg-dark-700);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.biz-item-card.biz-active-highlight {
+    border-color: var(--piu-green);
+    background: rgba(0, 255, 136, 0.06);
+}
+.biz-item-logo { font-size: 1.8rem; }
+.biz-item-info { flex: 1; }
+.biz-item-info h4 { font-size: 1rem; margin: 0; }
+.biz-item-info p { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+.biz-item-actions { display: flex; gap: 6px; align-items: center; }
+
+.backup-actions-row {
+    padding: 20px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* Responsive Vistas */
+@media (max-width: 768px) {
+    .view-header-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .date-navigator {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .friendly-date-title {
+        font-size: 1.1rem;
+    }
+    .month-day-cell {
+        min-height: 75px;
+        padding: 4px;
+    }
+    .res-badge-text, .mini-players-list {
+        display: none;
+    }
+    .req-main-row {
+        flex-direction: column;
+    }
+    .req-total-cost {
+        text-align: left;
+    }
+}
