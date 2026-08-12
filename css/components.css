@@ -1,5 +1,5 @@
 /* css/components.css */
-/* Componentes UI: Cabecera, Modales, Notificaciones Toast, Selector de Negocio y Ticket Digital */
+/* Componentes UI con la Nueva Paleta Oficial: #023859, #012623, #088C4F, #68F205, #C3D91E */
 
 /* ==========================================================================
    HEADER & NAVIGATION
@@ -8,11 +8,11 @@
     background: var(--bg-glass);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid rgba(104, 242, 5, 0.2);
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
 .header-top-row {
@@ -33,15 +33,15 @@
 
 .brand-badge-icon {
     font-size: 1.8rem;
-    background: linear-gradient(135deg, var(--bg-dark-700), var(--bg-dark-600));
-    border: 1px solid rgba(255, 42, 95, 0.4);
+    background: linear-gradient(135deg, var(--bg-dark-700), var(--bg-dark-800));
+    border: 1px solid rgba(104, 242, 5, 0.4);
     width: 44px;
     height: 44px;
     border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 15px rgba(255, 42, 95, 0.3);
+    box-shadow: 0 0 15px rgba(104, 242, 5, 0.3);
 }
 
 .brand-title {
@@ -53,8 +53,8 @@
 }
 
 .piu-highlight {
-    color: var(--piu-red);
-    text-shadow: 0 0 10px rgba(255, 42, 95, 0.6);
+    color: var(--color-neon-lime);
+    text-shadow: 0 0 12px rgba(104, 242, 5, 0.6);
 }
 
 .brand-subtitle {
@@ -122,22 +122,22 @@
 }
 
 .btn-role-toggle.role-client {
-    border-color: rgba(0, 229, 255, 0.4);
-    background: rgba(0, 229, 255, 0.08);
+    border-color: rgba(195, 217, 30, 0.4);
+    background: rgba(195, 217, 30, 0.08);
 }
 .btn-role-toggle.role-client .role-indicator {
-    background: var(--piu-cyan);
-    box-shadow: 0 0 8px var(--piu-cyan);
+    background: var(--color-chartreuse);
+    box-shadow: 0 0 8px var(--color-chartreuse);
 }
 
 .btn-role-toggle.role-admin {
-    border-color: rgba(255, 208, 0, 0.5);
-    background: rgba(255, 208, 0, 0.12);
+    border-color: rgba(104, 242, 5, 0.5);
+    background: rgba(104, 242, 5, 0.12);
     color: #ffffff;
 }
 .btn-role-toggle.role-admin .role-indicator {
-    background: var(--piu-gold);
-    box-shadow: 0 0 8px var(--piu-gold);
+    background: var(--color-neon-lime);
+    box-shadow: 0 0 8px var(--color-neon-lime);
 }
 
 .role-indicator {
@@ -149,8 +149,8 @@
 
 /* Navigation Row */
 .header-nav-row {
-    background: rgba(8, 10, 15, 0.6);
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    background: rgba(1, 24, 22, 0.7);
+    border-top: 1px solid rgba(104, 242, 5, 0.08);
 }
 
 .view-nav-tabs {
@@ -183,21 +183,21 @@
 
 .nav-tab:hover {
     color: var(--text-main);
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(104, 242, 5, 0.05);
 }
 
 .nav-tab.active {
     color: #ffffff;
-    border-bottom-color: var(--piu-red);
-    background: linear-gradient(to top, rgba(255, 42, 95, 0.15), transparent);
-    text-shadow: 0 0 10px rgba(255, 42, 95, 0.5);
+    border-bottom-color: var(--color-neon-lime);
+    background: linear-gradient(to top, rgba(104, 242, 5, 0.15), transparent);
+    text-shadow: 0 0 10px rgba(104, 242, 5, 0.5);
 }
 
 .badge-counter {
-    background: var(--piu-red);
-    color: #ffffff;
+    background: var(--color-neon-lime);
+    color: #011816;
     font-size: 0.72rem;
-    font-weight: 800;
+    font-weight: 900;
     padding: 2px 7px;
     border-radius: var(--radius-full);
     margin-left: 2px;
@@ -217,7 +217,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0, 0, 0, 0.82);
+    background: rgba(1, 24, 22, 0.88);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     display: flex;
@@ -230,8 +230,8 @@
 
 .modal-card {
     background: var(--bg-dark-800);
-    border: 1px solid var(--border-glow);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 229, 255, 0.2);
+    border: 1px solid rgba(104, 242, 5, 0.35);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85), 0 0 30px rgba(104, 242, 5, 0.2);
     border-radius: var(--radius-md);
     width: 100%;
     max-height: 90vh;
@@ -326,31 +326,25 @@
 }
 
 .toast-item.toast-success {
-    border-left: 4px solid var(--piu-green);
+    border-left: 4px solid var(--color-neon-lime);
     box-shadow: 0 0 15px var(--piu-green-glow);
 }
 .toast-item.toast-error {
-    border-left: 4px solid var(--piu-red);
-    box-shadow: 0 0 15px var(--piu-red-glow);
+    border-left: 4px solid #ff5277;
+    box-shadow: 0 0 15px rgba(255, 82, 119, 0.4);
 }
 .toast-item.toast-warning {
-    border-left: 4px solid var(--piu-gold);
+    border-left: 4px solid var(--color-chartreuse);
     box-shadow: 0 0 15px var(--piu-gold-glow);
 }
 .toast-item.toast-info {
-    border-left: 4px solid var(--piu-cyan);
-    box-shadow: 0 0 15px var(--piu-cyan-glow);
+    border-left: 4px solid var(--color-neon-lime);
+    box-shadow: 0 0 15px var(--piu-green-glow);
 }
 
-.toast-icon {
-    font-size: 1.2rem;
-}
-.toast-content {
-    flex: 1;
-}
-.toast-message {
-    font-weight: 500;
-}
+.toast-icon { font-size: 1.2rem; }
+.toast-content { flex: 1; }
+.toast-message { font-weight: 500; }
 .toast-close {
     background: transparent;
     border: none;
@@ -369,13 +363,13 @@
 }
 
 .ticket-card {
-    background: linear-gradient(145deg, #101726, #162032);
-    border: 2px dashed rgba(0, 229, 255, 0.4);
+    background: linear-gradient(145deg, #012623, #023859);
+    border: 2px dashed rgba(104, 242, 5, 0.45);
     border-radius: var(--radius-md);
     padding: 22px;
     width: 100%;
     position: relative;
-    box-shadow: 0 0 25px rgba(0, 229, 255, 0.2);
+    box-shadow: 0 0 25px rgba(104, 242, 5, 0.2);
 }
 
 .ticket-header {
@@ -387,9 +381,7 @@
     margin-bottom: 14px;
 }
 
-.ticket-venue-logo {
-    font-size: 2rem;
-}
+.ticket-venue-logo { font-size: 2rem; }
 .ticket-venue-title h4 {
     font-size: 1.15rem;
     margin: 0;
@@ -410,7 +402,7 @@
 .ticket-folio {
     font-family: var(--font-mono);
     font-size: 0.82rem;
-    color: var(--piu-cyan);
+    color: var(--color-chartreuse);
     font-weight: 600;
 }
 
@@ -418,7 +410,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.3);
     padding: 14px;
     border-radius: var(--radius-sm);
     margin-bottom: 14px;
@@ -443,8 +435,8 @@
 }
 
 .ticket-notes {
-    background: rgba(255, 208, 0, 0.08);
-    border: 1px solid rgba(255, 208, 0, 0.25);
+    background: rgba(195, 217, 30, 0.08);
+    border: 1px solid rgba(195, 217, 30, 0.25);
     padding: 10px 14px;
     border-radius: var(--radius-sm);
     margin-bottom: 14px;
@@ -459,9 +451,9 @@
     display: flex;
     justify-content: space-around;
     font-size: 1.1rem;
-    color: var(--piu-red);
+    color: var(--color-neon-lime);
     letter-spacing: 6px;
-    text-shadow: 0 0 10px var(--piu-red);
+    text-shadow: 0 0 10px var(--color-neon-lime);
     padding-top: 6px;
 }
 

@@ -1,5 +1,5 @@
 /* css/views.css */
-/* Estilos específicos de las vistas: Landing (Index de Selección), Día (Grid), Semana, Mes, Máquinas, Solicitudes y Superadmin */
+/* Estilos específicos de las vistas con la Nueva Paleta Oficial: #023859, #012623, #088C4F, #68F205, #C3D91E */
 
 /* ==========================================================================
    LANDING / SELECCIÓN INICIAL DE LOCAL
@@ -25,9 +25,9 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: rgba(255, 42, 95, 0.15);
-    border: 1px solid rgba(255, 42, 95, 0.4);
-    color: var(--piu-red);
+    background: rgba(104, 242, 5, 0.15);
+    border: 1px solid rgba(104, 242, 5, 0.4);
+    color: var(--color-neon-lime);
     font-size: 0.8rem;
     font-weight: 800;
     letter-spacing: 1px;
@@ -67,8 +67,8 @@
 
 .venue-landing-card:hover {
     transform: translateY(-5px);
-    border-color: var(--piu-cyan);
-    box-shadow: 0 12px 30px rgba(0, 229, 255, 0.25);
+    border-color: var(--color-neon-lime);
+    box-shadow: 0 12px 30px rgba(104, 242, 5, 0.25);
 }
 
 .venue-card-img-wrap {
@@ -93,24 +93,24 @@
     bottom: 12px;
     left: 14px;
     font-size: 2rem;
-    background: rgba(14, 19, 29, 0.85);
-    border: 1px solid rgba(255, 42, 95, 0.4);
+    background: rgba(1, 38, 35, 0.9);
+    border: 1px solid rgba(104, 242, 5, 0.4);
     width: 48px;
     height: 48px;
     border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.6);
 }
 
 .venue-city-pill {
     position: absolute;
     top: 12px;
     right: 14px;
-    background: rgba(8, 10, 15, 0.8);
+    background: rgba(1, 24, 22, 0.85);
     border: 1px solid var(--border-color);
-    color: var(--piu-cyan);
+    color: var(--color-chartreuse);
     font-size: 0.75rem;
     font-weight: 700;
     padding: 4px 10px;
@@ -191,12 +191,12 @@
 
 .btn-back-hub {
     margin-right: 8px;
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(104, 242, 5, 0.3);
+    color: var(--color-neon-lime);
 }
 .btn-back-hub:hover {
-    background: rgba(255, 42, 95, 0.15);
-    border-color: var(--piu-red);
-    color: var(--piu-red);
+    background: rgba(104, 242, 5, 0.15);
+    border-color: var(--color-neon-lime);
 }
 
 /* ==========================================================================
@@ -345,18 +345,18 @@
 }
 
 .cell-available {
-    background: rgba(8, 10, 15, 0.4);
+    background: rgba(1, 24, 22, 0.5);
     cursor: pointer;
 }
 .cell-available:hover {
-    background: rgba(0, 229, 255, 0.08);
+    background: rgba(104, 242, 5, 0.08);
 }
 
 .slot-book-btn {
     width: 100%;
     height: 100%;
     background: transparent;
-    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border: 1px dashed rgba(104, 242, 5, 0.2);
     border-radius: var(--radius-sm);
     color: var(--text-dimmed);
     font-family: var(--font-heading);
@@ -371,32 +371,32 @@
 }
 
 .cell-available:hover .slot-book-btn {
-    border-color: var(--piu-cyan);
-    color: var(--piu-cyan);
-    background: rgba(0, 229, 255, 0.06);
-    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+    border-color: var(--color-neon-lime);
+    color: var(--color-neon-lime);
+    background: rgba(104, 242, 5, 0.08);
+    box-shadow: 0 0 10px rgba(104, 242, 5, 0.25);
 }
 
 .cell-slot.slot-confirmed {
-    background: rgba(0, 255, 136, 0.1);
-    border-left: 3px solid var(--piu-green);
+    background: rgba(8, 140, 79, 0.2);
+    border-left: 3px solid var(--color-neon-lime);
     cursor: pointer;
 }
 .cell-slot.slot-confirmed:hover {
-    background: rgba(0, 255, 136, 0.18);
+    background: rgba(8, 140, 79, 0.32);
 }
 
 .cell-slot.slot-pending {
-    background: rgba(255, 208, 0, 0.12);
-    border-left: 3px solid var(--piu-gold);
+    background: rgba(195, 217, 30, 0.15);
+    border-left: 3px solid var(--color-chartreuse);
     cursor: pointer;
 }
 .cell-slot.slot-pending:hover {
-    background: rgba(255, 208, 0, 0.2);
+    background: rgba(195, 217, 30, 0.25);
 }
 
 .cell-maintenance {
-    background: rgba(255, 42, 95, 0.06);
+    background: rgba(2, 56, 89, 0.25);
 }
 
 .slot-content {
@@ -416,12 +416,12 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--piu-green);
-    box-shadow: 0 0 6px var(--piu-green);
+    background: var(--color-neon-lime);
+    box-shadow: 0 0 6px var(--color-neon-lime);
 }
 .slot-pending .status-indicator-dot {
-    background: var(--piu-gold);
-    box-shadow: 0 0 6px var(--piu-gold);
+    background: var(--color-chartreuse);
+    box-shadow: 0 0 6px var(--color-chartreuse);
 }
 
 .occupant-name {
@@ -451,8 +451,8 @@
     text-transform: uppercase;
     color: var(--text-muted);
 }
-.slot-confirmed .slot-status-pill { color: var(--piu-green); }
-.slot-pending .slot-status-pill { color: var(--piu-gold); }
+.slot-confirmed .slot-status-pill { color: var(--color-neon-lime); }
+.slot-pending .slot-status-pill { color: var(--color-chartreuse); }
 
 .slot-locked {
     display: flex;
@@ -481,10 +481,10 @@
     height: 10px;
     border-radius: 2px;
 }
-.dot-available { background: var(--bg-dark-600); border: 1px dashed var(--text-muted); }
-.dot-pending { background: var(--piu-gold); }
-.dot-confirmed { background: var(--piu-green); }
-.dot-maintenance { background: var(--piu-red); }
+.dot-available { background: var(--bg-dark-700); border: 1px dashed var(--color-neon-lime); }
+.dot-pending { background: var(--color-chartreuse); }
+.dot-confirmed { background: var(--color-neon-lime); }
+.dot-maintenance { background: var(--color-deep-blue); }
 
 .res-detail-dialog {
     display: flex;
@@ -547,18 +547,18 @@
 
 .week-day-card:hover {
     transform: translateY(-3px);
-    border-color: var(--piu-cyan);
-    box-shadow: 0 6px 20px rgba(0, 229, 255, 0.2);
+    border-color: var(--color-neon-lime);
+    box-shadow: 0 6px 20px rgba(104, 242, 5, 0.2);
 }
 
 .week-day-card.card-today {
-    border-color: var(--piu-red);
-    background: linear-gradient(180deg, rgba(255, 42, 95, 0.12), var(--bg-glass-card));
-    box-shadow: 0 0 15px rgba(255, 42, 95, 0.25);
+    border-color: var(--color-neon-lime);
+    background: linear-gradient(180deg, rgba(104, 242, 5, 0.12), var(--bg-glass-card));
+    box-shadow: 0 0 15px rgba(104, 242, 5, 0.25);
 }
 
 .week-day-card.card-selected {
-    outline: 2px solid var(--piu-cyan);
+    outline: 2px solid var(--color-chartreuse);
 }
 
 .day-card-header {
@@ -588,8 +588,8 @@
     border-radius: 4px;
 }
 .badge-today {
-    background: var(--piu-red);
-    color: #ffffff;
+    background: var(--color-neon-lime);
+    color: #011816;
 }
 
 .day-booking-counter {
@@ -625,8 +625,8 @@
     border-radius: 4px;
     font-weight: 600;
 }
-.tag-conf { background: rgba(0, 255, 136, 0.15); color: var(--piu-green); }
-.tag-pend { background: rgba(255, 208, 0, 0.15); color: var(--piu-gold); }
+.tag-conf { background: rgba(8, 140, 79, 0.25); color: var(--color-neon-lime); }
+.tag-pend { background: rgba(195, 217, 30, 0.18); color: var(--color-chartreuse); }
 
 .day-preview-list {
     min-height: 55px;
@@ -643,10 +643,10 @@
     background: var(--bg-dark-800);
     padding: 3px 6px;
     border-radius: 4px;
-    border-left: 2px solid var(--piu-green);
+    border-left: 2px solid var(--color-neon-lime);
 }
 .preview-res-item.item-pending {
-    border-left-color: var(--piu-gold);
+    border-left-color: var(--color-chartreuse);
 }
 .res-time {
     font-family: var(--font-mono);
@@ -728,7 +728,7 @@
     padding: 8px;
     border-bottom: 1px solid var(--border-color);
     border-right: 1px solid var(--border-color);
-    background: rgba(8, 10, 15, 0.35);
+    background: rgba(1, 24, 22, 0.4);
     display: flex;
     flex-direction: column;
     cursor: pointer;
@@ -736,7 +736,7 @@
 }
 
 .month-day-cell:hover {
-    background: rgba(0, 229, 255, 0.08);
+    background: rgba(104, 242, 5, 0.08);
 }
 
 .month-day-cell.other-month {
@@ -744,12 +744,12 @@
 }
 
 .month-day-cell.is-today {
-    background: rgba(255, 42, 95, 0.08);
-    border-top: 2px solid var(--piu-red);
+    background: rgba(104, 242, 5, 0.08);
+    border-top: 2px solid var(--color-neon-lime);
 }
 
 .month-day-cell.is-selected {
-    box-shadow: inset 0 0 0 2px var(--piu-cyan);
+    box-shadow: inset 0 0 0 2px var(--color-chartreuse);
 }
 
 .cell-day-header {
@@ -770,8 +770,8 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--piu-red);
-    box-shadow: 0 0 6px var(--piu-red);
+    background: var(--color-neon-lime);
+    box-shadow: 0 0 6px var(--color-neon-lime);
 }
 
 .cell-day-body {
@@ -792,16 +792,16 @@
 }
 
 .badge-has-res {
-    background: rgba(0, 229, 255, 0.15);
-    border: 1px solid rgba(0, 229, 255, 0.4);
-    color: var(--piu-cyan);
+    background: rgba(195, 217, 30, 0.15);
+    border: 1px solid rgba(195, 217, 30, 0.4);
+    color: var(--color-chartreuse);
 }
 
 .badge-high-res {
-    background: rgba(255, 42, 95, 0.2);
-    border: 1px solid rgba(255, 42, 95, 0.5);
+    background: rgba(104, 242, 5, 0.22);
+    border: 1px solid rgba(104, 242, 5, 0.5);
     color: #ffffff;
-    box-shadow: 0 0 8px rgba(255, 42, 95, 0.3);
+    box-shadow: 0 0 8px rgba(104, 242, 5, 0.35);
 }
 
 .res-badge-val {
@@ -830,7 +830,7 @@
 
 .mini-more {
     font-size: 0.65rem;
-    color: var(--piu-cyan);
+    color: var(--color-neon-lime);
 }
 
 .no-bookings-hint {
@@ -871,8 +871,8 @@
 
 .machine-card:hover {
     transform: translateY(-3px);
-    border-color: var(--piu-red);
-    box-shadow: 0 8px 25px rgba(255, 42, 95, 0.2);
+    border-color: var(--color-neon-lime);
+    box-shadow: 0 8px 25px rgba(104, 242, 5, 0.2);
 }
 
 .card-dimmed {
@@ -901,9 +901,9 @@
     position: absolute;
     bottom: 12px;
     right: 12px;
-    background: rgba(8, 10, 15, 0.85);
-    border: 1px solid var(--piu-gold);
-    color: var(--piu-gold);
+    background: rgba(1, 24, 22, 0.85);
+    border: 1px solid var(--color-chartreuse);
+    color: var(--color-chartreuse);
     font-family: var(--font-mono);
     font-weight: 700;
     font-size: 0.95rem;
@@ -939,10 +939,10 @@
 
 .mach-version-pill {
     font-size: 0.75rem;
-    background: var(--bg-dark-600);
+    background: var(--bg-dark-700);
     padding: 2px 8px;
     border-radius: var(--radius-full);
-    color: var(--piu-cyan);
+    color: var(--color-chartreuse);
     white-space: nowrap;
 }
 
@@ -975,9 +975,9 @@
 }
 .feature-tag {
     font-size: 0.72rem;
-    background: rgba(0, 229, 255, 0.08);
-    border: 1px solid rgba(0, 229, 255, 0.2);
-    color: var(--piu-cyan);
+    background: rgba(104, 242, 5, 0.08);
+    border: 1px solid rgba(104, 242, 5, 0.25);
+    color: var(--color-neon-lime);
     padding: 2px 6px;
     border-radius: 4px;
 }
@@ -1019,14 +1019,14 @@
 
 .filter-tab:hover {
     color: #ffffff;
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: var(--color-neon-lime);
 }
 
 .filter-tab.active {
-    background: var(--bg-dark-600);
-    border-color: var(--piu-cyan);
+    background: var(--bg-dark-700);
+    border-color: var(--color-neon-lime);
     color: #ffffff;
-    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+    box-shadow: 0 0 10px rgba(104, 242, 5, 0.25);
 }
 
 .filter-pill {
@@ -1035,9 +1035,9 @@
     font-size: 0.75rem;
     font-weight: 800;
 }
-.pill-warning { background: var(--piu-gold); color: #080a0f; }
-.pill-success { background: var(--piu-green); color: #080a0f; }
-.pill-danger { background: var(--piu-red); color: #ffffff; }
+.pill-warning { background: var(--color-chartreuse); color: #011816; }
+.pill-success { background: var(--color-neon-lime); color: #011816; }
+.pill-danger { background: #ff5277; color: #ffffff; }
 
 .requests-list {
     display: flex;
@@ -1057,7 +1057,7 @@
 }
 
 .border-warning {
-    border-color: rgba(255, 208, 0, 0.4);
+    border-color: rgba(195, 217, 30, 0.4);
 }
 
 .req-main-row {
@@ -1132,16 +1132,16 @@
 .rd-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; }
 
 .req-notes-box {
-    background: rgba(0, 229, 255, 0.06);
-    border: 1px solid rgba(0, 229, 255, 0.2);
+    background: rgba(104, 242, 5, 0.06);
+    border: 1px solid rgba(104, 242, 5, 0.25);
     padding: 8px 12px;
     border-radius: var(--radius-sm);
     font-size: 0.85rem;
     color: var(--text-main);
 }
 .req-reject-reason {
-    background: rgba(255, 42, 95, 0.1);
-    border-color: rgba(255, 42, 95, 0.3);
+    background: rgba(255, 82, 119, 0.1);
+    border-color: rgba(255, 82, 119, 0.3);
 }
 
 .req-actions-bar {
@@ -1221,8 +1221,8 @@
 }
 .catalogs-table code {
     font-family: var(--font-mono);
-    color: var(--piu-cyan);
-    background: rgba(0, 229, 255, 0.08);
+    color: var(--color-chartreuse);
+    background: rgba(195, 217, 30, 0.08);
     padding: 2px 6px;
     border-radius: 4px;
 }
@@ -1244,8 +1244,8 @@
     gap: 12px;
 }
 .biz-item-card.biz-active-highlight {
-    border-color: var(--piu-green);
-    background: rgba(0, 255, 136, 0.06);
+    border-color: var(--color-neon-lime);
+    background: rgba(104, 242, 5, 0.08);
 }
 .biz-item-logo { font-size: 1.8rem; }
 .biz-item-info { flex: 1; }
