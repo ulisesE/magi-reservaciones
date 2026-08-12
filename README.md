@@ -4,26 +4,23 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## 🌟 Novedades y Flujo de Selección de Local
+## 🌟 Novedades: Módulos de Administración de Catálogos por Negocio
 
-### 1. 🏢 Pantalla de Bienvenida / Index Obligatoria
-- Al entrar a `index.html` (sin un parámetro de local previo), el sistema **NO entra solo a ningún local**.
-- Muestra una pantalla de bienvenida donde el usuario debe **elegir explícitamente a qué sala o sucursal desea ingresar** (*Pump Zone Centro*, *Arcade Galaxy Norte*, etc.).
-- **Bloqueo de Local**: Una vez que el usuario selecciona su local, el sistema queda bloqueado a ese local específico para evitar confusiones o mezclas de reservas.
-- Para cambiar de sucursal, el usuario solo debe hacer clic en el botón superior **`← Cambiar de Local`**, el cual lo regresa al Index inicial.
+### 1. 🕹️ Catálogo de Máquinas por Negocio (CRUD y Reasignación)
+- **Agregar / Registrar**: Alta de nuevos gabinetes PIU con modelo (LX 55", TX 50", FX 42", etc.), versión de software, tarifa por hora, fotos y calibración de sensores FSR.
+- **Editar / Modificar**: Modifica en cualquier momento tarifas, estado operativo (*Disponible*, *En Mantenimiento*, *Fuera de Servicio*), y notas técnicas de los pads.
+- **Eliminar**: Baja definitiva de máquinas del inventario local.
+- **🔀 Reasignar / Transferir**: Permite mover o reasignar una máquina de un local a otro con 1 clic (ej. transferir un gabinete LX de *Pump Zone Centro* a *Arcade Galaxy Norte*).
 
-### 2. 🗑️ Eliminación en Cascada por Negocio (Superadmin)
-- Cuando el Superadministrador elimina un local desde el panel global, el sistema ejecuta una **eliminación en cascada completa**:
-  - Se eliminan todas las máquinas registradas de ese local (`piu_machines`).
-  - Se eliminan todas las reservaciones e historial de ese local (`piu_reservations`).
-  - Se eliminan todas las cuentas de encargados asignadas a ese local (`piu_staff_users`).
-  - Se limpia el almacenamiento en la nube en Firebase Firestore y la memoria local.
+### 2. 💿 Catálogo Maestro de Versiones de Software
+- Módulo centralizado para registrar, editar y catalogar versiones oficiales del juego (*Phoenix 2024*, *XX 20th Anniversary*, *Prime 2*, *Fiesta*, etc.).
+- Soporte para especificar año de lanzamiento, último parche (*v1.08.0*) y modos de juego compatibles (*Single, Double, Co-Op, Premium*).
 
-### 3. 👑 Consola de Superadmin y Catálogos Globales
-- **Catálogo de Locales / Sucursales**: Alta, edición, eliminación en cascada y generación de enlaces directos para clientes.
-- **Catálogo de Máquinas por Negocio**: Control centralizado de gabinetes LX, TX, FX y estado de pads.
-- **Catálogo de Encargados / Staff**: Creación y asignación de cuentas de encargados con PIN de seguridad por local.
-- **Catálogo de Horarios y Reglas**: Configuración de horas de apertura y cierre por sucursal.
+### 3. 👥 Catálogo de Encargados y Personal por Local
+- El Superadmin puede crear, editar usuarios, contraseñas/PINs y reasignar encargados de sucursal.
+
+### 4. 🕺 Directorio de Clientes / Jugadores por Negocio
+- Los encargados administran a sus clientes habituales (Gamertags, teléfonos, WhatsApp directo, correo, nivel de juego y notas de calibración).
 
 ---
 
@@ -33,7 +30,8 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
                   ┌───────────────────────────────┐
                   │    SUPERADMINISTRADOR (Tú)    │
                   │  • Administra todos los locales│
-                  │  • Asigna encargados y enlaces │
+                  │  • Catálogos Maestros y Reglas │
+                  │  • Reasignación de Máquinas    │
                   │  • Eliminación en Cascada      │
                   └──────────────┬────────────────┘
                                  │
@@ -42,7 +40,7 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
       ┌─────────────────────┐         ┌─────────────────────┐
       │   ENCARGADO LOCAL 1 │         │   ENCARGADO LOCAL 2 │
       │ (Pistas, Reservas,  │         │ (Pistas, Reservas,  │
-      │  Horarios Centro)   │         │  Horarios Galaxy)   │
+      │  Clientes, Centro)  │         │  Clientes, Galaxy)  │
       └──────────┬──────────┘         └──────────┬──────────┘
                  │                               │
                  ▼                               ▼
@@ -54,6 +52,15 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
+## 🎨 Paleta Oficial de la Nueva Versión
+- `#023859` — Deep Ocean Blue
+- `#012623` — Deep Obsidian Teal
+- `#088C4F` — Emerald Green
+- `#68F205` — Neon Laser Lime
+- `#C3D91E` — Electric Chartreuse
+
+---
+
 ## 🔑 Credenciales Demo Preconfiguradas (Botón `🔐 Acceso Staff`):
 
 | Rol | Usuario | PIN | Negocio Asignado |
@@ -61,12 +68,11 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 | 👑 **Superadmin** | `superadmin` | `8888` | Control global de todos los locales |
 | 🕹️ **Encargado Centro** | `encargado_centro` | `1234` | Solo *Pump Zone Centro* |
 | ⚡ **Encargada Galaxy** | `encargado_galaxy` | `5678` | Solo *Arcade Galaxy Norte* |
-| 👤 **Clientes** | *Sin login* | *N/A* | Acceso al local vía selector o enlace directo |
+| 👤 **Clientes** | *Sin login* | *N/A* | Acceso directo al local vía selector o URL |
 
 ---
 
 ## 📅 Vistas de Calendario Disponibles
-
 1. **⚡ Vista Día (Grid de Horas × Máquinas)**: Matriz interactiva de horas (filas) vs máquinas (columnas). Celdas disponibles para reservar con 1 clic; celdas ocupadas con nombre del jugador y horario.
 2. **📊 Vista Semana**: Tarjetas de los 7 días con conteo de reservas, desglose de estados y atajo para reservar.
 3. **🗓️ Vista Mes**: Calendario mensual con badges numéricos de reservaciones por fecha.

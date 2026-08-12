@@ -1,5 +1,5 @@
 // js/components/header.js
-// Barra superior con bloqueo de local, pestaña de clientes para encargados y botón para regresar al Index
+// Barra superior con acceso a todos los catálogos (Máquinas, Solicitudes, Clientes, Ajustes y Catálogos Maestros)
 import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { authManager } from '../core/authManager.js';
@@ -47,7 +47,7 @@ export function renderHeader(container) {
         return;
     }
 
-    // Cabecera dentro de un local específico
+    // Cabecera dentro de un local específico o modo Superadmin
     container.innerHTML = `
         <header class="app-header">
             <div class="header-top-row">
@@ -67,8 +67,8 @@ export function renderHeader(container) {
                 </div>
 
                 <!-- Indicador de Local Bloqueado -->
-                <div class="header-tenant-selector" style="border-color:rgba(0, 229, 255, 0.4); background:rgba(0, 229, 255, 0.06);">
-                    <span style="font-size:0.85rem; font-weight:700; color:var(--piu-cyan);">
+                <div class="header-tenant-selector" style="border-color:rgba(104, 242, 5, 0.4); background:rgba(104, 242, 5, 0.06);">
+                    <span style="font-size:0.85rem; font-weight:700; color:var(--color-neon-lime);">
                         📍 Sala Activa: <strong>${business.name}</strong>
                     </span>
                 </div>
@@ -84,7 +84,7 @@ export function renderHeader(container) {
                             <span style="font-size:1rem;">${currentUser.avatar || '👤'}</span>
                             <div style="display:flex; flex-direction:column; line-height:1.1;">
                                 <strong style="font-size:0.8rem; color:#fff;">${currentUser.name}</strong>
-                                <small style="font-size:0.68rem; color:${isSuperAdmin ? 'var(--piu-red)' : 'var(--piu-gold)'}; font-weight:700;">
+                                <small style="font-size:0.68rem; color:${isSuperAdmin ? 'var(--color-neon-lime)' : 'var(--color-chartreuse)'}; font-weight:700;">
                                     ${isSuperAdmin ? 'SUPERADMIN' : 'ENCARGADO'}
                                 </small>
                             </div>
@@ -128,6 +128,10 @@ export function renderHeader(container) {
                             <span class="tab-icon">👥</span>
                             <span class="tab-text">Clientes</span>
                         </button>
+                        <button class="nav-tab ${currentView === 'CATALOGS' ? 'active' : ''}" data-view="CATALOGS">
+                            <span class="tab-icon">🗄️</span>
+                            <span class="tab-text">Catálogos</span>
+                        </button>
                         <button class="nav-tab ${currentView === 'BUSINESS' ? 'active' : ''}" data-view="BUSINESS">
                             <span class="tab-icon">⚙️</span>
                             <span class="tab-text">Ajustes Local</span>
@@ -135,7 +139,7 @@ export function renderHeader(container) {
                     ` : ''}
 
                     ${isSuperAdmin ? `
-                        <button class="nav-tab ${currentView === 'SUPERADMIN' ? 'active' : ''}" data-view="SUPERADMIN" style="border-bottom-color:var(--piu-gold); color:var(--piu-gold);">
+                        <button class="nav-tab ${currentView === 'SUPERADMIN' ? 'active' : ''}" data-view="SUPERADMIN" style="border-bottom-color:var(--color-neon-lime); color:var(--color-neon-lime);">
                             <span class="tab-icon">👑</span>
                             <span class="tab-text">Panel Global</span>
                         </button>
@@ -208,14 +212,14 @@ export function openLoginModal() {
 
             <!-- Accesos Rápidos Demo -->
             <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); border:1px dashed var(--border-color); margin-top:8px;">
-                <span style="font-size:0.75rem; color:var(--piu-cyan); font-weight:700; display:block; margin-bottom:8px;">
+                <span style="font-size:0.75rem; color:var(--color-neon-lime); font-weight:700; display:block; margin-bottom:8px;">
                     ⚡ ACCESOS RÁPIDOS PARA PRUEBA (1-CLICK):
                 </span>
                 <div style="display:flex; flex-direction:column; gap:6px;">
                     ${staffList.map(u => `
                         <button type="button" class="btn btn-outline btn-xs btn-quick-login" data-user="${u.username}" data-pin="${u.pin}" style="justify-content:space-between;">
                             <span>${u.avatar || '👤'} <strong>${u.name}</strong> (${u.role})</span>
-                            <code style="color:var(--piu-gold);">PIN: ${u.pin}</code>
+                            <code style="color:var(--color-chartreuse);">PIN: ${u.pin}</code>
                         </button>
                     `).join('')}
                 </div>
