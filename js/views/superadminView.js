@@ -102,6 +102,18 @@ export async function renderSuperadminView(container) {
         openCreateBusinessModal(container);
     });
 
+    // Cambiar configuración global
+    container.querySelector('#sys-disable-change-local-globally')?.addEventListener('change', async (e) => {
+        try {
+            await tenantManager.updateGlobalConfig({
+                disableChangeLocalGlobally: e.target.checked
+            });
+            toast.success("Configuración global actualizada.");
+        } catch (err) {
+            toast.error("Error al actualizar la configuración global.");
+        }
+    });
+
     // Crear nuevo encargado
     container.querySelector('#btn-create-manager')?.addEventListener('click', () => {
         openStaffFormModal(null, container);
@@ -232,6 +244,31 @@ export async function renderSuperadminView(container) {
 function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, gameVersions, players) {
     if (tab === 'BUSINESSES') {
         return `
+            <!-- Configuración Global (Solo Superadmin) -->
+            <div class="settings-card" style="margin-bottom: 20px; border-left: 4px solid var(--color-neon-lime);">
+                <div class="card-title-bar">
+                    <div class="title-with-icon">
+                        <span class="t-icon">⚙️</span>
+                        <div>
+                            <h3>Configuración Global del Sistema</h3>
+                            <small>Afecta a todas las sucursales y la experiencia de los clientes</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-form-body" style="padding: 16px;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700;">
+                            <input type="checkbox" id="sys-disable-change-local-globally" style="width:18px; height:18px; accent-color:var(--color-neon-lime); cursor:pointer;" ${tenantManager.disableChangeLocalGlobally ? 'checked' : ''}>
+                            <span>Desactivar el botón "Cambiar de Local" GLOBALMENTE (Bloquear navegación en todas las sucursales)</span>
+                        </label>
+                        <small style="display:block; margin-top:6px; color:var(--text-muted); font-size:0.78rem; line-height:1.4;">
+                            💡 <em>Si se activa, el botón "Cambiar de Local" se ocultará en todas las sucursales para clientes e invitados, forzándolos a permanecer en la sucursal activa. El Superadmin siempre podrá verlo para no perder acceso.</em>
+                        </small>
+                    </div>
+                </div>
+            </div>
+
             <div class="settings-card">
                 <div class="card-title-bar">
                     <div class="title-with-icon">

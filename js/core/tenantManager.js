@@ -7,6 +7,7 @@ import {
     collection, 
     getDocs, 
     setDoc, 
+    getDoc,
     doc, 
     updateDoc, 
     deleteDoc,
@@ -91,11 +92,35 @@ class TenantManager {
         this.isLocalSelected = false; // Controla si el usuario ya eligió local o debe ver la pantalla de selección inicial
         this.listeners = [];
         this.unsubscribeBusinesses = null;
+        this.disableChangeLocalGlobally = false;
     }
 
     async init() {
         let loaded = [];
         let loadedFromFirestore = false;
+
+        // Cargar Configuración Global
+        this.disableChangeLocalGlobally = false;
+        if (isFirebaseAvailable && db) {
+            try {
+                const docSnap = await getDoc(doc(db, 'piu_system_settings', 'global_config'));
+                if (docSnap.exists()) {
+                    this.disableChangeLocalGlobally = !!docSnap.data().disableChangeLocalGlobally;
+                }
+            } catch (err) {
+                console.warn("Error cargando config global de Firebase:", err);
+            }
+        }
+        
+        const localConfig = localStorage.getItem('piu_global_config_v1');
+        if (localConfig) {
+            try {
+                const parsed = JSON.parse(localConfig);
+                if (!isFirebaseAvailable || this.disableChangeLocalGlobally === undefined) {
+                    this.disableChangeLocalGlobally = !!parsed.disableChangeLocalGlobally;
+                }
+            } catch (e) {}
+        }
 
         if (isFirebaseAvailable && db) {
             try {
@@ -407,6 +432,25 @@ class TenantManager {
         }
 
         return true;
+    }
+
+    async updateGlobalConfig(configData) {
+        this.disableChangeLocalGlobally = !!configData.disableChangeLocalGlobally;
+        localStorage.setItem('piu_global_config_v1', JSON.stringify({
+            disableChangeLocalGlobally: this.disableChangeLocalGlobally
+        }));
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await setDoc(doc(db, 'piu_system_settings', 'global_config'), {
+                    disableChangeLocalGlobally: this.disableChangeLocalGlobally,
+                    updatedAt: new Date().toISOString()
+                });
+            } catch (e) {
+                console.warn("Error guardando config global en Firebase:", e);
+            }
+        }
+        this.notify();
     }
 
     subscribe(callback) {
