@@ -97,9 +97,6 @@ export function renderHeader(container) {
 
                 <!-- Control de Acceso y Acciones -->
                 <div class="header-actions">
-                    <button id="btn-mobile-nav" class="btn btn-outline btn-sm btn-mobile-nav" type="button" aria-label="Abrir menú de navegación" aria-expanded="false">
-                        <span>☰</span>
-                    </button>
                     ${!currentUser ? `
                         <button id="btn-open-login" class="btn btn-outline btn-sm" title="Iniciar sesión o registrarte como Jugador">
                             <span class="login-action-label">🔐 Iniciar Sesión / Registro</span>
@@ -119,6 +116,10 @@ export function renderHeader(container) {
 
                     <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red">
                         <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
+                    </button>
+
+                    <button id="btn-mobile-nav" class="btn btn-outline btn-sm btn-mobile-nav" type="button" aria-label="Abrir menú de navegación" aria-expanded="false">
+                        <span>☰</span>
                     </button>
                 </div>
             </div>
