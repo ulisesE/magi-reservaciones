@@ -5,7 +5,7 @@ import { tenantManager } from '../core/tenantManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { authManager } from '../core/authManager.js';
-import { formatFriendlyDate, format12Hour, generateTimeSlots, addMinutesToTime } from '../core/timeUtils.js';
+import { formatFriendlyDate, format12Hour, generateTimeSlots } from '../core/timeUtils.js';
 
 /**
  * Abre el modal para solicitar o agendar una reservación
@@ -26,8 +26,13 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     const defaultDate = date || store.selectedDate;
     const defaultStartTime = startTime || business.openingTime || '12:00';
 
-    // Generar opciones de horas
-    const slots = generateTimeSlots(business.openingTime || '11:00', business.closingTime || '22:00', 60);
+    // Cada local define la duración de su bloque (por ejemplo, 60 o 30 minutos).
+    const slotDuration = business.slotDuration || 60;
+    const slots = generateTimeSlots(
+        business.openingTime || '11:00',
+        business.closingTime || '22:00',
+        slotDuration
+    );
 
     const machinesOptions = machines.map(m => `
         <option value="${m.id}" ${m.id === defaultMachineId ? 'selected' : ''}>
@@ -35,8 +40,9 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         </option>
     `).join('');
 
+    const selectedSlot = slots.find(s => s.start === defaultStartTime) || slots[0];
     const timesOptions = slots.map(s => `
-        <option value="${s.start}" ${s.start === defaultStartTime ? 'selected' : ''}>
+        <option value="${s.start}|${s.end}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
             ${format12Hour(s.start)} - ${format12Hour(s.end)}
         </option>
     `).join('');
@@ -71,23 +77,15 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                     <input type="date" id="book-date" class="cyber-input" value="${defaultDate}" required>
                 </div>
                 <div class="form-group">
-                    <label for="book-time"><span class="neon-arrow">◆</span> Horario de Inicio</label>
+                    <label for="book-time"><span class="neon-arrow">◆</span> Intervalo disponible</label>
                     <select id="book-time" class="cyber-select" required>
                         ${timesOptions}
                     </select>
                 </div>
             </div>
 
-            <div class="form-row grid-2">
-                <div class="form-group">
-                    <label for="book-duration"><span class="neon-arrow">◆</span> Duración</label>
-                    <select id="book-duration" class="cyber-select">
-                        <option value="60" selected>1 Hora (Bloque Estándar)</option>
-                        <option value="120">2 Horas (Sesión Pro)</option>
-                        <option value="180">3 Horas (Maratón / Team)</option>
-                    </select>
-                </div>
-                <div class="form-group">
+            <div class="form-row">
+                <div class="form-group flex-1">
                     <label><span class="neon-arrow">◆</span> Tarifa Estimada</label>
                     <div id="booking-cost-preview" class="cost-badge-preview">
                         ${business.currencySymbol}0 ${business.currency}
@@ -135,10 +133,9 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     // Actualizar costo estimado
     const updateCost = () => {
         const selectedMachId = modalEl.querySelector('#book-machine').value;
-        const durationMins = parseInt(modalEl.querySelector('#book-duration').value, 10) || 60;
         const mach = store.getMachineById(selectedMachId);
         const rate = mach ? mach.hourlyRate : 100;
-        const total = Math.round((durationMins / 60) * rate);
+        const total = Math.round((slotDuration / 60) * rate);
         const costPreview = modalEl.querySelector('#booking-cost-preview');
         if (costPreview) {
             costPreview.textContent = `${business.currencySymbol}${total} ${business.currency}`;
@@ -146,7 +143,6 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     };
 
     modalEl.querySelector('#book-machine').addEventListener('change', updateCost);
-    modalEl.querySelector('#book-duration').addEventListener('change', updateCost);
     updateCost();
 
     // Acciones de los botones
@@ -159,7 +155,6 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         const dateInput = modalEl.querySelector('#book-date');
         const timeSelect = modalEl.querySelector('#book-time');
         const machineSelect = modalEl.querySelector('#book-machine');
-        const durationSelect = modalEl.querySelector('#book-duration');
         const notesInput = modalEl.querySelector('#book-notes');
         const errorMsg = modalEl.querySelector('#booking-error');
 
@@ -169,9 +164,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             return;
         }
 
-        const durationMinutes = parseInt(durationSelect.value, 10);
-        const startTimeVal = timeSelect.value;
-        const endTimeVal = addMinutesToTime(startTimeVal, durationMinutes);
+        const [startTimeVal, endTimeVal] = timeSelect.value.split('|');
 
         try {
             const booking = await store.requestReservation({
@@ -179,7 +172,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 date: dateInput.value,
                 startTime: startTimeVal,
                 endTime: endTimeVal,
-                durationMinutes: durationMinutes,
+                durationMinutes: slotDuration,
                 clientName: nameInput.value.trim(),
                 clientPhone: phoneInput.value.trim(),
                 notes: notesInput.value.trim()
