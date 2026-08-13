@@ -3,7 +3,7 @@
 import { store } from '../core/store.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
-import { formatFriendlyDate, format12Hour, generateTimeSlots } from '../core/timeUtils.js';
+import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations } from '../core/timeUtils.js';
 import { showReservationTicket } from './clientBookingModal.js';
 
 let activeFilter = 'PENDING'; // 'PENDING', 'CONFIRMED', 'REJECTED', 'ALL'
@@ -311,10 +311,12 @@ function openModifyModal(reservation) {
 
     const selectedSlot = slots.find(s => s.start === reservation.startTime) || slots[0];
     const timesOptions = slots.map(s => `
-        <option value="${s.start}|${s.end}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
-            ${format12Hour(s.start)} - ${format12Hour(s.end)}
+        <option value="${s.start}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
+            ${format12Hour(s.start)}
         </option>
     `).join('');
+    const initialDurations = getAvailableDurations(selectedSlot.start, business.closingTime || '22:00', slotDuration);
+    const selectedDuration = initialDurations.includes(reservation.durationMinutes) ? reservation.durationMinutes : initialDurations[0];
 
     const contentHtml = `
         <form id="form-modify-res" class="cyber-form">
@@ -333,15 +335,21 @@ function openModifyModal(reservation) {
                     <input type="date" id="mod-date" class="cyber-input" value="${reservation.date}" required>
                 </div>
                 <div class="form-group">
-                    <label for="mod-time"><span class="neon-arrow">◆</span> Intervalo disponible</label>
+                    <label for="mod-time"><span class="neon-arrow">◆</span> Hora de inicio</label>
                     <select id="mod-time" class="cyber-select" required>
                         ${timesOptions}
                     </select>
                 </div>
             </div>
 
-            <div class="form-row">
-                <div class="form-group flex-1">
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="mod-duration"><span class="neon-arrow">◆</span> Duración</label>
+                    <select id="mod-duration" class="cyber-select" required>
+                        ${initialDurations.map(duration => `<option value="${duration}" ${duration === selectedDuration ? 'selected' : ''}>${formatDuration(duration)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="mod-notes"><span class="neon-arrow">◆</span> Nota de Modificación</label>
                     <input type="text" id="mod-notes" class="cyber-input" placeholder="Ej. Reasignada a cabina LX por petición del jugador">
                 </div>
@@ -366,15 +374,27 @@ function openModifyModal(reservation) {
 
     modalEl.querySelector('#btn-cancel-mod').onclick = () => modal.close();
 
+    modalEl.querySelector('#mod-time').addEventListener('change', () => {
+        const durationSelect = modalEl.querySelector('#mod-duration');
+        const durations = getAvailableDurations(
+            modalEl.querySelector('#mod-time').value,
+            business.closingTime || '22:00',
+            slotDuration
+        );
+        durationSelect.innerHTML = durations.map(duration => `<option value="${duration}">${formatDuration(duration)}</option>`).join('');
+    });
+
     modalEl.querySelector('#btn-save-mod').onclick = async () => {
         const machineId = modalEl.querySelector('#mod-machine').value;
         const date = modalEl.querySelector('#mod-date').value;
-        const [startTime, endTime] = modalEl.querySelector('#mod-time').value.split('|');
+        const startTime = modalEl.querySelector('#mod-time').value;
+        const durationMinutes = parseInt(modalEl.querySelector('#mod-duration').value, 10);
+        const endTime = addMinutesToTime(startTime, durationMinutes);
         const adminNotes = modalEl.querySelector('#mod-notes').value.trim();
         const errorDiv = modalEl.querySelector('#mod-error');
 
         const mach = store.getMachineById(machineId);
-        const totalCost = Math.round((slotDuration / 60) * (mach ? mach.hourlyRate : 100));
+        const totalCost = Math.round((durationMinutes / 60) * (mach ? mach.hourlyRate : 100));
 
         try {
             await store.modifyReservation(reservation.id, {
@@ -382,7 +402,7 @@ function openModifyModal(reservation) {
                 date,
                 startTime,
                 endTime,
-                durationMinutes: slotDuration,
+                durationMinutes,
                 totalCost,
                 adminNotes: adminNotes || 'Horario modificado por encargado.'
             });

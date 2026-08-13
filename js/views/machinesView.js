@@ -20,7 +20,7 @@ export function renderMachinesView(container) {
             <div class="view-header-bar">
                 <div class="header-left">
                     <h2 class="friendly-date-title">🕹️ Catálogo de Máquinas PIU</h2>
-                    <p class="subtitle-text">Pistas registradas en <strong>${business.name}</strong> • ${machines.length} máquinas en total</p>
+                    <p class="subtitle-text">Máquinas registradas en <strong>${business.name}</strong> • ${machines.length} máquinas en total</p>
                 </div>
                 ${isStaff ? `
                     <button class="btn btn-primary glow-red" id="btn-add-machine">
@@ -98,7 +98,7 @@ export function renderMachinesView(container) {
                             ` : `
                                 <div class="mach-card-actions">
                                     <button class="btn btn-primary btn-sm btn-book-this-mach glow-red" data-id="${m.id}" ${!isAvail ? 'disabled' : ''}>
-                                        📅 Reservar esta Pista
+                                        📅 Reservar esta Máquina
                                     </button>
                                 </div>
                             `}

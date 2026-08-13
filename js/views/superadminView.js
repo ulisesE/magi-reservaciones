@@ -512,7 +512,7 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                         <span class="t-icon">🕹️</span>
                         <div>
                             <h3>Catálogo de Máquinas de: ${currentBiz.name}</h3>
-                            <small>Pistas registradas en la sucursal activa</small>
+                            <small>Máquinas registradas en la sucursal activa</small>
                         </div>
                     </div>
                 </div>

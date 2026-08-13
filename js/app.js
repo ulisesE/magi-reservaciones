@@ -6,6 +6,7 @@ import { catalogsManager } from './core/catalogsManager.js';
 import { store } from './core/store.js';
 import { renderHeader } from './components/header.js';
 import { renderLandingView } from './views/landingView.js';
+import { renderBusinessHomeView } from './views/businessHomeView.js';
 import { renderDayView } from './views/dayView.js';
 import { renderWeekView } from './views/weekView.js';
 import { renderMonthView } from './views/monthView.js';
@@ -39,6 +40,14 @@ class App {
 
         // 4. Inicializar Store y datos de la sucursal activa
         await store.init();
+
+        // Los enlaces compartidos de una sucursal abren su página pública.
+        const hasBusinessInUrl = new URLSearchParams(window.location.search).has('local')
+            || new URLSearchParams(window.location.search).has('business')
+            || new URLSearchParams(window.location.search).has('sucursal');
+        if (hasBusinessInUrl && tenantManager.isLocalSelected && store.currentView === 'DAY' && !authManager.isStaff()) {
+            store.currentView = 'HOME';
+        }
 
         if (authManager.isSuperAdmin() && store.currentView === 'DAY' && !tenantManager.isLocalSelected) {
             store.currentView = 'SUPERADMIN';
@@ -88,6 +97,9 @@ class App {
             }
 
             switch (currentView) {
+                case 'HOME':
+                    renderBusinessHomeView(this.mainContent);
+                    break;
                 case 'DAY':
                     renderDayView(this.mainContent);
                     break;

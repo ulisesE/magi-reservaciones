@@ -75,7 +75,7 @@ export const DEFAULT_BUSINESSES = [
         requiresDeposit: false,
         depositPercentage: 0,
         paymentInstructions: 'Pago en caja / recepción al llegar a tu sesión de juego (Efectivo o Tarjeta).',
-        rules: '1. Respetar el tiempo asignado de pista.\n2. Cuidar los paneles acrílicos y sensores.\n3. Bebidas y alimentos sólo en el área de descanso.',
+        rules: '1. Respetar el tiempo asignado de máquina.\n2. Cuidar los paneles acrílicos y sensores.\n3. Bebidas y alimentos sólo en el área de descanso.',
         wifiNetwork: 'Galaxy_Gaming_Free',
         wifiPassword: 'GalaxyPump2024',
         createdAt: new Date().toISOString()

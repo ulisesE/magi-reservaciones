@@ -97,6 +97,9 @@ export function renderHeader(container) {
 
                 <!-- Control de Acceso y Acciones -->
                 <div class="header-actions">
+                    <button id="btn-mobile-nav" class="btn btn-outline btn-sm btn-mobile-nav" type="button" aria-label="Abrir menú de navegación" aria-expanded="false">
+                        <span>☰</span>
+                    </button>
                     ${!currentUser ? `
                         <button id="btn-open-login" class="btn btn-outline btn-sm" title="Iniciar sesión o registrarte como Jugador">
                             <span>🔐 Iniciar Sesión / Registro</span>
@@ -115,7 +118,7 @@ export function renderHeader(container) {
                     `}
 
                     <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red">
-                        <span>➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Pista'}</span>
+                        <span>➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
                     </button>
                 </div>
             </div>
@@ -123,6 +126,10 @@ export function renderHeader(container) {
             <!-- Barra de Pestañas y Vistas del Local -->
             <div class="header-nav-row">
                 <nav class="view-nav-tabs">
+                    <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME">
+                        <span class="tab-icon">🏠</span>
+                        <span class="tab-text">Inicio</span>
+                    </button>
                     <button class="nav-tab ${currentView === 'DAY' ? 'active' : ''}" data-view="DAY">
                         <span class="tab-icon">📅</span>
                         <span class="tab-text">Vista Día (Grid)</span>
@@ -210,10 +217,21 @@ export function renderHeader(container) {
         });
     }
 
+    const mobileNavBtn = container.querySelector('#btn-mobile-nav');
+    const navRow = container.querySelector('.header-nav-row');
+    mobileNavBtn?.addEventListener('click', () => {
+        const isOpen = navRow?.classList.toggle('mobile-nav-open');
+        mobileNavBtn.setAttribute('aria-expanded', String(isOpen));
+        mobileNavBtn.querySelector('span').textContent = isOpen ? '✕' : '☰';
+    });
+
     const navTabs = container.querySelectorAll('.nav-tab');
     navTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const view = tab.dataset.view;
+            navRow?.classList.remove('mobile-nav-open');
+            mobileNavBtn?.setAttribute('aria-expanded', 'false');
+            if (mobileNavBtn?.querySelector('span')) mobileNavBtn.querySelector('span').textContent = '☰';
             store.setCurrentView(view);
         });
     });

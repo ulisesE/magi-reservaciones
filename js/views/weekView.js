@@ -106,7 +106,7 @@ export function renderWeekView(container) {
                             <!-- Mini Lista de Reservas del día -->
                             <div class="day-preview-list">
                                 ${d.reservations.length === 0 ? `
-                                    <div class="day-empty-hint">Pistas libres</div>
+                                    <div class="day-empty-hint">Máquinas disponibles</div>
                                 ` : `
                                     ${d.reservations.slice(0, 3).map(r => {
                                         const mach = store.getMachineById(r.machineId);

@@ -4,6 +4,24 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
+## Funcionalidades recientes
+
+### Página principal por local
+- Al seleccionar una sucursal, el cliente llega a su dashboard público con imagen, dirección, ciudad, horario, contacto, WhatsApp, Maps y redes sociales configuradas.
+- Los enlaces compartibles (`?local=<id-del-local>`) abren directamente esa página principal.
+- Desde el dashboard, el botón **Ver horarios y reservar** lleva a la Vista Día para consultar la disponibilidad de las máquinas.
+
+### Reservas por intervalos configurables
+- Cada local configura su propio intervalo de reserva: 30, 45, 60, 90 o 120 minutos.
+- El formulario muestra **Hora de inicio** y **Duración**. Las duraciones son múltiplos del intervalo del local y se ajustan automáticamente a la hora de cierre.
+- Ejemplo: con intervalos de 30 minutos se puede elegir 30 min, 1 hora, 1 hora 30 min, 2 horas, etc.; con intervalos de 60 minutos se muestran 1, 2, 3 horas, etc.
+
+### Experiencia móvil
+- La navegación de vistas se agrupa en un menú hamburguesa en pantallas pequeñas.
+- Los controles de fecha de la Vista Día mantienen juntas las flechas anterior/siguiente para evitar saltos de línea.
+
+---
+
 ## 🌟 Novedades: Módulos de Administración de Catálogos por Negocio
 
 ### 1. 🕹️ Catálogo de Máquinas por Negocio (CRUD y Reasignación)
@@ -39,7 +57,7 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
                  ▼                               ▼
       ┌─────────────────────┐         ┌─────────────────────┐
       │   ENCARGADO LOCAL 1 │         │   ENCARGADO LOCAL 2 │
-      │ (Pistas, Reservas,  │         │ (Pistas, Reservas,  │
+      │ (Máquinas, Reservas,│         │ (Máquinas, Reservas,│
       │  Clientes, Centro)  │         │  Clientes, Galaxy)  │
       └──────────┬──────────┘         └──────────┬──────────┘
                  │                               │

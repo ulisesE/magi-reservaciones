@@ -47,13 +47,15 @@ export function renderDayView(container) {
             <!-- Day View Header Controls -->
             <div class="view-header-bar">
                 <div class="date-navigator">
-                    <button class="btn btn-icon btn-secondary" id="btn-prev-day" title="Día anterior">◀</button>
+                    <div class="date-step-controls" aria-label="Cambiar día">
+                        <button class="btn btn-icon btn-secondary" id="btn-prev-day" title="Día anterior" aria-label="Día anterior">◀</button>
+                        <button class="btn btn-icon btn-secondary" id="btn-next-day" title="Día siguiente" aria-label="Día siguiente">▶</button>
+                    </div>
                     <div class="current-date-info">
                         <input type="date" id="input-day-picker" class="cyber-input-date" value="${selectedDate}">
                         <h2 class="friendly-date-title">${formatFriendlyDate(selectedDate)}</h2>
                         ${isToday ? '<span class="badge badge-primary">HOY</span>' : ''}
                     </div>
-                    <button class="btn btn-icon btn-secondary" id="btn-next-day" title="Día siguiente">▶</button>
                     <button class="btn btn-secondary btn-sm" id="btn-today-day">Ir a Hoy</button>
                 </div>
 

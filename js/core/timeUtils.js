@@ -89,6 +89,30 @@ export function addMinutesToTime(timeStr, mins) {
 }
 
 /**
+ * Formatea una duración en minutos para interfaces de reserva.
+ */
+export function formatDuration(minutes) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    if (hours === 0) return `${remainingMinutes} min`;
+    if (remainingMinutes === 0) return `${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+    return `${hours} ${hours === 1 ? 'hora' : 'horas'} ${remainingMinutes} min`;
+}
+
+/**
+ * Devuelve duraciones válidas desde una hora de inicio hasta el cierre,
+ * siempre como múltiplos del intervalo configurado por el local.
+ */
+export function getAvailableDurations(startTime, closingTime, intervalMins = 60) {
+    const availableMinutes = timeToMinutes(closingTime) - timeToMinutes(startTime);
+    const durations = [];
+    for (let duration = intervalMins; duration <= availableMinutes; duration += intervalMins) {
+        durations.push(duration);
+    }
+    return durations;
+}
+
+/**
  * Genera la lista de slots horarios entre start y end con intervalo dado
  * @param {string} startTime - ej. '10:00'
  * @param {string} endTime - ej. '22:00'

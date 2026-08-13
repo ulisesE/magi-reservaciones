@@ -359,7 +359,7 @@ export function renderBusinessView(container) {
                             <div class="title-with-icon">
                                 <span class="t-icon">📜</span>
                                 <div>
-                                    <h3>5. Reglamento de Pista y Servicios Adicionales</h3>
+                                    <h3>5. Reglamento de Máquinas y Servicios Adicionales</h3>
                                     <small>Políticas de uso de las máquinas PIU y datos de cortesía (WiFi)</small>
                                 </div>
                             </div>
@@ -367,7 +367,7 @@ export function renderBusinessView(container) {
 
                         <div class="settings-form-body">
                             <div class="form-group">
-                                <label for="biz-rules"><span class="neon-arrow">◆</span> Reglamento Interno de Pistas</label>
+                                <label for="biz-rules"><span class="neon-arrow">◆</span> Reglamento Interno de Máquinas</label>
                                 <textarea id="biz-rules" class="cyber-textarea" rows="3" placeholder="Ej. 1. Calzado deportivo limpio obligatorio.&#10;2. Prohibido pisar las barras.&#10;3. Tolerancia de espera: 10 minutos.">${business.rules || ''}</textarea>
                             </div>
 
@@ -451,7 +451,7 @@ export function renderBusinessView(container) {
                                         </tr>
                                         <tr>
                                             <td><code>${COLLECTIONS.RESERVATIONS}</code></td>
-                                            <td>Catálogo de Reservaciones y Solicitudes de Pistas</td>
+                                            <td>Catálogo de Reservaciones y Solicitudes de Máquinas</td>
                                             <td><span class="badge badge-success">Activo (${store.reservations.length})</span></td>
                                         </tr>
                                         <tr>

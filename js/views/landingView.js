@@ -19,7 +19,7 @@ export function renderLandingView(container) {
                     ¿A QUÉ <span class="piu-highlight">LOCAL / SUCURSAL</span> DESEAS INGRESAR?
                 </h1>
                 <p class="landing-hero-subtitle">
-                    Selecciona tu sala de maquinitas para consultar la disponibilidad de pistas, horarios y solicitar tu reservación.
+                    Selecciona tu sala de maquinitas para consultar la disponibilidad de máquinas, horarios y solicitar tu reservación.
                 </p>
             </div>
 
@@ -92,7 +92,7 @@ export function renderLandingView(container) {
             e.stopPropagation();
             const id = btn.dataset.id;
             await tenantManager.selectLocal(id);
-            store.setCurrentView('DAY');
+            store.setCurrentView('HOME');
         });
     });
 
@@ -100,7 +100,7 @@ export function renderLandingView(container) {
         card.addEventListener('click', () => {
             const id = card.dataset.bizId;
             tenantManager.selectLocal(id).then(() => {
-                store.setCurrentView('DAY');
+                store.setCurrentView('HOME');
             });
         });
     });

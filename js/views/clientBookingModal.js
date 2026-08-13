@@ -5,7 +5,7 @@ import { tenantManager } from '../core/tenantManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { authManager } from '../core/authManager.js';
-import { formatFriendlyDate, format12Hour, generateTimeSlots } from '../core/timeUtils.js';
+import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations } from '../core/timeUtils.js';
 
 /**
  * Abre el modal para solicitar o agendar una reservación
@@ -42,10 +42,11 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
     const selectedSlot = slots.find(s => s.start === defaultStartTime) || slots[0];
     const timesOptions = slots.map(s => `
-        <option value="${s.start}|${s.end}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
-            ${format12Hour(s.start)} - ${format12Hour(s.end)}
+        <option value="${s.start}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
+            ${format12Hour(s.start)}
         </option>
     `).join('');
+    const durationOptions = getAvailableDurations(selectedSlot.start, business.closingTime || '22:00', slotDuration);
 
     const modalTitle = isStaff ? 'Asignar Reservación Directa' : 'Solicitar Reservación de Máquina';
     const modalIcon = isStaff ? '👑' : '🕹️';
@@ -77,15 +78,21 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                     <input type="date" id="book-date" class="cyber-input" value="${defaultDate}" required>
                 </div>
                 <div class="form-group">
-                    <label for="book-time"><span class="neon-arrow">◆</span> Intervalo disponible</label>
+                    <label for="book-time"><span class="neon-arrow">◆</span> Hora de inicio</label>
                     <select id="book-time" class="cyber-select" required>
                         ${timesOptions}
                     </select>
                 </div>
             </div>
 
-            <div class="form-row">
-                <div class="form-group flex-1">
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="book-duration"><span class="neon-arrow">◆</span> Duración</label>
+                    <select id="book-duration" class="cyber-select" required>
+                        ${durationOptions.map(duration => `<option value="${duration}">${formatDuration(duration)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
                     <label><span class="neon-arrow">◆</span> Tarifa Estimada</label>
                     <div id="booking-cost-preview" class="cost-badge-preview">
                         ${business.currencySymbol}0 ${business.currency}
@@ -133,16 +140,30 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     // Actualizar costo estimado
     const updateCost = () => {
         const selectedMachId = modalEl.querySelector('#book-machine').value;
+        const durationMinutes = parseInt(modalEl.querySelector('#book-duration').value, 10) || slotDuration;
         const mach = store.getMachineById(selectedMachId);
         const rate = mach ? mach.hourlyRate : 100;
-        const total = Math.round((slotDuration / 60) * rate);
+        const total = Math.round((durationMinutes / 60) * rate);
         const costPreview = modalEl.querySelector('#booking-cost-preview');
         if (costPreview) {
             costPreview.textContent = `${business.currencySymbol}${total} ${business.currency}`;
         }
     };
 
+    const updateDurationOptions = () => {
+        const durationSelect = modalEl.querySelector('#book-duration');
+        const durations = getAvailableDurations(
+            modalEl.querySelector('#book-time').value,
+            business.closingTime || '22:00',
+            slotDuration
+        );
+        durationSelect.innerHTML = durations.map(duration => `<option value="${duration}">${formatDuration(duration)}</option>`).join('');
+        updateCost();
+    };
+
     modalEl.querySelector('#book-machine').addEventListener('change', updateCost);
+    modalEl.querySelector('#book-time').addEventListener('change', updateDurationOptions);
+    modalEl.querySelector('#book-duration').addEventListener('change', updateCost);
     updateCost();
 
     // Acciones de los botones
@@ -154,6 +175,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         const phoneInput = modalEl.querySelector('#book-phone');
         const dateInput = modalEl.querySelector('#book-date');
         const timeSelect = modalEl.querySelector('#book-time');
+        const durationSelect = modalEl.querySelector('#book-duration');
         const machineSelect = modalEl.querySelector('#book-machine');
         const notesInput = modalEl.querySelector('#book-notes');
         const errorMsg = modalEl.querySelector('#booking-error');
@@ -164,7 +186,9 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             return;
         }
 
-        const [startTimeVal, endTimeVal] = timeSelect.value.split('|');
+        const startTimeVal = timeSelect.value;
+        const durationMinutes = parseInt(durationSelect.value, 10);
+        const endTimeVal = addMinutesToTime(startTimeVal, durationMinutes);
 
         try {
             const booking = await store.requestReservation({
@@ -172,7 +196,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 date: dateInput.value,
                 startTime: startTimeVal,
                 endTime: endTimeVal,
-                durationMinutes: slotDuration,
+                durationMinutes,
                 clientName: nameInput.value.trim(),
                 clientPhone: phoneInput.value.trim(),
                 notes: notesInput.value.trim()
@@ -218,7 +242,7 @@ export function showReservationTicket(reservation) {
         `💰 *Total:* ${business.currencySymbol}${reservation.totalCost} ${business.currency}\n` +
         `📍 *Ubicación:* ${business.address || business.city}\n` +
         `🔖 *Folio:* #${reservation.id.slice(-6).toUpperCase()}\n\n` +
-        `¡Nos vemos en la pista de baile! 🕺💃`
+        `¡Nos vemos en tu sesión de baile! 🕺💃`
     );
 
     const waLink = business.whatsapp 

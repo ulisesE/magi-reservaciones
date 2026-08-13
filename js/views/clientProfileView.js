@@ -92,7 +92,7 @@ export function renderClientProfileView(container) {
                             <strong style="font-size:1.3rem; color:#00ff88;">${confirmedBookings}</strong>
                         </div>
                         <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
-                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas en Pista</span>
+                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas de Juego</span>
                             <strong style="font-size:1.3rem; color:var(--piu-cyan);">${totalHours}h</strong>
                         </div>
                     </div>
@@ -123,10 +123,10 @@ export function renderClientProfileView(container) {
                         <div class="empty-icon" style="font-size:2.5rem; margin-bottom:10px;">🕹️</div>
                         <h4 style="color:#ffffff;">No tienes reservaciones registradas aún</h4>
                         <p style="color:var(--text-secondary); max-width:400px; margin:0 auto 16px auto; font-size:0.9rem;">
-                            Selecciona una máquina y tu horario preferido para apartar tu pista de baile.
+                            Selecciona una máquina y tu horario preferido para apartarla.
                         </p>
                         <button class="btn btn-primary glow-red btn-sm" id="btn-empty-book">
-                            <span>🚀 Agendar mi Primera Pista</span>
+                            <span>🚀 Agendar mi Primera Reserva</span>
                         </button>
                     </div>
                 ` : `
@@ -335,7 +335,7 @@ export function renderClientProfileView(container) {
     container.querySelectorAll('.btn-cancel-res').forEach(btn => {
         btn.addEventListener('click', async () => {
             const resId = btn.dataset.resId;
-            if (confirm("¿Estás seguro de cancelar tu reservación? Esta acción liberará la pista para otros jugadores.")) {
+            if (confirm("¿Estás seguro de cancelar tu reservación? Esta acción liberará la máquina para otros jugadores.")) {
                 try {
                     await store.cancelReservationByClient(resId);
                     toast.info("Tu reservación ha sido cancelada.");
