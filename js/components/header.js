@@ -73,7 +73,7 @@ export function renderHeader(container) {
             <div class="header-top-row">
                 <!-- Branding & Botón Regresar al Index -->
                 <div class="header-brand">
-                    ${!isManager ? `
+                    ${(!isManager && (!business?.disableChangeLocal || isSuperAdmin)) ? `
                         <button id="btn-back-to-index" class="btn btn-outline btn-sm btn-back-hub" title="Regresar al inicio para cambiar de sucursal">
                             <span>← Cambiar de Local</span>
                         </button>

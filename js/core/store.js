@@ -462,12 +462,13 @@ class Store {
         };
 
         if (isFirebaseAvailable && db) {
-            const reservationQuery = query(
-                collection(db, COLLECTIONS.RESERVATIONS),
-                where('businessId', '==', this.currentBusiness.id)
-            );
-            await runTransaction(db, async (transaction) => {
-                const snapshot = await transaction.get(reservationQuery);
+            try {
+                const reservationQuery = query(
+                    collection(db, COLLECTIONS.RESERVATIONS),
+                    where('businessId', '==', this.currentBusiness.id),
+                    where('date', '==', newReservation.date)
+                );
+                const snapshot = await getDocs(reservationQuery);
                 const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
                 const conflict = findReservationConflict(
                     remoteReservations,
@@ -479,8 +480,11 @@ class Store {
                 if (conflict) {
                     throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
                 }
-                transaction.set(doc(db, COLLECTIONS.RESERVATIONS, newReservation.id), newReservation);
-            });
+                await setDoc(doc(db, COLLECTIONS.RESERVATIONS, newReservation.id), newReservation);
+            } catch (err) {
+                console.error("Error guardando reservación en Firebase:", err);
+                throw err;
+            }
         }
 
         this.reservations.push(newReservation);

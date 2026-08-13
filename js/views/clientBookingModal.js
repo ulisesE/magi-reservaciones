@@ -100,6 +100,10 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 </div>
             </div>
 
+            <div id="booking-deposit-info" style="margin-top: 10px; padding: 10px; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); border-radius: var(--radius-sm); font-size: 0.8rem; margin-bottom: 12px;">
+                <!-- Se actualiza dinámicamente -->
+            </div>
+
             <div class="form-divider"></div>
 
             <div class="form-row grid-2">
@@ -147,6 +151,27 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         const costPreview = modalEl.querySelector('#booking-cost-preview');
         if (costPreview) {
             costPreview.textContent = `${business.currencySymbol}${total} ${business.currency}`;
+        }
+
+        const depositInfo = modalEl.querySelector('#booking-deposit-info');
+        if (depositInfo) {
+            if (business.requiresDeposit) {
+                const depositPct = business.depositPercentage || 50;
+                const depositAmount = Math.round(total * (depositPct / 100));
+                depositInfo.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; color:var(--color-neon-lime);">
+                        <span>💰 Anticipo Requerido (${depositPct}%):</span>
+                        <strong>${business.currencySymbol}${depositAmount} ${business.currency}</strong>
+                    </div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:6px; border-top:1px dashed rgba(0,229,255,0.15); padding-top:4px;">
+                        <em>Esta sucursal requiere pago previo de anticipo para confirmar el espacio.</em>
+                    </div>
+                `;
+            } else {
+                depositInfo.innerHTML = `
+                    <span style="color:var(--piu-cyan);">✓ Pago total en mostrador (No se requiere depósito previo).</span>
+                `;
+            }
         }
     };
 
@@ -232,6 +257,12 @@ export function showReservationTicket(reservation) {
         ? '<span class="badge badge-warning">En Revisión por Encargado</span>'
         : '<span class="badge badge-danger">Rechazada</span>';
 
+    // Generar línea de anticipo para el texto de WhatsApp
+    const depositAmount = Math.round(reservation.totalCost * (business.depositPercentage / 100));
+    const depositLine = business.requiresDeposit
+        ? `💳 *Anticipo (${business.depositPercentage}%):* ${business.currencySymbol}${depositAmount} ${business.currency}\n`
+        : `💳 *Pago:* Pago total al llegar al local\n`;
+
     // Generar texto para compartir en WhatsApp
     const waText = encodeURIComponent(
         `🎮 *RESERVACIÓN PUMP IT UP - ${business.name}*\n` +
@@ -240,68 +271,10 @@ export function showReservationTicket(reservation) {
         `📅 *Fecha:* ${friendlyDate}\n` +
         `⏰ *Horario:* ${timeFormatted} (${reservation.durationMinutes} min)\n` +
         `💰 *Total:* ${business.currencySymbol}${reservation.totalCost} ${business.currency}\n` +
+        depositLine +
         `📍 *Ubicación:* ${business.address || business.city}\n` +
         `🔖 *Folio:* #${reservation.id.slice(-6).toUpperCase()}\n\n` +
         `¡Nos vemos en tu sesión de baile! 🕺💃`
-    );
-
-    const waLink = business.whatsapp 
-        ? `https://wa.me/${business.whatsapp}?text=${waText}`
-        : `https://api.whatsapp.com/send?text=${waText}`;
-
-    const contentHtml = `
-        <div class="ticket-wrapper">
-            <div class="ticket-card animate-scale-up">
-                <div class="ticket-header">
-                    <div class="ticket-venue-logo">${business.logoIcon || '🕹️'}</div>
-                    <div class="ticket-venue-title">
-                        <h4>${business.name}</h4>
-                        <span>${business.city}</span>
-                    </div>
-                </div>
-
-                <div class="ticket-badge-row">
-                    <span class="ticket-folio">FOLIO: #${reservation.id.slice(-6).toUpperCase()}</span>
-                    ${statusBadge}
-                </div>
-
-                <div class="ticket-details-grid">
-                    <div class="ticket-item">
-                        <span class="t-label">JUGADOR / GAMERTAG</span>
-                        <strong class="t-value highlight">${reservation.clientName}</strong>
-                    </div>
-                    <div class="ticket-item">
-                        <span class="t-label">MÁQUINA</span>
-                        <strong class="t-value">${machine ? machine.name : 'PIU Machine'}</strong>
-                    </div>
-                    <div class="ticket-item">
-                        <span class="t-label">FECHA</span>
-                        <strong class="t-value">${friendlyDate}</strong>
-                    </div>
-                    <div class="ticket-item">
-                        <span class="t-label">HORARIO</span>
-                        <strong class="t-value highlight-cyan">${timeFormatted}</strong>
-                    </div>
-                    <div class="ticket-item">
-                        <span class="t-label">DURACIÓN</span>
-                        <strong class="t-value">${reservation.durationMinutes} Minutos</strong>
-                    </div>
-                    <div class="ticket-item">
-                        <span class="t-label">TOTAL ESTIMADO</span>
-                        <strong class="t-value highlight-gold">${business.currencySymbol}${reservation.totalCost} ${business.currency}</strong>
-                    </div>
-                </div>
-
-                ${reservation.notes ? `
-                    <div class="ticket-notes">
-                        <span class="t-label">NOTAS:</span>
-                        <p>${reservation.notes}</p>
-                    </div>
-                ` : ''}
-
-                <div class="ticket-arcade-arrows">
-                    <span>↖</span> <span>↗</span> <span>★</span> <span>↙</span> <span>↘</span>
-                </div>
             </div>
         </div>
     `;

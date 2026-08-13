@@ -60,6 +60,16 @@ export function renderBusinessHomeView(container) {
                     </div>
                 </article>
             </div>
+            
+            ${business.rules ? `
+                <section class="business-home-rules" style="margin: 40px auto 0 auto; padding: 24px; background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(255, 255, 255, 0.15); border-radius: var(--radius-md); text-align: left; max-width: 1200px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                        <span style="font-size: 1.5rem;">📜</span>
+                        <h3 style="margin:0; font-family:var(--font-heading); color:#ffffff; font-size: 1.2rem; letter-spacing: 1.5px;">REGLAMENTO INTERNO DE LA SALA</h3>
+                    </div>
+                    <div style="color:var(--text-secondary); font-size:0.92rem; line-height: 1.6; white-space: pre-line; padding: 4px 8px;">${business.rules}</div>
+                </section>
+            ` : ''}
 
             <section class="business-home-details">
                 <div>

@@ -406,6 +406,18 @@ export function renderBusinessView(container) {
                                     🌐 Abrir Enlace
                                 </a>
                             </div>
+                            
+                            <div class="form-divider" style="margin: 16px 0;"></div>
+                            
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700;">
+                                    <input type="checkbox" id="biz-disable-change-local" style="width:18px; height:18px; accent-color:var(--color-neon-lime); cursor:pointer;" ${business.disableChangeLocal ? 'checked' : ''}>
+                                    <span>Bloquear Navegación a esta Sucursal (Ocultar botón "Cambiar de Local" a clientes e invitados)</span>
+                                </label>
+                                <small style="display:block; margin-top:6px; color:var(--text-muted); font-size:0.78rem; line-height:1.4;">
+                                    💡 <em>Al activar esta opción, los usuarios que ingresen a esta sucursal no verán el botón para regresar a la pantalla de selección de locales. El Superadmin siempre podrá verlo para no perder acceso.</em>
+                                </small>
+                            </div>
                         </div>
                     </div>
 
@@ -738,7 +750,8 @@ export function renderBusinessView(container) {
             paymentInstructions: container.querySelector('#biz-pay-instructions').value.trim(),
             rules: container.querySelector('#biz-rules').value.trim(),
             wifiNetwork: container.querySelector('#biz-wifi-net').value.trim(),
-            wifiPassword: container.querySelector('#biz-wifi-pass').value.trim()
+            wifiPassword: container.querySelector('#biz-wifi-pass').value.trim(),
+            disableChangeLocal: container.querySelector('#biz-disable-change-local').checked
         };
 
         if (!updated.name || !updated.city) {
