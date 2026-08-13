@@ -11,12 +11,24 @@ import {
     updateDoc, 
     deleteDoc, 
     onSnapshot, 
+    runTransaction,
     query, 
     where 
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
 import { formatDateKey, isOverlapping } from './timeUtils.js';
+
+function findReservationConflict(reservations, machineId, date, startTime, endTime, excludeReservationId = null) {
+    return reservations.find(res =>
+        res.id !== excludeReservationId
+        && res.machineId === machineId
+        && res.date === date
+        && res.status !== 'REJECTED'
+        && res.status !== 'CANCELLED'
+        && isOverlapping(startTime, endTime, res.startTime, res.endTime)
+    );
+}
 
 // Modelos y datos de prueba predeterminados de Pump It Up
 const DEFAULT_MACHINES_BY_BIZ = {
@@ -210,7 +222,8 @@ class Store {
         this.selectedDate = formatDateKey(new Date());
         this.currentView = 'DAY'; // 'DAY', 'WEEK', 'MONTH', 'MACHINES', 'REQUESTS', 'BUSINESS', 'SUPERADMIN'
         this.listeners = [];
-        this.unsubscribeFirestore = null;
+        this.unsubscribeReservations = null;
+        this.unsubscribeMachines = null;
     }
 
     async init() {
@@ -240,13 +253,14 @@ class Store {
         if (!this.currentBusiness) return;
         const bizId = this.currentBusiness.id;
 
-        if (this.unsubscribeFirestore) {
-            this.unsubscribeFirestore();
-            this.unsubscribeFirestore = null;
-        }
+        this.unsubscribeReservations?.();
+        this.unsubscribeMachines?.();
+        this.unsubscribeReservations = null;
+        this.unsubscribeMachines = null;
 
         let loadedMachines = [];
         let loadedReservations = [];
+        let loadedFromFirestore = false;
 
         if (isFirebaseAvailable && db) {
             try {
@@ -257,8 +271,15 @@ class Store {
                 const resQuery = query(collection(db, COLLECTIONS.RESERVATIONS), where("businessId", "==", bizId));
                 const resSnap = await getDocs(resQuery);
                 resSnap.forEach(d => loadedReservations.push({ id: d.id, ...d.data() }));
+                loadedFromFirestore = true;
 
-                this.unsubscribeFirestore = onSnapshot(resQuery, (snapshot) => {
+                this.unsubscribeMachines = onSnapshot(machQuery, (snapshot) => {
+                    this.machines = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+                    this.saveLocalMachines(bizId, this.machines);
+                    this.notify();
+                }, (error) => console.warn('Error de sincronización de máquinas:', error));
+
+                this.unsubscribeReservations = onSnapshot(resQuery, (snapshot) => {
                     const realtimeRes = [];
                     snapshot.forEach(docSnap => {
                         realtimeRes.push({ id: docSnap.id, ...docSnap.data() });
@@ -266,27 +287,27 @@ class Store {
                     this.reservations = realtimeRes;
                     this.saveLocalReservations(bizId, realtimeRes);
                     this.notify();
-                });
+                }, (error) => console.warn('Error de sincronización de reservas:', error));
             } catch (err) {
                 console.warn("Error Firebase:", err);
             }
         }
 
-        if (loadedMachines.length === 0) {
+        if (!loadedFromFirestore && loadedMachines.length === 0) {
             const localMach = localStorage.getItem(`piu_machines_${bizId}`);
             if (localMach) {
                 try { loadedMachines = JSON.parse(localMach); } catch (e) { loadedMachines = []; }
             }
         }
 
-        if (loadedReservations.length === 0) {
+        if (!loadedFromFirestore && loadedReservations.length === 0) {
             const localRes = localStorage.getItem(`piu_reservations_${bizId}`);
             if (localRes) {
                 try { loadedReservations = JSON.parse(localRes); } catch (e) { loadedReservations = []; }
             }
         }
 
-        if (loadedMachines.length === 0) {
+        if (!loadedFromFirestore && loadedMachines.length === 0) {
             loadedMachines = DEFAULT_MACHINES_BY_BIZ[bizId] || [
                 {
                     id: `mach_${bizId}_01`,
@@ -303,13 +324,11 @@ class Store {
                 }
             ];
             this.saveLocalMachines(bizId, loadedMachines);
-            this.syncMachinesToFirebase(loadedMachines);
         }
 
-        if (loadedReservations.length === 0) {
+        if (!loadedFromFirestore && loadedReservations.length === 0) {
             loadedReservations = createDemoReservations(bizId);
             this.saveLocalReservations(bizId, loadedReservations);
-            this.syncReservationsToFirebase(loadedReservations);
         }
 
         this.machines = loadedMachines;
@@ -404,14 +423,15 @@ class Store {
     }
 
     async requestReservation(bookingData) {
-        const availability = this.checkAvailability(
-            bookingData.machineId,
-            bookingData.date,
-            bookingData.startTime,
-            bookingData.endTime
-        );
-
-        if (!availability.available) throw new Error(availability.reason);
+        if (!isFirebaseAvailable || !db) {
+            const availability = this.checkAvailability(
+                bookingData.machineId,
+                bookingData.date,
+                bookingData.startTime,
+                bookingData.endTime
+            );
+            if (!availability.available) throw new Error(availability.reason);
+        }
 
         const machine = this.getMachineById(bookingData.machineId);
         const hours = (bookingData.durationMinutes || 60) / 60;
@@ -441,12 +461,30 @@ class Store {
             createdAt: new Date().toISOString()
         };
 
+        if (isFirebaseAvailable && db) {
+            const reservationQuery = query(
+                collection(db, COLLECTIONS.RESERVATIONS),
+                where('businessId', '==', this.currentBusiness.id)
+            );
+            await runTransaction(db, async (transaction) => {
+                const snapshot = await transaction.get(reservationQuery);
+                const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+                const conflict = findReservationConflict(
+                    remoteReservations,
+                    newReservation.machineId,
+                    newReservation.date,
+                    newReservation.startTime,
+                    newReservation.endTime
+                );
+                if (conflict) {
+                    throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
+                }
+                transaction.set(doc(db, COLLECTIONS.RESERVATIONS, newReservation.id), newReservation);
+            });
+        }
+
         this.reservations.push(newReservation);
         this.saveLocalReservations(this.currentBusiness.id, this.reservations);
-
-        if (isFirebaseAvailable && db) {
-            try { await setDoc(doc(db, COLLECTIONS.RESERVATIONS, newReservation.id), newReservation); } catch (err) {}
-        }
 
         this.notify();
         return newReservation;
@@ -529,23 +567,41 @@ class Store {
         const targetStart = updatedFields.startTime || res.startTime;
         const targetEnd = updatedFields.endTime || res.endTime;
 
-        const availability = this.checkAvailability(targetMachine, targetDate, targetStart, targetEnd, reservationId);
-        if (!availability.available) throw new Error(availability.reason);
+        if (!isFirebaseAvailable || !db) {
+            const availability = this.checkAvailability(targetMachine, targetDate, targetStart, targetEnd, reservationId);
+            if (!availability.available) throw new Error(availability.reason);
+        }
 
-        Object.assign(res, updatedFields, {
+        const persistedFields = {
+            ...updatedFields,
             machineId: targetMachine,
             date: targetDate,
             startTime: targetStart,
             endTime: targetEnd,
             status: 'CONFIRMED',
             updatedAt: new Date().toISOString()
-        });
+        };
+
+        if (isFirebaseAvailable && db) {
+            const reservationQuery = query(
+                collection(db, COLLECTIONS.RESERVATIONS),
+                where('businessId', '==', this.currentBusiness.id)
+            );
+            await runTransaction(db, async (transaction) => {
+                const snapshot = await transaction.get(reservationQuery);
+                const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+                const conflict = findReservationConflict(remoteReservations, targetMachine, targetDate, targetStart, targetEnd, reservationId);
+                if (conflict) {
+                    throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
+                }
+                transaction.update(doc(db, COLLECTIONS.RESERVATIONS, reservationId), persistedFields);
+            });
+        }
+
+        Object.assign(res, persistedFields);
 
         this.saveLocalReservations(this.currentBusiness.id, this.reservations);
 
-        if (isFirebaseAvailable && db) {
-            try { await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), updatedFields); } catch (e) {}
-        }
         this.notify();
         return res;
     }

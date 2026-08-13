@@ -69,7 +69,7 @@ export function renderHeader(container) {
 
     // Cabecera dentro de un local específico o modo Superadmin
     container.innerHTML = `
-        <header class="app-header">
+        <header class="app-header ${currentUser ? 'header-authenticated' : 'header-guest'}">
             <div class="header-top-row">
                 <!-- Branding & Botón Regresar al Index -->
                 <div class="header-brand">
@@ -102,7 +102,7 @@ export function renderHeader(container) {
                     </button>
                     ${!currentUser ? `
                         <button id="btn-open-login" class="btn btn-outline btn-sm" title="Iniciar sesión o registrarte como Jugador">
-                            <span>🔐 Iniciar Sesión / Registro</span>
+                            <span class="login-action-label">🔐 Iniciar Sesión / Registro</span>
                         </button>
                     ` : `
                         <div class="user-session-pill" style="display:flex; align-items:center; gap:8px; background:var(--bg-dark-700); padding:4px 10px; border-radius:var(--radius-full); border:1px solid var(--border-color);">
@@ -118,7 +118,7 @@ export function renderHeader(container) {
                     `}
 
                     <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red">
-                        <span>➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
+                        <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
                     </button>
                 </div>
             </div>

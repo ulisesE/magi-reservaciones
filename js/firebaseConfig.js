@@ -14,6 +14,7 @@ import {
     getDocs, 
     setDoc, 
     getDoc,
+    runTransaction,
     serverTimestamp,
     orderBy
 } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
@@ -88,6 +89,7 @@ export {
     getDocs, 
     setDoc, 
     getDoc,
+    runTransaction,
     serverTimestamp,
     orderBy
 };

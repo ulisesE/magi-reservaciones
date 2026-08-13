@@ -747,7 +747,7 @@ export function renderBusinessView(container) {
         }
 
         try {
-            await tenantManager.updateBusiness(business.id, updated);
+            await tenantManager.updateBusiness(business.id, updated, business.version ?? 0);
             toast.success(`Configuraciones de "${updated.name}" guardadas exitosamente.`);
             // Refrescar vista
             renderBusinessView(container);

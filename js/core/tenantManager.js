@@ -10,6 +10,8 @@ import {
     doc, 
     updateDoc, 
     deleteDoc,
+    onSnapshot,
+    runTransaction,
     query,
     where 
 } from '../firebaseConfig.js';
@@ -88,14 +90,17 @@ class TenantManager {
         this.activeBusinessId = null;
         this.isLocalSelected = false; // Controla si el usuario ya eligió local o debe ver la pantalla de selección inicial
         this.listeners = [];
+        this.unsubscribeBusinesses = null;
     }
 
     async init() {
         let loaded = [];
+        let loadedFromFirestore = false;
 
         if (isFirebaseAvailable && db) {
             try {
                 const querySnapshot = await getDocs(collection(db, COLLECTIONS.BUSINESSES));
+                loadedFromFirestore = true;
                 if (!querySnapshot.empty) {
                     querySnapshot.forEach(docSnap => {
                         loaded.push({ id: docSnap.id, ...docSnap.data() });
@@ -106,14 +111,14 @@ class TenantManager {
             }
         }
 
-        if (loaded.length === 0) {
+        if (!loadedFromFirestore && loaded.length === 0) {
             const localData = localStorage.getItem(TENANTS_STORAGE_KEY);
             if (localData) {
                 try { loaded = JSON.parse(localData); } catch (e) { loaded = []; }
             }
         }
 
-        if (loaded.length === 0) {
+        if (!loadedFromFirestore && loaded.length === 0) {
             loaded = [...DEFAULT_BUSINESSES];
             this.saveLocally(loaded);
             if (isFirebaseAvailable && db) {
@@ -124,6 +129,15 @@ class TenantManager {
         }
 
         this.businesses = loaded;
+
+        if (isFirebaseAvailable && db) {
+            this.unsubscribeBusinesses?.();
+            this.unsubscribeBusinesses = onSnapshot(collection(db, COLLECTIONS.BUSINESSES), (snapshot) => {
+                this.businesses = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+                this.saveLocally(this.businesses);
+                this.notify();
+            }, (error) => console.warn('Error de sincronización de locales:', error));
+        }
 
         // Comprobar si hay una sesión activa de Encargado bloqueada a una sucursal específica
         const sessionRaw = localStorage.getItem('piu_active_user_session');
@@ -275,7 +289,8 @@ class TenantManager {
             rules: businessData.rules?.trim() || '',
             wifiNetwork: businessData.wifiNetwork?.trim() || '',
             wifiPassword: businessData.wifiPassword?.trim() || '',
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            version: 1
         };
 
         this.businesses.push(newBusiness);
@@ -293,25 +308,35 @@ class TenantManager {
         return newBusiness;
     }
 
-    async updateBusiness(businessId, updatedFields) {
+    async updateBusiness(businessId, updatedFields, expectedVersion = null) {
         const index = this.businesses.findIndex(b => b.id === businessId);
         if (index === -1) return null;
 
-        this.businesses[index] = {
-            ...this.businesses[index],
+        const currentVersion = expectedVersion ?? this.businesses[index].version ?? 0;
+        const persistedFields = {
             ...updatedFields,
+            version: currentVersion + 1,
             updatedAt: new Date().toISOString()
         };
 
-        this.saveLocally(this.businesses);
-
         if (isFirebaseAvailable && db) {
-            try {
-                await updateDoc(doc(db, COLLECTIONS.BUSINESSES, businessId), updatedFields);
-            } catch (err) {
-                console.warn("Error actualizando negocio en Firebase:", err);
-            }
+            await runTransaction(db, async (transaction) => {
+                const businessRef = doc(db, COLLECTIONS.BUSINESSES, businessId);
+                const latest = await transaction.get(businessRef);
+                if (!latest.exists()) throw new Error('El local ya no existe.');
+                if ((latest.data().version || 0) !== currentVersion) {
+                    throw new Error('La configuración cambió en otro dispositivo. Recarga la página antes de volver a guardar.');
+                }
+                transaction.update(businessRef, persistedFields);
+            });
         }
+
+        this.businesses[index] = {
+            ...this.businesses[index],
+            ...persistedFields
+        };
+
+        this.saveLocally(this.businesses);
 
         this.notify();
         return this.businesses[index];

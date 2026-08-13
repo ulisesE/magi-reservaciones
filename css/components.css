@@ -485,6 +485,29 @@
         min-width: 0;
     }
     .header-actions { gap: 8px; }
+    .app-header.header-guest .header-top-row {
+        align-items: flex-start;
+    }
+    .app-header.header-guest .header-brand {
+        flex-basis: 100%;
+    }
+    .app-header.header-guest .header-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .app-header.header-guest .login-action-label,
+    .app-header.header-guest .quick-book-label {
+        font-size: 0;
+    }
+    .app-header.header-guest .login-action-label::after {
+        content: '🔐 Entrar';
+        font-size: 0.78rem;
+    }
+    .app-header.header-guest .quick-book-label::after {
+        content: '➕ Reservar';
+        font-size: 0.78rem;
+    }
     .btn-mobile-nav {
         display: inline-flex;
         min-width: 38px;
