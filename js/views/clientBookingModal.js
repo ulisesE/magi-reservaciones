@@ -275,6 +275,91 @@ export function showReservationTicket(reservation) {
         `📍 *Ubicación:* ${business.address || business.city}\n` +
         `🔖 *Folio:* #${reservation.id.slice(-6).toUpperCase()}\n\n` +
         `¡Nos vemos en tu sesión de baile! 🕺💃`
+    );
+
+    const waLink = business.whatsapp 
+        ? `https://wa.me/${business.whatsapp}?text=${waText}`
+        : `https://api.whatsapp.com/send?text=${waText}`;
+
+    // Generar bloque de depósito para el ticket visual
+    const depositRequiredHtml = business.requiresDeposit
+        ? `
+            <div class="ticket-deposit-box" style="margin-top: 15px; padding: 12px; background: rgba(195, 217, 30, 0.05); border: 1px dashed rgba(195, 217, 30, 0.4); border-radius: 4px; font-size: 0.85rem; text-align: left;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">
+                    <span style="color:var(--text-secondary); font-weight:700;">Anticipo Requerido (${business.depositPercentage}%):</span>
+                    <strong style="color:var(--color-chartreuse); font-size: 1.05rem;">
+                        ${business.currencySymbol}${depositAmount} ${business.currency}
+                    </strong>
+                </div>
+                ${business.paymentInstructions ? `
+                    <div style="font-size:0.78rem; color:var(--text-secondary); padding-top: 2px;">
+                        <strong style="color:var(--color-neon-lime);">Instrucciones de Pago:</strong>
+                        <p style="margin:4px 0 0 0; white-space:pre-line; line-height: 1.35; font-family:var(--font-mono);">${business.paymentInstructions}</p>
+                    </div>
+                ` : ''}
+            </div>
+        `
+        : `
+            <div class="ticket-deposit-box" style="margin-top: 15px; padding: 8px 12px; background: rgba(0, 229, 255, 0.04); border: 1px solid rgba(0, 229, 255, 0.15); border-radius: 4px; font-size: 0.82rem; color: var(--piu-cyan); text-align: left;">
+                <span>✓ Pago total en mostrador (No se requiere depósito previo).</span>
+            </div>
+        `;
+
+    const contentHtml = `
+        <div class="ticket-wrapper">
+            <div class="ticket-card animate-scale-up">
+                <div class="ticket-header">
+                    <div class="ticket-venue-logo">${business.logoIcon || '🕹️'}</div>
+                    <div class="ticket-venue-title">
+                        <h4>${business.name}</h4>
+                        <span>${business.city}</span>
+                    </div>
+                </div>
+
+                <div class="ticket-badge-row">
+                    <span class="ticket-folio">FOLIO: #${reservation.id.slice(-6).toUpperCase()}</span>
+                    ${statusBadge}
+                </div>
+
+                <div class="ticket-details-grid">
+                    <div class="ticket-item">
+                        <span class="t-label">JUGADOR / GAMERTAG</span>
+                        <strong class="t-value highlight">${reservation.clientName}</strong>
+                    </div>
+                    <div class="ticket-item">
+                        <span class="t-label">MÁQUINA</span>
+                        <strong class="t-value">${machine ? machine.name : 'PIU Machine'}</strong>
+                    </div>
+                    <div class="ticket-item">
+                        <span class="t-label">FECHA</span>
+                        <strong class="t-value">${friendlyDate}</strong>
+                    </div>
+                    <div class="ticket-item">
+                        <span class="t-label">HORARIO</span>
+                        <strong class="t-value highlight-cyan">${timeFormatted}</strong>
+                    </div>
+                    <div class="ticket-item">
+                        <span class="t-label">DURACIÓN</span>
+                        <strong class="t-value">${reservation.durationMinutes} Minutos</strong>
+                    </div>
+                    <div class="ticket-item">
+                        <span class="t-label">TOTAL ESTIMADO</span>
+                        <strong class="t-value highlight-gold">${business.currencySymbol}${reservation.totalCost} ${business.currency}</strong>
+                    </div>
+                </div>
+
+                ${reservation.notes ? `
+                    <div class="ticket-notes">
+                        <span class="t-label">NOTAS:</span>
+                        <p>${reservation.notes}</p>
+                    </div>
+                ` : ''}
+
+                ${depositRequiredHtml}
+
+                <div class="ticket-arcade-arrows">
+                    <span>↖</span> <span>↗</span> <span>★</span> <span>↙</span> <span>↘</span>
+                </div>
             </div>
         </div>
     `;
