@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Sistema de gestión y reservación de maquinitas de baile Pump It Up (PIU) con vistas de Mes, Semana y Día (Grid Horas x Máquinas), perfiles de cliente y encargado, y soporte Multi-Negocio.">
+    <meta name="description"
+        content="Sistema de gestión y reservación de maquinitas de baile Pump It Up (PIU) con vistas de Mes, Semana y Día (Grid Horas x Máquinas), perfiles de cliente y encargado, y soporte Multi-Negocio.">
     <meta name="theme-color" content="#080a0f">
     <title>Pump It Up Hub • Sistema de Reservaciones de Maquinitas</title>
 
@@ -12,8 +14,10 @@
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/views.css">
 
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕹️</text></svg>">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕹️</text></svg>">
 </head>
+
 <body>
     <div id="app">
         <!-- Barra de Encabezado Superior (Renderizada dinámicamente) -->
@@ -21,21 +25,110 @@
 
         <!-- Contenedor Principal de Vistas -->
         <main id="main-content" class="main-content-container" role="main">
-            <div class="empty-state">
-                <div class="empty-icon pulse-glow">🕹️</div>
-                <h3>Cargando sistema Pump It Up Hub...</h3>
+            <!-- Splash Screen Animado con la paleta de PIU Phoenix -->
+            <style>
+                @keyframes progress-sim {
+                    0% {
+                        left: -50%;
+                        width: 30%;
+                    }
+
+                    50% {
+                        left: 30%;
+                        width: 60%;
+                    }
+
+                    100% {
+                        left: 110%;
+                        width: 20%;
+                    }
+                }
+
+                @keyframes blink {
+
+                    0%,
+                    100% {
+                        opacity: 0;
+                    }
+
+                    50% {
+                        opacity: 1;
+                    }
+                }
+
+                @keyframes blink-neon {
+                    0% {
+                        filter: drop-shadow(0 0 10px rgba(104, 242, 5, 0.4));
+                        opacity: 0.85;
+                    }
+
+                    100% {
+                        filter: drop-shadow(0 0 25px rgba(104, 242, 5, 0.9));
+                        opacity: 1;
+                    }
+                }
+
+                @keyframes pulse-neon {
+
+                    0%,
+                    100% {
+                        transform: scale(1);
+                        filter: drop-shadow(0 0 12px rgba(104, 242, 5, 0.3));
+                    }
+
+                    50% {
+                        transform: scale(1.03);
+                        filter: drop-shadow(0 0 22px rgba(195, 217, 30, 0.5));
+                    }
+                }
+            </style>
+
+            <div class="piu-splash-screen"
+                style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; text-align:center; padding: 40px 20px;">
+                <div class="splash-logo-container" style="position:relative; margin-bottom:20px;">
+                    <div
+                        style="font-size: 5rem; line-height: 1; filter: drop-shadow(0 0 20px #68F205); animation: blink-neon 1.5s infinite alternate; margin-bottom: 10px;">
+                        🕹️</div>
+                </div>
+
+                <h1
+                    style="font-family: 'Rajdhani', sans-serif; font-size: 3rem; font-weight: 900; letter-spacing: 5px; margin: 0; text-transform: uppercase; background: linear-gradient(135deg, #68F205 0%, #C3D91E 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 15px rgba(104,242,5,0.35)); animation: pulse-neon 2s infinite ease-in-out;">
+                    PUMP IT UP HUB
+                </h1>
+
+                <p
+                    style="font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: #9bb7ad; letter-spacing: 3px; margin: 14px 0 24px 0; text-transform: uppercase;">
+                    INICIALIZANDO SISTEMA <span style="color:#68F205; animation: blink 0.8s infinite;">_</span>
+                </p>
+
+                <!-- Simulador de barra de carga arcade -->
+                <div
+                    style="width: 260px; height: 5px; background: rgba(1, 38, 35, 0.6); border: 1px solid rgba(104, 242, 5, 0.2); border-radius: 999px; overflow: hidden; position: relative; margin-bottom: 20px; box-shadow: 0 0 10px rgba(104,242,5,0.1);">
+                    <div
+                        style="position: absolute; left: 0; top: 0; height: 100%; width: 40%; background: linear-gradient(90deg, #088C4F, #68F205); border-radius: 999px; animation: progress-sim 1.8s infinite ease-in-out;">
+                    </div>
+                </div>
+
+                <div
+                    style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #52756a; display:flex; flex-direction:column; gap:4px; letter-spacing:1px;">
+                    <span>[CARGANDO MÓDULOS DEL MOTOR...]</span>
+                    <span style="color:#68F205;">SINCRONIZANDO CON EL SERVIDOR</span>
+                </div>
             </div>
         </main>
 
         <!-- Pie de página con estado de conexión -->
-        <footer class="app-footer" style="padding: 16px 24px; text-align: center; font-size: 0.78rem; color: var(--text-dimmed); border-top: 1px solid var(--border-color); background: var(--bg-dark-900);">
-            <div style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <footer class="app-footer"
+            style="padding: 16px 24px; text-align: center; font-size: 0.78rem; color: var(--text-dimmed); border-top: 1px solid var(--border-color); background: var(--bg-dark-900);">
+            <div
+                style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div>
                     <strong>PUMP IT UP HUB</strong> • Plataforma Modular de Reservaciones Multi-Negocio
                 </div>
                 <div id="cloud-sync-status" style="display: flex; align-items: center; gap: 6px;">
-                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 8px #00ff88;"></span>
-                    <span>Firebase Firestore Activo (Namespace: <code>piu_app_v1</code>)</span>
+                    <span
+                        style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 8px #00ff88;"></span>
+                    <span>Conexión Segura (piu_app_v1.0.0.1)</span>
                 </div>
             </div>
         </footer>
@@ -48,4 +141,5 @@
     <!-- Entrada Principal JavaScript (ES Modules) -->
     <script type="module" src="js/app.js"></script>
 </body>
+
 </html>

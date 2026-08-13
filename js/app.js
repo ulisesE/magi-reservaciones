@@ -70,12 +70,12 @@ class App {
             if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted);">Sincronización en la Nube (Firestore <code>piu_app_v1</code>)</span>
+                    <span style="color:var(--text-muted);">Servidor Remoto Conectado (piu_app_v1)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted);">Modo LocalStorage (Sin conexión remota)</span>
+                    <span style="color:var(--text-muted);">Modo Local (Sin conexión)</span>
                 `;
             }
         }
