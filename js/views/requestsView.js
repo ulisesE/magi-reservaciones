@@ -3,7 +3,7 @@
 import { store } from '../core/store.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
-import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations } from '../core/timeUtils.js';
+import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes } from '../core/timeUtils.js';
 import { showReservationTicket } from './clientBookingModal.js';
 
 let activeFilter = 'PENDING'; // 'PENDING', 'CONFIRMED', 'REJECTED', 'ALL'
@@ -297,9 +297,12 @@ function openModifyModal(reservation) {
     const business = store.currentBusiness;
     const machines = store.getActiveMachines();
     const slotDuration = business.slotDuration || 60;
-    const slots = generateTimeSlots(
-        business.openingTime || '11:00',
-        business.closingTime || '22:00',
+    
+    // Obtener horarios específicos para la fecha de la reservación
+    const { openingTime, closingTime, closed } = getBusinessHoursForDate(business, reservation.date);
+    const slots = closed ? [] : generateTimeSlots(
+        openingTime,
+        closingTime,
         slotDuration
     );
 
@@ -310,13 +313,26 @@ function openModifyModal(reservation) {
     `).join('');
 
     const selectedSlot = slots.find(s => s.start === reservation.startTime) || slots[0];
+    
+    const openMinutes = timeToMinutes(openingTime);
+    const closeMinutes = timeToMinutes(closingTime);
+    const isOvernight = closeMinutes < openMinutes;
+
+    const getSlotLabel = (slotStart) => {
+        const slotStartMins = timeToMinutes(slotStart);
+        if (isOvernight && slotStartMins < openMinutes) {
+            return `${format12Hour(slotStart)} (Siguiente día)`;
+        }
+        return format12Hour(slotStart);
+    };
+
     const timesOptions = slots.map(s => `
         <option value="${s.start}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
-            ${format12Hour(s.start)}
+            ${getSlotLabel(s.start)}
         </option>
     `).join('');
-    const initialDurations = getAvailableDurations(selectedSlot.start, business.closingTime || '22:00', slotDuration);
-    const selectedDuration = initialDurations.includes(reservation.durationMinutes) ? reservation.durationMinutes : initialDurations[0];
+    const initialDurations = selectedSlot ? getAvailableDurations(selectedSlot.start, closingTime || '22:00', slotDuration) : [];
+    const selectedDuration = initialDurations.includes(reservation.durationMinutes) ? reservation.durationMinutes : (initialDurations[0] || slotDuration);
 
     const contentHtml = `
         <form id="form-modify-res" class="cyber-form">
@@ -374,14 +390,67 @@ function openModifyModal(reservation) {
 
     modalEl.querySelector('#btn-cancel-mod').onclick = () => modal.close();
 
-    modalEl.querySelector('#mod-time').addEventListener('change', () => {
+    const updateModDurations = () => {
         const durationSelect = modalEl.querySelector('#mod-duration');
+        const selectedDate = modalEl.querySelector('#mod-date').value;
+        const { closingTime } = getBusinessHoursForDate(business, selectedDate);
         const durations = getAvailableDurations(
             modalEl.querySelector('#mod-time').value,
-            business.closingTime || '22:00',
+            closingTime || '22:00',
             slotDuration
         );
         durationSelect.innerHTML = durations.map(duration => `<option value="${duration}">${formatDuration(duration)}</option>`).join('');
+    };
+
+    modalEl.querySelector('#mod-time').addEventListener('change', updateModDurations);
+
+    // Listener para cambio de fecha en modificación
+    modalEl.querySelector('#mod-date').addEventListener('change', (e) => {
+        const newDate = e.target.value;
+        if (!newDate) return;
+        
+        const { openingTime: opt, closingTime: clt, closed: isCl } = getBusinessHoursForDate(business, newDate);
+        const timeSelect = modalEl.querySelector('#mod-time');
+        const durationSelect = modalEl.querySelector('#mod-duration');
+        const errorMsg = modalEl.querySelector('#mod-error');
+        const saveBtn = modalEl.querySelector('#btn-save-mod');
+        
+        if (isCl) {
+            errorMsg.textContent = 'La sucursal está cerrada en la fecha seleccionada. Por favor, elige otra.';
+            errorMsg.classList.remove('hidden');
+            timeSelect.innerHTML = '<option value="">Cerrado</option>';
+            durationSelect.innerHTML = '<option value="">-</option>';
+            timeSelect.disabled = true;
+            durationSelect.disabled = true;
+            saveBtn.disabled = true;
+            return;
+        }
+        
+        timeSelect.disabled = false;
+        durationSelect.disabled = false;
+        saveBtn.disabled = false;
+        errorMsg.classList.add('hidden');
+        
+        const newSlots = generateTimeSlots(opt, clt, slotDuration);
+        if (newSlots.length === 0) {
+            timeSelect.innerHTML = '<option value="">No hay slots disponibles</option>';
+            durationSelect.innerHTML = '<option value="">-</option>';
+            return;
+        }
+        
+        const openMinutes = timeToMinutes(opt);
+        const closeMinutes = timeToMinutes(clt);
+        const isOvernight = closeMinutes < openMinutes;
+        
+        timeSelect.innerHTML = newSlots.map(s => {
+            const label = (isOvernight && timeToMinutes(s.start) < openMinutes) 
+                ? `${format12Hour(s.start)} (Siguiente día)` 
+                : format12Hour(s.start);
+            return `<option value="${s.start}">${label}</option>`;
+        }).join('');
+        
+        const durations = getAvailableDurations(newSlots[0].start, clt, slotDuration);
+        durationSelect.innerHTML = durations.map(d => `<option value="${d}">${formatDuration(d)}</option>`).join('');
     });
 
     modalEl.querySelector('#btn-save-mod').onclick = async () => {

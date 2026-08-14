@@ -4,6 +4,7 @@ import { tenantManager } from '../core/tenantManager.js';
 import { store } from '../core/store.js';
 import { authManager } from '../core/authManager.js';
 import { openLoginModal } from '../components/header.js';
+import { format12Hour, getBusinessHoursForDate } from '../core/timeUtils.js';
 
 export function renderLandingView(container) {
     const businesses = tenantManager.getAllBusinesses();
@@ -26,6 +27,11 @@ export function renderLandingView(container) {
             <!-- Grid de Selección de Locales -->
             <div class="landing-venues-grid">
                 ${businesses.map(b => {
+                    const todayDateStr = new Date().toISOString().slice(0, 10);
+                    const todayHours = getBusinessHoursForDate(b, todayDateStr);
+                    const horarioLabel = todayHours.closed 
+                        ? 'Cerrado hoy' 
+                        : `Hoy: ${format12Hour(todayHours.openingTime)} a ${format12Hour(todayHours.closingTime)}`;
                     return `
                         <div class="venue-landing-card" data-biz-id="${b.id}">
                             <div class="venue-card-img-wrap">
@@ -49,7 +55,7 @@ export function renderLandingView(container) {
                                     </div>
                                     <div class="v-info-item">
                                         <span class="v-icon">⏰</span>
-                                        <span>Horario: <strong>${b.openingTime} a ${b.closingTime}</strong></span>
+                                        <span>Horario: <strong>${horarioLabel}</strong></span>
                                     </div>
                                     <div class="v-info-item">
                                         <span class="v-icon">💰</span>

@@ -314,6 +314,17 @@ class TenantManager {
             rules: businessData.rules?.trim() || '',
             wifiNetwork: businessData.wifiNetwork?.trim() || '',
             wifiPassword: businessData.wifiPassword?.trim() || '',
+            operatingHours: (() => {
+                const oh = {};
+                for (let i = 0; i < 7; i++) {
+                    oh[i] = {
+                        open: businessData.openingTime || '11:00',
+                        close: businessData.closingTime || '22:00',
+                        closed: false
+                    };
+                }
+                return oh;
+            })(),
             createdAt: new Date().toISOString(),
             version: 1
         };

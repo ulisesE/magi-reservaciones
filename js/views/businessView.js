@@ -6,6 +6,7 @@ import { authManager } from '../core/authManager.js';
 import { COLLECTIONS } from '../firebaseConfig.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { DAYS_OF_WEEK } from '../core/timeUtils.js';
 
 // URL de ejemplo sugerida por el usuario
 const FB_EXAMPLE_URL = 'https://scontent-qro1-2.xx.fbcdn.net/v/t39.30808-6/724053305_1025229003358348_5523282942833772562_n.jpg?stp=dst-jpg_tt6&cstp=mx500x500&ctp=s500x500&_nc_cat=107&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=LS1w0JkJS_MQ7kNvwHzxI4I&_nc_oc=Adr79gKV4Ryuma3nOMkafJ9MkywnUbjl7y_Rf9gDNR51ciURCvb0XNyj7ZYvzL6AvlE&_nc_zt=23&_nc_ht=scontent-qro1-2.xx&_nc_gid=6FLHME4iNh4boah72s7Jyw&_nc_ss=702a8&oh=00_AQHr29y8OUsGs4pG3sKdxE6APo5P5xnv_HMJZfpkpiBLeg&oe=6A82B2A6';
@@ -250,15 +251,59 @@ export function renderBusinessView(container) {
                         </div>
 
                         <div class="settings-form-body">
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label style="font-weight: 700; color: var(--color-neon-lime); margin-bottom: 8px; display: block;">
+                                        <span class="neon-arrow">◆</span> Horarios de Atención por Día de la Semana
+                                    </label>
+                                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+                                        Define el horario para cada día. Si el local permanece cerrado, desmarca el switch de "Abierto".
+                                        Para locales con horarios nocturnos que cierran de madrugada (ej. de 5 PM a 3 AM del día siguiente), 
+                                        introduce la hora de cierre menor a la de apertura (ej. apertura 17:00, cierre 03:00).
+                                    </p>
+                                    <div class="catalogs-table-wrapper" style="margin-bottom: 20px;">
+                                        <table class="catalogs-table" style="width:100%;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Día</th>
+                                                    <th style="text-align:center; width:120px;">Estado</th>
+                                                    <th>Apertura</th>
+                                                    <th>Cierre</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${DAYS_OF_WEEK.map(day => {
+                                                    const dayConfig = business.operatingHours?.[day.id] || business.operatingHours?.[String(day.id)] || {
+                                                        open: business.openingTime || '11:00',
+                                                        close: business.closingTime || '22:00',
+                                                        closed: false
+                                                    };
+                                                    const isOpen = !dayConfig.closed;
+                                                    return `
+                                                        <tr>
+                                                            <td style="font-weight:700; vertical-align:middle; color:#ffffff;">${day.name}</td>
+                                                            <td style="text-align:center; vertical-align:middle;">
+                                                                <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+                                                                    <input type="checkbox" class="day-closed-checkbox" data-day-id="${day.id}" style="width:18px; height:18px; accent-color:var(--color-neon-lime);" ${isOpen ? 'checked' : ''}>
+                                                                    <span class="status-label" style="font-size:0.85rem; color:${isOpen ? 'var(--color-neon-lime)' : 'var(--text-muted)'};">${isOpen ? 'Abierto' : 'Cerrado'}</span>
+                                                                </label>
+                                                            </td>
+                                                            <td>
+                                                                <input type="time" class="cyber-input day-open-time" data-day-id="${day.id}" value="${dayConfig.open || '11:00'}" ${isOpen ? '' : 'disabled'} style="max-width:130px; padding:6px; font-size:0.88rem;">
+                                                            </td>
+                                                            <td>
+                                                                <input type="time" class="cyber-input day-close-time" data-day-id="${day.id}" value="${dayConfig.close || '22:00'}" ${isOpen ? '' : 'disabled'} style="max-width:130px; padding:6px; font-size:0.88rem;">
+                                                            </td>
+                                                        </tr>
+                                                    `;
+                                                }).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="form-row grid-3">
-                                <div class="form-group">
-                                    <label for="biz-open"><span class="neon-arrow">◆</span> Hora de Apertura *</label>
-                                    <input type="time" id="biz-open" class="cyber-input" value="${business.openingTime || '11:00'}" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="biz-close"><span class="neon-arrow">◆</span> Hora de Cierre *</label>
-                                    <input type="time" id="biz-close" class="cyber-input" value="${business.closingTime || '22:00'}" required>
-                                </div>
                                 <div class="form-group">
                                     <label for="biz-slot-dur"><span class="neon-arrow">◆</span> Duración de Slot Estándar</label>
                                     <select id="biz-slot-dur" class="cyber-select">
@@ -718,11 +763,46 @@ export function renderBusinessView(container) {
         }
     });
 
+    // Habilitar/Deshabilitar inputs de tiempo de la tabla de horarios
+    container.querySelectorAll('.day-closed-checkbox').forEach(chk => {
+        chk.addEventListener('change', (e) => {
+            const dayId = chk.dataset.dayId;
+            const isOpen = e.target.checked;
+            const label = chk.parentElement.querySelector('.status-label');
+            if (label) {
+                label.textContent = isOpen ? 'Abierto' : 'Cerrado';
+                label.style.color = isOpen ? 'var(--color-neon-lime)' : 'var(--text-muted)';
+            }
+            
+            const openInput = container.querySelector(`.day-open-time[data-day-id="${dayId}"]`);
+            const closeInput = container.querySelector(`.day-close-time[data-day-id="${dayId}"]`);
+            if (openInput) openInput.disabled = !isOpen;
+            if (closeInput) closeInput.disabled = !isOpen;
+        });
+    });
+
     // =========================================================================
     // GUARDAR TODAS LAS CONFIGURACIONES DEL LOCAL
     // =========================================================================
     container.querySelector('#form-edit-active-biz')?.addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        const operatingHours = {};
+        DAYS_OF_WEEK.forEach(day => {
+            const chk = container.querySelector(`.day-closed-checkbox[data-day-id="${day.id}"]`);
+            const openInput = container.querySelector(`.day-open-time[data-day-id="${day.id}"]`);
+            const closeInput = container.querySelector(`.day-close-time[data-day-id="${day.id}"]`);
+            operatingHours[day.id] = {
+                closed: !chk.checked,
+                open: openInput.value,
+                close: closeInput.value
+            };
+        });
+
+        // Fallback para campos heredados (usando Lunes o Domingo como representativos)
+        const representativeDay = operatingHours[1] || operatingHours[0];
+        const openingTime = representativeDay ? representativeDay.open : '11:00';
+        const closingTime = representativeDay ? representativeDay.close : '22:00';
 
         const updated = {
             name: container.querySelector('#biz-name').value.trim(),
@@ -737,8 +817,9 @@ export function renderBusinessView(container) {
             mapsUrl: container.querySelector('#biz-maps').value.trim(),
             facebookUrl: container.querySelector('#biz-fb').value.trim(),
             instagramUrl: container.querySelector('#biz-ig').value.trim(),
-            openingTime: container.querySelector('#biz-open').value,
-            closingTime: container.querySelector('#biz-close').value,
+            openingTime,
+            closingTime,
+            operatingHours,
             slotDuration: parseInt(container.querySelector('#biz-slot-dur').value, 10) || 60,
             maxAdvanceDays: parseInt(container.querySelector('#biz-max-advance').value, 10) || 14,
             minCancelNoticeHours: parseInt(container.querySelector('#biz-min-cancel').value, 10) || 2,

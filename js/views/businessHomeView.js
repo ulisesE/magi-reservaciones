@@ -1,6 +1,6 @@
 // Página pública principal de la sucursal seleccionada.
 import { store } from '../core/store.js';
-import { format12Hour } from '../core/timeUtils.js';
+import { format12Hour, getBusinessHoursForDate, DAYS_OF_WEEK } from '../core/timeUtils.js';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80';
 
@@ -17,6 +17,13 @@ export function renderBusinessHomeView(container) {
     const slotLabel = slotDuration === 60 ? 'cada hora' : `cada ${slotDuration} minutos`;
     const whatsapp = (business.whatsapp || '').replace(/\D/g, '');
     const mapsUrl = mapsLink(business);
+
+    // Horarios de hoy y semanal
+    const todayNum = new Date().getDay();
+    const todayHours = getBusinessHoursForDate(business, new Date().toISOString().slice(0, 10));
+    const todayHoursStr = todayHours.closed 
+        ? 'Cerrado hoy' 
+        : `Hoy: ${format12Hour(todayHours.openingTime)} – ${format12Hour(todayHours.closingTime)}`;
 
     container.innerHTML = `
         <section class="business-home animate-fade-in">
@@ -45,10 +52,31 @@ export function renderBusinessHomeView(container) {
                 </article>
                 <article class="business-info-card">
                     <span class="business-info-icon">🕒</span>
-                    <div>
+                    <div style="width: 100%;">
                         <small>HORARIO</small>
-                        <strong>${format12Hour(business.openingTime || '11:00')} – ${format12Hour(business.closingTime || '22:00')}</strong>
-                        <span>Reservas ${slotLabel}</span>
+                        <strong>${todayHoursStr}</strong>
+                        <details style="margin-top: 5px; cursor: pointer; font-size: 0.82rem; color: var(--text-muted);">
+                            <summary style="outline: none; color: var(--piu-cyan);">Ver horarios semanales</summary>
+                            <div style="margin-top: 6px; display: grid; gap: 4px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
+                                ${DAYS_OF_WEEK.map(day => {
+                                    const dayConfig = business.operatingHours?.[day.id] || business.operatingHours?.[String(day.id)] || {
+                                        open: business.openingTime || '11:00',
+                                        close: business.closingTime || '22:00',
+                                        closed: false
+                                    };
+                                    const isCurrentDay = day.id === todayNum;
+                                    const boldStyle = isCurrentDay ? 'color: var(--color-neon-lime); font-weight: bold;' : '';
+                                    const hoursText = dayConfig.closed ? 'Cerrado' : `${format12Hour(dayConfig.open)} - ${format12Hour(dayConfig.close)}`;
+                                    return `
+                                        <div style="display: flex; justify-content: space-between; ${boldStyle}">
+                                            <span>${day.name}:</span>
+                                            <span>${hoursText}</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </details>
+                        <span style="display: block; margin-top: 4px;">Reservas ${slotLabel}</span>
                     </div>
                 </article>
                 <article class="business-info-card">

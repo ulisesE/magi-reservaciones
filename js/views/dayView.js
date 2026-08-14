@@ -8,7 +8,9 @@ import {
     format12Hour, 
     generateTimeSlots, 
     timeToMinutes, 
-    isOverlapping 
+    isOverlapping,
+    getBusinessHoursForDate,
+    DAYS_OF_WEEK
 } from '../core/timeUtils.js';
 import { openBookingModal, showReservationTicket } from './clientBookingModal.js';
 import { modal } from '../components/modal.js';
@@ -22,9 +24,10 @@ export function renderDayView(container) {
     const isStaff = authManager.isStaff();
 
     // Generar slots horarios según configuración del negocio
-    const slots = generateTimeSlots(
-        business.openingTime || '11:00',
-        business.closingTime || '22:00',
+    const { openingTime, closingTime, closed } = getBusinessHoursForDate(business, selectedDate);
+    const slots = closed ? [] : generateTimeSlots(
+        openingTime,
+        closingTime,
         business.slotDuration || 60
     );
 
@@ -69,7 +72,16 @@ export function renderDayView(container) {
 
             <!-- Grid Horas x Máquinas -->
             <div class="grid-container-card">
-                ${activeMachines.length === 0 ? `
+                ${closed ? `
+                    <div class="empty-state animate-fade-in" style="padding: 40px 20px; text-align: center;">
+                        <div class="empty-icon" style="font-size: 3rem; margin-bottom: 12px;">⏰</div>
+                        <h3 style="color: var(--color-neon-lime); font-family: var(--font-heading); letter-spacing: 1px;">Sucursal Cerrada este día</h3>
+                        <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 8px;">
+                            Esta sucursal está programada como cerrada los días <strong>${DAYS_OF_WEEK[new Date(selectedDate + 'T00:00:00').getDay()].name}</strong>.<br>
+                            Por favor selecciona otra fecha en el calendario.
+                        </p>
+                    </div>
+                ` : activeMachines.length === 0 ? `
                     <div class="empty-state">
                         <div class="empty-icon">🕹️</div>
                         <h3>No hay máquinas registradas en esta sucursal</h3>
@@ -128,7 +140,7 @@ export function renderDayView(container) {
                                                 // Buscar si hay reserva que cruce este slot
                                                 const reservation = dayReservations.find(r => 
                                                     r.machineId === machine.id && 
-                                                    isOverlapping(slot.start, slot.end, r.startTime, r.endTime)
+                                                    isOverlapping(slot.start, slot.end, r.startTime, r.endTime, openingTime, closingTime)
                                                 );
 
                                                 if (reservation) {

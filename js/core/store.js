@@ -17,16 +17,18 @@ import {
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
-import { formatDateKey, isOverlapping } from './timeUtils.js';
+import { formatDateKey, isOverlapping, getBusinessHoursForDate } from './timeUtils.js';
 
 function findReservationConflict(reservations, machineId, date, startTime, endTime, excludeReservationId = null) {
+    const business = tenantManager.getActiveBusiness();
+    const { openingTime, closingTime } = getBusinessHoursForDate(business, date);
     return reservations.find(res =>
         res.id !== excludeReservationId
         && res.machineId === machineId
         && res.date === date
         && res.status !== 'REJECTED'
         && res.status !== 'CANCELLED'
-        && isOverlapping(startTime, endTime, res.startTime, res.endTime)
+        && isOverlapping(startTime, endTime, res.startTime, res.endTime, openingTime, closingTime)
     );
 }
 
@@ -395,11 +397,16 @@ class Store {
             return { available: false, reason: 'La máquina se encuentra fuera de servicio.' };
         }
 
+        const { openingTime, closingTime, closed } = getBusinessHoursForDate(this.currentBusiness, date);
+        if (closed) {
+            return { available: false, reason: 'La sucursal se encuentra cerrada este día.' };
+        }
+
         const existing = this.getReservations({ date, machineId, excludeRejectedCancelled: true });
 
         for (const res of existing) {
             if (excludeReservationId && res.id === excludeReservationId) continue;
-            if (isOverlapping(startTime, endTime, res.startTime, res.endTime)) {
+            if (isOverlapping(startTime, endTime, res.startTime, res.endTime, openingTime, closingTime)) {
                 return {
                     available: false,
                     reason: `Conflicto con la reservación de ${res.clientName} (${res.startTime} - ${res.endTime})`,
@@ -487,8 +494,10 @@ class Store {
             }
         }
 
-        this.reservations.push(newReservation);
-        this.saveLocalReservations(this.currentBusiness.id, this.reservations);
+        if (!this.reservations.some(r => r.id === newReservation.id)) {
+            this.reservations.push(newReservation);
+            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
+        }
 
         this.notify();
         return newReservation;

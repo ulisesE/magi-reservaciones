@@ -72,10 +72,10 @@ export function timeToMinutes(timeStr) {
 }
 
 /**
- * Convierte minutos desde la medianoche a 'HH:mm'
+ * Convierte minutos desde la medianoche a 'HH:mm' (con soporte de envoltura de medianoche)
  */
 export function minutesToTime(minutes) {
-    const h = Math.floor(minutes / 60);
+    const h = Math.floor(minutes / 60) % 24;
     const m = minutes % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
@@ -101,10 +101,15 @@ export function formatDuration(minutes) {
 
 /**
  * Devuelve duraciones válidas desde una hora de inicio hasta el cierre,
- * siempre como múltiplos del intervalo configurado por el local.
+ * siempre como múltiplos del intervalo configurado por el local (con soporte nocturno).
  */
 export function getAvailableDurations(startTime, closingTime, intervalMins = 60) {
-    const availableMinutes = timeToMinutes(closingTime) - timeToMinutes(startTime);
+    const startMins = timeToMinutes(startTime);
+    let closeMins = timeToMinutes(closingTime);
+    if (closeMins < startMins) {
+        closeMins += 24 * 60; // Overnight wrap
+    }
+    const availableMinutes = closeMins - startMins;
     const durations = [];
     for (let duration = intervalMins; duration <= availableMinutes; duration += intervalMins) {
         durations.push(duration);
@@ -113,14 +118,17 @@ export function getAvailableDurations(startTime, closingTime, intervalMins = 60)
 }
 
 /**
- * Genera la lista de slots horarios entre start y end con intervalo dado
+ * Genera la lista de slots horarios entre start y end con intervalo dado (con soporte nocturno)
  * @param {string} startTime - ej. '10:00'
  * @param {string} endTime - ej. '22:00'
  * @param {number} intervalMins - ej. 60 o 30
  */
 export function generateTimeSlots(startTime = '11:00', endTime = '22:00', intervalMins = 60) {
     const start = timeToMinutes(startTime);
-    const end = timeToMinutes(endTime);
+    let end = timeToMinutes(endTime);
+    if (end < start) {
+        end += 24 * 60; // Overnight wrap
+    }
     const slots = [];
 
     for (let current = start; current + intervalMins <= end; current += intervalMins) {
@@ -136,13 +144,68 @@ export function generateTimeSlots(startTime = '11:00', endTime = '22:00', interv
 }
 
 /**
- * Verifica si dos intervalos de tiempo se traslapan
+ * Normaliza cualquier hora (HH:mm) a minutos transcurridos desde la medianoche de operación.
+ * Si es un horario nocturno y la hora cae después de medianoche, le suma 24 horas.
  */
-export function isOverlapping(startA, endA, startB, endB) {
-    const a1 = timeToMinutes(startA);
-    const a2 = timeToMinutes(endA);
-    const b1 = timeToMinutes(startB);
-    const b2 = timeToMinutes(endB);
+export function getMinutesSinceOperationalMidnight(timeStr, openingTime, closingTime) {
+    const mins = timeToMinutes(timeStr);
+    if (!openingTime || !closingTime) return mins;
+    
+    const openMins = timeToMinutes(openingTime);
+    const closeMins = timeToMinutes(closingTime);
+    
+    // Only wrap if it's an overnight schedule AND the time is less than openingTime
+    if (closeMins < openMins && mins < openMins) {
+        return mins + 24 * 60;
+    }
+    return mins;
+}
+
+/**
+ * Obtiene la configuración de horarios para una fecha específica del negocio.
+ */
+export function getBusinessHoursForDate(business, dateStr) {
+    if (!business) return { openingTime: '11:00', closingTime: '22:00', closed: false };
+    
+    // Fallback standard fields if operatingHours is not set
+    if (!business.operatingHours) {
+        return { 
+            openingTime: business.openingTime || '11:00', 
+            closingTime: business.closingTime || '22:00', 
+            closed: false 
+        };
+    }
+    
+    // Parse date to get day of week (0 = Sunday, 1 = Monday, etc.)
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const dayOfWeek = dateObj.getDay();
+    
+    const dayConfig = business.operatingHours[dayOfWeek] || business.operatingHours[String(dayOfWeek)];
+    if (dayConfig) {
+        return {
+            openingTime: dayConfig.open || '11:00',
+            closingTime: dayConfig.close || '22:00',
+            closed: !!dayConfig.closed
+        };
+    }
+    
+    // Final fallback
+    return {
+        openingTime: business.openingTime || '11:00',
+        closingTime: business.closingTime || '22:00',
+        closed: false
+    };
+}
+
+/**
+ * Verifica si dos intervalos de tiempo se traslapan (con soporte de rango nocturno operativo)
+ */
+export function isOverlapping(startA, endA, startB, endB, openingTime = null, closingTime = null) {
+    const a1 = getMinutesSinceOperationalMidnight(startA, openingTime, closingTime);
+    const a2 = getMinutesSinceOperationalMidnight(endA, openingTime, closingTime);
+    const b1 = getMinutesSinceOperationalMidnight(startB, openingTime, closingTime);
+    const b2 = getMinutesSinceOperationalMidnight(endB, openingTime, closingTime);
     return Math.max(a1, b1) < Math.min(a2, b2);
 }
 

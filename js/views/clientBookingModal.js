@@ -5,7 +5,7 @@ import { tenantManager } from '../core/tenantManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { authManager } from '../core/authManager.js';
-import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations } from '../core/timeUtils.js';
+import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes } from '../core/timeUtils.js';
 
 /**
  * Abre el modal para solicitar o agendar una reservación
@@ -24,13 +24,16 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
     const defaultMachineId = machineId || machines[0].id;
     const defaultDate = date || store.selectedDate;
-    const defaultStartTime = startTime || business.openingTime || '12:00';
+
+    // Obtener horarios para la fecha por defecto
+    const { openingTime, closingTime, closed } = getBusinessHoursForDate(business, defaultDate);
+    const defaultStartTime = startTime || openingTime || '12:00';
 
     // Cada local define la duración de su bloque (por ejemplo, 60 o 30 minutos).
     const slotDuration = business.slotDuration || 60;
-    const slots = generateTimeSlots(
-        business.openingTime || '11:00',
-        business.closingTime || '22:00',
+    const slots = closed ? [] : generateTimeSlots(
+        openingTime,
+        closingTime,
         slotDuration
     );
 
@@ -41,12 +44,28 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     `).join('');
 
     const selectedSlot = slots.find(s => s.start === defaultStartTime) || slots[0];
+    
+    const openMinutes = timeToMinutes(openingTime);
+    const closeMinutes = timeToMinutes(closingTime);
+    const isOvernight = closeMinutes < openMinutes;
+
+    const getSlotLabel = (slotStart) => {
+        const slotStartMins = timeToMinutes(slotStart);
+        if (isOvernight && slotStartMins < openMinutes) {
+            return `${format12Hour(slotStart)} (Siguiente día)`;
+        }
+        return format12Hour(slotStart);
+    };
+
     const timesOptions = slots.map(s => `
         <option value="${s.start}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
-            ${format12Hour(s.start)}
+            ${getSlotLabel(s.start)}
         </option>
     `).join('');
-    const durationOptions = getAvailableDurations(selectedSlot.start, business.closingTime || '22:00', slotDuration);
+    
+    const durationOptions = selectedSlot 
+        ? getAvailableDurations(selectedSlot.start, closingTime || '22:00', slotDuration)
+        : [];
 
     const modalTitle = isStaff ? 'Asignar Reservación Directa' : 'Solicitar Reservación de Máquina';
     const modalIcon = isStaff ? '👑' : '🕹️';
@@ -177,9 +196,11 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
     const updateDurationOptions = () => {
         const durationSelect = modalEl.querySelector('#book-duration');
+        const selectedDate = modalEl.querySelector('#book-date').value;
+        const { closingTime } = getBusinessHoursForDate(business, selectedDate);
         const durations = getAvailableDurations(
             modalEl.querySelector('#book-time').value,
-            business.closingTime || '22:00',
+            closingTime || '22:00',
             slotDuration
         );
         durationSelect.innerHTML = durations.map(duration => `<option value="${duration}">${formatDuration(duration)}</option>`).join('');
@@ -189,6 +210,58 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     modalEl.querySelector('#book-machine').addEventListener('change', updateCost);
     modalEl.querySelector('#book-time').addEventListener('change', updateDurationOptions);
     modalEl.querySelector('#book-duration').addEventListener('change', updateCost);
+
+    // Dynamic date change slots updating
+    modalEl.querySelector('#book-date').addEventListener('change', (e) => {
+        const newDate = e.target.value;
+        if (!newDate) return;
+        
+        const { openingTime: opt, closingTime: clt, closed: isCl } = getBusinessHoursForDate(business, newDate);
+        const timeSelect = modalEl.querySelector('#book-time');
+        const durationSelect = modalEl.querySelector('#book-duration');
+        const errorMsg = modalEl.querySelector('#booking-error');
+        const submitBtn = modalEl.querySelector('#btn-submit-book');
+        
+        if (isCl) {
+            errorMsg.textContent = 'La sucursal está cerrada en la fecha seleccionada. Por favor, elige otro día.';
+            errorMsg.classList.remove('hidden');
+            timeSelect.innerHTML = '<option value="">Cerrado</option>';
+            durationSelect.innerHTML = '<option value="">-</option>';
+            timeSelect.disabled = true;
+            durationSelect.disabled = true;
+            submitBtn.disabled = true;
+            return;
+        }
+        
+        timeSelect.disabled = false;
+        durationSelect.disabled = false;
+        submitBtn.disabled = false;
+        errorMsg.classList.add('hidden');
+        
+        const newSlots = generateTimeSlots(opt, clt, slotDuration);
+        if (newSlots.length === 0) {
+            timeSelect.innerHTML = '<option value="">No hay slots disponibles</option>';
+            durationSelect.innerHTML = '<option value="">-</option>';
+            return;
+        }
+        
+        const openMinutes = timeToMinutes(opt);
+        const closeMinutes = timeToMinutes(clt);
+        const isOvernight = closeMinutes < openMinutes;
+        
+        timeSelect.innerHTML = newSlots.map(s => {
+            const label = (isOvernight && timeToMinutes(s.start) < openMinutes) 
+                ? `${format12Hour(s.start)} (Siguiente día)` 
+                : format12Hour(s.start);
+            return `<option value="${s.start}">${label}</option>`;
+        }).join('');
+        
+        const durations = getAvailableDurations(newSlots[0].start, clt, slotDuration);
+        durationSelect.innerHTML = durations.map(d => `<option value="${d}">${formatDuration(d)}</option>`).join('');
+        
+        updateCost();
+    });
+
     updateCost();
 
     // Acciones de los botones
