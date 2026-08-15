@@ -7,19 +7,19 @@ import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, gen
 import { showReservationTicket } from './clientBookingModal.js';
 
 let activeFilter = 'PENDING'; // 'PENDING', 'CONFIRMED', 'REJECTED', 'ALL'
+let currentPage = 1;
+let searchQuery = '';
+let selectedMachine = '';
+const pageSize = 15;
 
 export function renderRequestsView(container) {
     const business = store.currentBusiness;
-    const allReservations = store.getReservations().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const allReservations = store.getReservations().sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+    const machines = store.getMachines();
     
     const pendingCount = allReservations.filter(r => r.status === 'PENDING').length;
     const confirmedCount = allReservations.filter(r => r.status === 'CONFIRMED').length;
     const rejectedCount = allReservations.filter(r => r.status === 'REJECTED').length;
-
-    let filtered = allReservations;
-    if (activeFilter === 'PENDING') filtered = allReservations.filter(r => r.status === 'PENDING');
-    else if (activeFilter === 'CONFIRMED') filtered = allReservations.filter(r => r.status === 'CONFIRMED');
-    else if (activeFilter === 'REJECTED') filtered = allReservations.filter(r => r.status === 'REJECTED');
 
     container.innerHTML = `
         <div class="requests-view-wrapper animate-fade-in">
@@ -50,119 +50,53 @@ export function renderRequestsView(container) {
                 </button>
             </div>
 
-            <!-- Lista de Solicitudes -->
-            <div class="requests-list">
-                ${filtered.length === 0 ? `
-                    <div class="empty-state">
-                        <div class="empty-icon">📭</div>
-                        <h3>No hay solicitudes en esta sección</h3>
-                        <p>Las nuevas solicitudes de clientes aparecerán aquí en tiempo real.</p>
-                    </div>
-                ` : filtered.map(r => {
-                    const machine = store.getMachineById(r.machineId);
-                    const isPending = r.status === 'PENDING';
-                    const isConfirmed = r.status === 'CONFIRMED';
-                    const isRejected = r.status === 'REJECTED';
+            <!-- Barra de Búsqueda y Control de Filtros -->
+            <div class="requests-search-bar" style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; background:var(--bg-dark-800); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+                <div class="form-group" style="margin:0; flex:2; min-width:200px;">
+                    <input type="text" id="search-req" class="cyber-input" placeholder="🔍 Buscar por nombre, GamerTag o teléfono..." value="${searchQuery}" style="padding:8px 12px;">
+                </div>
+                <div class="form-group" style="margin:0; flex:1; min-width:150px;">
+                    <select id="filter-mach" class="cyber-select" style="padding:8px 12px;">
+                        <option value="">Todas las Máquinas</option>
+                        ${machines.map(m => `<option value="${m.id}" ${m.id === selectedMachine ? 'selected' : ''}>${m.name.split(' (')[0]}</option>`).join('')}
+                    </select>
+                </div>
+                <div style="color:var(--text-muted); font-size:0.85rem; display:flex; gap:6px; align-items:center;">
+                    <span>Mostrando:</span>
+                    <strong id="visible-count" style="color:var(--color-neon-lime);">0</strong>
+                    <span>de</span>
+                    <strong id="total-count" style="color:#ffffff;">0</strong>
+                </div>
+            </div>
 
-                    const statusBadge = isPending 
-                        ? '<span class="badge badge-warning">⏳ PENDIENTE DE REVISIÓN</span>'
-                        : isConfirmed 
-                        ? '<span class="badge badge-success">✓ CONFIRMADA</span>'
-                        : '<span class="badge badge-danger">✖ RECHAZADA</span>';
+            <!-- Listado en Formato Tabla para Alto Volumen -->
+            <div class="table-responsive animate-fade-in" style="overflow-x:auto; background:var(--bg-dark-800); border-radius:var(--radius-sm); border:1px solid var(--border-color); box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+                <table class="catalogs-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:0.85rem;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--border-color); background:rgba(0,0,0,0.4); color:var(--text-muted);">
+                            <th style="padding:12px; font-weight:600;">Folio / Estado</th>
+                            <th style="padding:12px; font-weight:600;">Jugador / Cliente</th>
+                            <th style="padding:12px; font-weight:600;">Máquina / Modo</th>
+                            <th style="padding:12px; font-weight:600;">Fecha / Horario</th>
+                            <th style="padding:12px; font-weight:600;">Total</th>
+                            <th style="padding:12px; font-weight:600; text-align:right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="requests-table-body">
+                        <!-- Carga dinámica por JS -->
+                    </tbody>
+                </table>
+            </div>
 
-                    // Link directo a WhatsApp del cliente
-                    const cleanPhone = (r.clientPhone || '').replace(/\D/g, '');
-                    const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
-
-                    return `
-                        <div class="request-card ${isPending ? 'border-warning pulse-border' : ''}" data-id="${r.id}">
-                            <div class="req-main-row">
-                                <div class="req-client-info">
-                                    <div class="req-avatar">🕺</div>
-                                    <div>
-                                        <div class="req-client-name-row">
-                                            <h3 class="req-client-name">${r.clientName}</h3>
-                                            ${statusBadge}
-                                        </div>
-                                        <div class="req-contact-info">
-                                            <span>📞 ${r.clientPhone || 'N/A'}</span>
-                                            ${cleanPhone ? `
-                                                <a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-contact-wa" title="Enviar WhatsApp">
-                                                    💬 WhatsApp
-                                                </a>
-                                            ` : ''}
-                                            <span class="req-created-time">Solicitado: ${new Date(r.createdAt).toLocaleDateString()} ${new Date(r.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="req-total-cost">
-                                    <span class="cost-lbl">Total:</span>
-                                    <span class="cost-num highlight-gold">${business.currencySymbol}${r.totalCost} ${business.currency}</span>
-                                </div>
-                                <div class="req-details-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
-                                <div class="req-detail-item">
-                                    <span class="rd-label">🕹️ Máquina</span>
-                                    <strong>${machine ? machine.name : 'PIU Machine'}</strong>
-                                </div>
-                                <div class="req-detail-item">
-                                    <span class="rd-label">👥 Modo</span>
-                                    <strong>${r.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</strong>
-                                </div>
-                                <div class="req-detail-item">
-                                    <span class="rd-label">📅 Fecha</span>
-                                    <strong>${formatFriendlyDate(r.date)}</strong>
-                                </div>
-                                <div class="req-detail-item">
-                                    <span class="rd-label">⏰ Horario</span>
-                                    <strong class="highlight-cyan">${format12Hour(r.startTime)} - ${format12Hour(r.endTime)} (${formatDuration(r.durationMinutes)})</strong>
-                                </div>
-                            </div>
-
-                            ${r.notes ? `
-                                <div class="req-notes-box">
-                                    <span class="notes-icon">💬</span>
-                                    <em>"${r.notes}"</em>
-                                </div>
-                            ` : ''}
-
-                            ${r.rejectionReason ? `
-                                <div class="req-notes-box req-reject-reason">
-                                    <span class="notes-icon">❌</span>
-                                    <strong>Motivo de rechazo:</strong> ${r.rejectionReason}
-                                </div>
-                            ` : ''}
-
-                            <!-- Botones de Acción del Encargado -->
-                            <div class="req-actions-bar">
-                                <button class="btn btn-outline btn-xs btn-ticket-res" data-id="${r.id}">
-                                    🎟️ Ver Ticket
-                                </button>
-                                
-                                <div class="flex-spacer"></div>
-
-                                ${isPending ? `
-                                    <button class="btn btn-warning btn-sm btn-modify-res" data-id="${r.id}">
-                                        ✏️ Modificar
-                                    </button>
-                                    <button class="btn btn-danger btn-sm btn-reject-res" data-id="${r.id}">
-                                        ✖ Rechazar
-                                    </button>
-                                    <button class="btn btn-success btn-sm btn-approve-res glow-green" data-id="${r.id}">
-                                        ✓ Aprobar Solicitud
-                                    </button>
-                                ` : `
-                                    <button class="btn btn-outline btn-xs btn-modify-res" data-id="${r.id}">
-                                        ✏️ Reasignar / Modificar
-                                    </button>
-                                    <button class="btn btn-danger btn-xs btn-del-res" data-id="${r.id}">
-                                        🗑️ Eliminar
-                                    </button>
-                                `}
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
+            <!-- Controles de Paginación -->
+            <div class="requests-pagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding:12px 0;">
+                <div style="font-size:0.85rem; color:var(--text-muted);">
+                    Página <strong id="current-page-num" style="color:#ffffff;">1</strong> de <strong id="total-pages-num">1</strong>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-prev-page" style="padding:6px 16px; font-size:0.8rem;">◀ Anterior</button>
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-next-page" style="padding:6px 16px; font-size:0.8rem;">Siguiente ▶</button>
+                </div>
             </div>
         </div>
     `;
@@ -171,62 +105,247 @@ export function renderRequestsView(container) {
     container.querySelectorAll('.filter-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             activeFilter = tab.dataset.filter;
+            currentPage = 1;
             renderRequestsView(container);
         });
     });
 
-    // Acción: Ver Ticket
-    container.querySelectorAll('.btn-ticket-res').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const res = store.reservations.find(r => r.id === id);
-            if (res) showReservationTicket(res);
-        });
-    });
+    const applyFiltersAndRender = () => {
+        // 1. Filtrar por estado (pestaña activa)
+        let filtered = allReservations;
+        if (activeFilter === 'PENDING') filtered = allReservations.filter(r => r.status === 'PENDING');
+        else if (activeFilter === 'CONFIRMED') filtered = allReservations.filter(r => r.status === 'CONFIRMED');
+        else if (activeFilter === 'REJECTED') filtered = allReservations.filter(r => r.status === 'REJECTED');
 
-    // Acción: Aprobar
-    container.querySelectorAll('.btn-approve-res').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            const res = store.reservations.find(r => r.id === id);
-            try {
-                await store.approveReservation(id);
-                toast.success(`¡Solicitud de ${res.clientName} aprobada exitosamente!`);
-            } catch (e) {
-                toast.error(e.message);
+        // 2. Filtrar por búsqueda de texto
+        if (searchQuery) {
+            filtered = filtered.filter(r => 
+                (r.clientName && r.clientName.toLowerCase().includes(searchQuery)) ||
+                (r.clientUsername && r.clientUsername.toLowerCase().includes(searchQuery)) ||
+                (r.clientPhone && r.clientPhone.includes(searchQuery)) ||
+                (r.id && r.id.toLowerCase().includes(searchQuery))
+            );
+        }
+
+        // 3. Filtrar por máquina
+        if (selectedMachine) {
+            filtered = filtered.filter(r => r.machineId === selectedMachine);
+        }
+
+        // 4. Calcular paginación
+        const totalCount = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+
+        const startIdx = (currentPage - 1) * pageSize;
+        const pageReservations = filtered.slice(startIdx, startIdx + pageSize);
+
+        // 5. Renderizar contadores
+        const visibleCountEl = container.querySelector('#visible-count');
+        const totalCountEl = container.querySelector('#total-count');
+        const curPageEl = container.querySelector('#current-page-num');
+        const totPagesEl = container.querySelector('#total-pages-num');
+
+        if (visibleCountEl) visibleCountEl.textContent = pageReservations.length;
+        if (totalCountEl) totalCountEl.textContent = totalCount;
+        if (curPageEl) curPageEl.textContent = currentPage;
+        if (totPagesEl) totPagesEl.textContent = totalPages;
+
+        // 6. Activar/Desactivar botones de paginación
+        const prevBtn = container.querySelector('#btn-prev-page');
+        const nextBtn = container.querySelector('#btn-next-page');
+        if (prevBtn) prevBtn.disabled = currentPage === 1;
+        if (nextBtn) nextBtn.disabled = currentPage === totalPages;
+
+        // 7. Renderizar filas
+        const tbody = container.querySelector('#requests-table-body');
+        if (!tbody) return;
+
+        if (pageReservations.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 24px;">
+                        No se encontraron reservaciones con los criterios seleccionados.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = pageReservations.map(r => {
+            const machine = store.getMachineById(r.machineId);
+            const isPending = r.status === 'PENDING';
+            const isConfirmed = r.status === 'CONFIRMED';
+            
+            let badgeClass = 'badge-warning';
+            let badgeText = 'Pendiente';
+            if (isConfirmed) {
+                badgeClass = 'badge-success';
+                badgeText = 'Confirmada';
+            } else if (r.status === 'REJECTED') {
+                badgeClass = 'badge-danger';
+                badgeText = 'Rechazada';
+            } else if (r.status === 'CANCELLED') {
+                badgeClass = 'badge-secondary';
+                badgeText = 'Cancelada';
+            }
+
+            const cleanPhone = (r.clientPhone || '').replace(/\D/g, '');
+            const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
+
+            return `
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:12px; white-space:nowrap;">
+                        <div style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-muted);">#${r.id.slice(-6).toUpperCase()}</div>
+                        <span class="badge ${badgeClass}" style="font-size:0.7rem; padding:2px 6px;">${badgeText}</span>
+                    </td>
+                    <td style="padding:12px;">
+                        <div style="font-weight:700; color:#ffffff;">${r.clientName}</div>
+                        <div style="font-size:0.75rem; color:var(--piu-cyan);">
+                            ${r.clientUsername ? `@${r.clientUsername}` : 'Invitado'}
+                            ${cleanPhone ? `• <a href="${waLink}" target="_blank" style="color:var(--color-neon-lime); text-decoration:none;">💬 WA</a>` : ''}
+                        </div>
+                    </td>
+                    <td style="padding:12px; color:#ffffff;">
+                        <strong>${machine ? machine.name.split(' (')[0] : 'PIU Machine'}</strong>
+                        <div style="font-size:0.75rem; color:var(--text-muted);">${r.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</div>
+                    </td>
+                    <td style="padding:12px; white-space:nowrap;">
+                        <div>📅 ${formatFriendlyDate(r.date)}</div>
+                        <div style="font-size:0.8rem; color:var(--piu-cyan);">⏰ ${format12Hour(r.startTime)} - ${format12Hour(r.endTime)}</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted);">⏳ ${formatDuration(r.durationMinutes)}</div>
+                    </td>
+                    <td style="padding:12px;">
+                        <strong class="highlight-gold" style="font-size:0.95rem;">${business.currencySymbol}${r.totalCost}</strong>
+                    </td>
+                    <td style="padding:12px; text-align:right; white-space:nowrap;">
+                        <div style="display:flex; justify-content:flex-end; gap:6px;">
+                            <button type="button" class="btn btn-outline btn-xs btn-ticket-res" data-id="${r.id}" style="padding:4px 8px;">
+                                🎟️ Pase
+                            </button>
+                            ${isPending ? `
+                                <button type="button" class="btn btn-primary btn-xs btn-approve-res glow-green" data-id="${r.id}" style="background:var(--color-neon-lime); color:#000000; border-color:var(--color-neon-lime); padding:4px 8px;">
+                                    Aprobar
+                                </button>
+                                <button type="button" class="btn btn-warning btn-xs btn-modify-res" data-id="${r.id}" style="padding:4px 8px;">
+                                    ✏️ Modif.
+                                </button>
+                                <button type="button" class="btn btn-danger btn-xs btn-reject-res" data-id="${r.id}" style="padding:4px 8px;">
+                                    ✖
+                                </button>
+                            ` : ''}
+                            ${isConfirmed ? `
+                                <button type="button" class="btn btn-warning btn-xs btn-modify-res" data-id="${r.id}" style="padding:4px 8px;">
+                                    ✏️ Reasignar
+                                </button>
+                            ` : ''}
+                            ${!isPending ? `
+                                <button type="button" class="btn btn-danger btn-xs btn-del-res" data-id="${r.id}" style="padding:4px 8px;">
+                                    🗑️
+                                </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Wire click handlers for dynamic buttons
+        tbody.querySelectorAll('.btn-ticket-res').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.id;
+                const res = store.reservations.find(r => r.id === id);
+                if (res) showReservationTicket(res);
+            });
+        });
+
+        tbody.querySelectorAll('.btn-approve-res').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                const res = store.reservations.find(r => r.id === id);
+                if (!res) return;
+                if (confirm(`¿Aprobar reservación de ${res.clientName}?`)) {
+                    try {
+                        await store.approveReservation(id);
+                        toast.success(`Reservación aprobada.`);
+                        renderRequestsView(container);
+                    } catch (e) {
+                        toast.error(e.message);
+                    }
+                }
+            });
+        });
+
+        tbody.querySelectorAll('.btn-reject-res').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.id;
+                const res = store.reservations.find(r => r.id === id);
+                if (res) openRejectModal(res);
+            });
+        });
+
+        tbody.querySelectorAll('.btn-modify-res').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.id;
+                const res = store.reservations.find(r => r.id === id);
+                if (res) openModifyModal(res);
+            });
+        });
+
+        tbody.querySelectorAll('.btn-del-res').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                if (confirm("¿Estás seguro de eliminar el registro de esta reservación?")) {
+                    await store.deleteReservation(id);
+                    toast.info("Registro eliminado.");
+                    renderRequestsView(container);
+                }
+            });
+        });
+    };
+
+    // Listeners para búsqueda y filtros
+    const searchInput = container.querySelector('#search-req');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value.toLowerCase().trim();
+            currentPage = 1;
+            applyFiltersAndRender();
+        });
+    }
+
+    const machSelect = container.querySelector('#filter-mach');
+    if (machSelect) {
+        machSelect.addEventListener('change', (e) => {
+            selectedMachine = e.target.value;
+            currentPage = 1;
+            applyFiltersAndRender();
+        });
+    }
+
+    // Controles de paginación
+    const prevBtn = container.querySelector('#btn-prev-page');
+    const nextBtn = container.querySelector('#btn-next-page');
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                applyFiltersAndRender();
             }
         });
-    });
+    }
 
-    // Acción: Rechazar
-    container.querySelectorAll('.btn-reject-res').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const res = store.reservations.find(r => r.id === id);
-            openRejectModal(res);
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            currentPage++;
+            applyFiltersAndRender();
         });
-    });
+    }
 
-    // Acción: Modificar
-    container.querySelectorAll('.btn-modify-res').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const res = store.reservations.find(r => r.id === id);
-            openModifyModal(res);
-        });
-    });
-
-    // Acción: Eliminar
-    container.querySelectorAll('.btn-del-res').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            if (confirm("¿Estás seguro de eliminar el registro de esta reservación?")) {
-                await store.deleteReservation(id);
-                toast.info("Registro eliminado.");
-            }
-        });
-    });
-}
+    // Carga inicial
+    applyFiltersAndRender();
+};
 
 /**
  * Modal para Rechazar una Solicitud con motivo
