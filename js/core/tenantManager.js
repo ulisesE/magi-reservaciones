@@ -60,6 +60,22 @@ export const DEFAULT_BUSINESSES = [
             5: { open: '12:00', close: '04:00', closed: false }, // Viernes: 12 PM - 4 AM Sábado
             6: { open: '12:00', close: '04:00', closed: false }  // Sábado: 12 PM - 4 AM Domingo
         },
+        customRates: [
+            { players: 1, duration: 5, price: 7 },
+            { players: 1, duration: 10, price: 14 },
+            { players: 1, duration: 15, price: 20 },
+            { players: 1, duration: 30, price: 40 },
+            { players: 1, duration: 60, price: 80 },
+            { players: 1, duration: 90, price: 120 },
+            { players: 1, duration: 105, price: 140 },
+            { players: 1, duration: 120, price: 160 },
+            { players: 2, duration: 15, price: 32.5 },
+            { players: 2, duration: 30, price: 65 },
+            { players: 2, duration: 60, price: 130 },
+            { players: 2, duration: 90, price: 195 },
+            { players: 2, duration: 105, price: 230 },
+            { players: 2, duration: 120, price: 260 }
+        ],
         createdAt: new Date().toISOString()
     },
     {
@@ -188,6 +204,29 @@ class TenantManager {
                         closed: false
                     };
                 }
+                modified = true;
+            }
+
+            if (b.id === 'biz_piu_centro' && !b.customRates) {
+                b.customRates = [
+                    { players: 1, duration: 5, price: 7 },
+                    { players: 1, duration: 10, price: 14 },
+                    { players: 1, duration: 15, price: 20 },
+                    { players: 1, duration: 30, price: 40 },
+                    { players: 1, duration: 60, price: 80 },
+                    { players: 1, duration: 90, price: 120 },
+                    { players: 1, duration: 105, price: 140 },
+                    { players: 1, duration: 120, price: 160 },
+                    { players: 2, duration: 15, price: 32.5 },
+                    { players: 2, duration: 30, price: 65 },
+                    { players: 2, duration: 60, price: 130 },
+                    { players: 2, duration: 90, price: 195 },
+                    { players: 2, duration: 105, price: 230 },
+                    { players: 2, duration: 120, price: 260 }
+                ];
+                modified = true;
+            } else if (!b.customRates) {
+                b.customRates = [];
                 modified = true;
             }
             return b;

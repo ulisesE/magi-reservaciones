@@ -28,6 +28,8 @@ export function renderBusinessView(container) {
     const isSuperAdmin = authManager.isSuperAdmin();
     const clientDirectUrl = `${window.location.origin}${window.location.pathname}?local=${business.id}`;
 
+    let localCustomRates = [...(business.customRates || [])];
+
     const currentImgUrl = business.imageUrl || STOCK_ARCADE_URL;
     const currentThemeColor = business.themeColor || '#ff2a5f';
     const currentEmoji = business.logoIcon || '🕹️';
@@ -466,6 +468,58 @@ export function renderBusinessView(container) {
                         </div>
                     </div>
 
+                    <!-- SECCIÓN 4: TABLA DE TARIFAS ESPECIALES POR DURACIÓN -->
+                    <div class="settings-card" style="margin-top: 20px;">
+                        <div class="card-title-bar">
+                            <div class="title-with-icon">
+                                <span class="t-icon">🏷️</span>
+                                <div>
+                                    <h3>4. Tabla de Tarifas Especiales por Duración</h3>
+                                    <small>Configura precios fijos específicos para ciertas duraciones y modos de juego. Si un cliente reserva otra duración, se aplicará el cálculo proporcional de la máquina.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-form-body">
+                            <div class="catalogs-table-wrapper">
+                                <table class="catalogs-table" id="table-custom-rates">
+                                    <thead>
+                                        <tr>
+                                            <th>Modo de Juego</th>
+                                            <th>Duración (Minutos)</th>
+                                            <th>Precio Fijo (${business.currencySymbol})</th>
+                                            <th>Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="custom-rates-tbody">
+                                        <!-- Se llena dinámicamente con JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div style="margin-top: 15px; display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; background: rgba(0,0,0,0.2); padding: 12px; border-radius: var(--radius-sm); border: 1px dashed var(--border-color);">
+                                <div class="form-group" style="margin: 0; flex: 1; min-width: 120px;">
+                                    <label for="new-rate-players" style="font-size: 0.75rem;">Modo</label>
+                                    <select id="new-rate-players" class="cyber-select" style="padding: 6px;">
+                                        <option value="1">👤 1 Jugador</option>
+                                        <option value="2">👥 2 Jugadores</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin: 0; flex: 1; min-width: 120px;">
+                                    <label for="new-rate-duration" style="font-size: 0.75rem;">Duración (Minutos)</label>
+                                    <input type="number" id="new-rate-duration" class="cyber-input" placeholder="Ej. 15, 30, 105" min="1" style="padding: 6px;">
+                                </div>
+                                <div class="form-group" style="margin: 0; flex: 1; min-width: 120px;">
+                                    <label for="new-rate-price" style="font-size: 0.75rem;">Precio Fijo (${business.currencySymbol})</label>
+                                    <input type="number" id="new-rate-price" class="cyber-input" placeholder="Ej. 20, 40, 230" min="1" style="padding: 6px;">
+                                </div>
+                                <button type="button" class="btn btn-success btn-sm" id="btn-add-custom-rate" style="padding: 8px 16px;">
+                                    ➕ Agregar Tarifa
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- BOTÓN GUARDAR CAMBIOS -->
                     <div class="settings-actions-sticky" style="display:flex; justify-content:flex-end; gap:12px; padding:16px 0;">
                         <button type="submit" class="btn btn-primary glow-red" style="font-size:1.05rem; padding:12px 28px;">
@@ -820,6 +874,7 @@ export function renderBusinessView(container) {
             openingTime,
             closingTime,
             operatingHours,
+            customRates: localCustomRates,
             hasSeededOvernightSchedule: business ? (business.hasSeededOvernightSchedule ?? true) : true,
             slotDuration: parseInt(container.querySelector('#biz-slot-dur').value, 10) || 60,
             maxAdvanceDays: parseInt(container.querySelector('#biz-max-advance').value, 10) || 14,
@@ -934,6 +989,75 @@ export function renderBusinessView(container) {
                 toast.info("Reiniciando base de datos a valores de prueba...");
                 setTimeout(() => window.location.reload(), 500);
             }
+        });
+
+        // Lógica de tabla de tarifas especiales
+        const renderCustomRatesTable = () => {
+            const tbody = container.querySelector('#custom-rates-tbody');
+            if (!tbody) return;
+
+            if (localCustomRates.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 16px;">
+                            No hay tarifas especiales configuradas. Se aplicará cobro proporcional por hora.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            localCustomRates.sort((a,b) => a.players - b.players || a.duration - b.duration);
+
+            tbody.innerHTML = localCustomRates.map((r, index) => `
+                <tr>
+                    <td><strong>${r.players === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</strong></td>
+                    <td><code>${r.duration} minutos</code> (${Math.round(r.duration / 60 * 100) / 100} hrs)</td>
+                    <td><strong class="highlight-gold">${business.currencySymbol}${r.price}</strong></td>
+                    <td>
+                        <button type="button" class="btn btn-danger btn-xs btn-remove-custom-rate" data-index="${index}" style="border-color: rgba(255, 0, 85, 0.4); color: var(--color-neon-rose);">
+                            🗑️ Borrar
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            tbody.querySelectorAll('.btn-remove-custom-rate').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.index, 10);
+                    localCustomRates.splice(idx, 1);
+                    renderCustomRatesTable();
+                });
+            });
+        };
+
+        // Renderizar tabla inicialmente
+        renderCustomRatesTable();
+
+        // Agregar Tarifa Especial
+        container.querySelector('#btn-add-custom-rate')?.addEventListener('click', () => {
+            const playersVal = parseInt(container.querySelector('#new-rate-players').value, 10);
+            const durationVal = parseInt(container.querySelector('#new-rate-duration').value, 10);
+            const priceVal = parseFloat(container.querySelector('#new-rate-price').value);
+
+            if (isNaN(durationVal) || isNaN(priceVal) || durationVal <= 0 || priceVal <= 0) {
+                toast.error("Por favor ingresa una duración y un precio válidos.");
+                return;
+            }
+
+            const exists = localCustomRates.some(r => r.players === playersVal && r.duration === durationVal);
+            if (exists) {
+                toast.error("Ya existe una tarifa configurada para esa duración y modo.");
+                return;
+            }
+
+            localCustomRates.push({ players: playersVal, duration: durationVal, price: priceVal });
+            
+            container.querySelector('#new-rate-duration').value = '';
+            container.querySelector('#new-rate-price').value = '';
+
+            renderCustomRatesTable();
+            toast.success("Tarifa especial agregada.");
         });
     }
 }

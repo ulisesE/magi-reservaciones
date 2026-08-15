@@ -6,7 +6,7 @@ import { tenantManager } from '../core/tenantManager.js';
 import { toast } from '../components/toast.js';
 import { openLoginModal } from '../components/header.js';
 import { openBookingModal, showReservationTicket } from './clientBookingModal.js';
-import { formatFriendlyDate, format12Hour } from '../core/timeUtils.js';
+import { formatFriendlyDate, format12Hour, formatDuration } from '../core/timeUtils.js';
 
 const AVATAR_OPTIONS = ['🕺', '💃', '🕹️', '⚡', '🎧', '🔥', '🚀', '👑', '🎯', '🌟', '👾', '👟'];
 
@@ -154,7 +154,8 @@ export function renderClientProfileView(container) {
                                     </div>
 
                                     <div style="background:var(--bg-dark-700); padding:10px; border-radius:var(--radius-sm); font-size:0.85rem; display:flex; flex-direction:column; gap:4px;">
-                                        <div>⏰ Horario: <strong style="color:var(--piu-cyan);">${timeFormatted}</strong> (${r.durationMinutes} min)</div>
+                                        <div>⏰ Horario: <strong style="color:var(--piu-cyan);">${timeFormatted}</strong> (${formatDuration(r.durationMinutes)})</div>
+                                        <div>👥 Modo: <strong>${r.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</strong></div>
                                         <div>💰 Tarifa: <strong style="color:var(--color-chartreuse);">${business?.currencySymbol || '$'}${r.totalCost} ${business?.currency || 'MXN'}</strong></div>
                                         ${r.notes ? `<div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">📝 Notas: "${r.notes}"</div>` : ''}
                                     </div>

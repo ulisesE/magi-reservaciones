@@ -290,3 +290,31 @@ export function getWeekDays(referenceDate = new Date()) {
     }
     return week;
 }
+
+/**
+ * Calcula el costo de una reservación según la duración, modo de juego (jugadores) y local.
+ * Busca primero coincidencias en las tarifas especiales del local y, si no existen, realiza
+ * un cálculo proporcional según la tarifa horaria de la máquina.
+ */
+export function calculateBookingCost(durationMinutes, numPlayers, machine, business) {
+    const playersCount = parseInt(numPlayers, 10) || 1;
+    const duration = parseInt(durationMinutes, 10) || 30;
+
+    // 1. Intentar buscar una tarifa especial en el local
+    if (business && Array.isArray(business.customRates)) {
+        const specialRate = business.customRates.find(r => 
+            parseInt(r.players, 10) === playersCount && 
+            parseInt(r.duration, 10) === duration
+        );
+        if (specialRate) {
+            return parseFloat(specialRate.price);
+        }
+    }
+
+    // 2. Fallback: Calcular de forma proporcional a la tarifa de la máquina
+    const rate1P = machine ? (parseFloat(machine.hourlyRate) || 80) : 80;
+    const rate2P = machine ? (parseFloat(machine.hourlyRate2P) || 130) : 130;
+    const activeRate = playersCount === 2 ? rate2P : rate1P;
+
+    return Math.round(duration * (activeRate / 60));
+}

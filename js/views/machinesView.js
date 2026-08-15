@@ -54,7 +54,7 @@ export function renderMachinesView(container) {
                                      referrerpolicy="no-referrer"
                                      class="mach-card-img" 
                                      onerror="this.src='https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80'">
-                                <div class="mach-rate-badge">${business.currencySymbol}${m.hourlyRate}/hr</div>
+                                 <div class="mach-rate-badge" style="font-size:0.75rem; padding:4px 8px; font-family:var(--font-mono);">👤 1P: ${business.currencySymbol}${m.hourlyRate} | 👥 2P: ${business.currencySymbol}${m.hourlyRate2P || 130}/hr</div>
                                 <div class="mach-status-badge">${statusBadge}</div>
                             </div>
 
@@ -227,7 +227,7 @@ async function openMachineFormModal(machine = null) {
                 </div>
             </div>
 
-            <div class="form-row grid-2">
+            <div class="form-row grid-3" style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:16px;">
                 <div class="form-group">
                     <label for="mach-version"><span class="neon-arrow">◆</span> Versión de Software (Catálogo Global) *</label>
                     <select id="mach-version" class="cyber-select">
@@ -236,8 +236,12 @@ async function openMachineFormModal(machine = null) {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="mach-rate"><span class="neon-arrow">◆</span> Tarifa por Hora (${business.currencySymbol}) *</label>
-                    <input type="number" id="mach-rate" class="cyber-input" value="${machine ? machine.hourlyRate : 100}" min="1" required>
+                    <label for="mach-rate"><span class="neon-arrow">◆</span> Tarifa 1P/hr (${business.currencySymbol}) *</label>
+                    <input type="number" id="mach-rate" class="cyber-input" value="${machine ? machine.hourlyRate : 80}" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="mach-rate2p"><span class="neon-arrow">◆</span> Tarifa 2P/hr (${business.currencySymbol}) *</label>
+                    <input type="number" id="mach-rate2p" class="cyber-input" value="${machine ? (machine.hourlyRate2P || 130) : 130}" min="1" required>
                 </div>
             </div>
 
@@ -293,7 +297,8 @@ async function openMachineFormModal(machine = null) {
         const name = modalEl.querySelector('#mach-name').value.trim();
         const model = modalEl.querySelector('#mach-model').value;
         const version = modalEl.querySelector('#mach-version').value;
-        const hourlyRate = parseFloat(modalEl.querySelector('#mach-rate').value) || 100;
+        const hourlyRate = parseFloat(modalEl.querySelector('#mach-rate').value) || 80;
+        const hourlyRate2P = parseFloat(modalEl.querySelector('#mach-rate2p').value) || 130;
         const status = modalEl.querySelector('#mach-status').value;
         const imageUrl = modalEl.querySelector('#mach-img').value.trim() || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80';
         const padsCondition = modalEl.querySelector('#mach-pads').value.trim();
@@ -312,12 +317,12 @@ async function openMachineFormModal(machine = null) {
         try {
             if (isEdit) {
                 await store.updateMachine(machine.id, {
-                    name, model, version, hourlyRate, status, imageUrl, padsCondition, features: selectedFeatures
+                    name, model, version, hourlyRate, hourlyRate2P, status, imageUrl, padsCondition, features: selectedFeatures
                 });
                 toast.success("Máquina actualizada correctamente.");
             } else {
                 await store.addMachine({
-                    name, model, version, hourlyRate, status, imageUrl, padsCondition, features: selectedFeatures
+                    name, model, version, hourlyRate, hourlyRate2P, status, imageUrl, padsCondition, features: selectedFeatures
                 });
                 toast.success("Nueva máquina registrada en el catálogo.");
             }

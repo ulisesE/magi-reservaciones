@@ -5,7 +5,7 @@ import { tenantManager } from '../core/tenantManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { authManager } from '../core/authManager.js';
-import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes } from '../core/timeUtils.js';
+import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes, calculateBookingCost } from '../core/timeUtils.js';
 import { clientDirManager } from './clientsView.js';
 import { openLoginModal } from '../components/header.js';
 
@@ -98,11 +98,18 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 </div>
             ` : ''}
 
-            <div class="form-row">
-                <div class="form-group flex-1">
+            <div class="form-row grid-2">
+                <div class="form-group">
                     <label for="book-machine"><span class="neon-arrow">◆</span> Máquina Pump It Up</label>
                     <select id="book-machine" class="cyber-select" required>
                         ${machinesOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="book-players-mode"><span class="neon-arrow">◆</span> Modo / Cantidad de Jugadores</label>
+                    <select id="book-players-mode" class="cyber-select" required>
+                        <option value="1" selected>👤 1 Jugador</option>
+                        <option value="2">👥 2 Jugadores</option>
                     </select>
                 </div>
             </div>
@@ -181,9 +188,9 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     const updateCost = () => {
         const selectedMachId = modalEl.querySelector('#book-machine').value;
         const durationMinutes = parseInt(modalEl.querySelector('#book-duration').value, 10) || slotDuration;
+        const playersMode = parseInt(modalEl.querySelector('#book-players-mode')?.value, 10) || 1;
         const mach = store.getMachineById(selectedMachId);
-        const rate = mach ? mach.hourlyRate : 100;
-        const total = Math.round((durationMinutes / 60) * rate);
+        const total = calculateBookingCost(durationMinutes, playersMode, mach, business);
         const costPreview = modalEl.querySelector('#booking-cost-preview');
         if (costPreview) {
             costPreview.textContent = `${business.currencySymbol}${total} ${business.currency}`;
@@ -225,6 +232,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     };
 
     modalEl.querySelector('#book-machine').addEventListener('change', updateCost);
+    modalEl.querySelector('#book-players-mode')?.addEventListener('change', updateCost);
     modalEl.querySelector('#book-time').addEventListener('change', updateDurationOptions);
     modalEl.querySelector('#book-duration').addEventListener('change', updateCost);
 
@@ -371,12 +379,14 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         const endTimeVal = addMinutesToTime(startTimeVal, durationMinutes);
 
         try {
+            const playersMode = parseInt(modalEl.querySelector('#book-players-mode')?.value, 10) || 1;
             const booking = await store.requestReservation({
                 machineId: machineSelect.value,
                 date: dateInput.value,
                 startTime: startTimeVal,
                 endTime: endTimeVal,
                 durationMinutes,
+                playersMode,
                 clientName: nameInput.value.trim(),
                 clientPhone: phoneInput.value.trim(),
                 notes: notesInput.value.trim()
@@ -419,12 +429,14 @@ export function showReservationTicket(reservation) {
         : `💳 *Pago:* Pago total al llegar al local\n`;
 
     // Generar texto para compartir en WhatsApp
+    const playersLabel = reservation.playersMode === 2 ? '2 Jugadores' : '1 Jugador';
     const waText = encodeURIComponent(
         `🎮 *RESERVACIÓN PUMP IT UP - ${business.name}*\n` +
         `👤 *Jugador:* ${reservation.clientName}\n` +
+        `👥 *Modo:* ${playersLabel}\n` +
         `🕹️ *Máquina:* ${machine ? machine.name : 'PIU'}\n` +
         `📅 *Fecha:* ${friendlyDate}\n` +
-        `⏰ *Horario:* ${timeFormatted} (${reservation.durationMinutes} min)\n` +
+        `⏰ *Horario:* ${timeFormatted} (${formatDuration(reservation.durationMinutes)})\n` +
         `💰 *Total:* ${business.currencySymbol}${reservation.totalCost} ${business.currency}\n` +
         depositLine +
         `📍 *Ubicación:* ${business.address || business.city}\n` +
@@ -486,6 +498,10 @@ export function showReservationTicket(reservation) {
                         <strong class="t-value">${machine ? machine.name : 'PIU Machine'}</strong>
                     </div>
                     <div class="ticket-item">
+                        <span class="t-label">MODO DE JUEGO</span>
+                        <strong class="t-value">${reservation.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</strong>
+                    </div>
+                    <div class="ticket-item">
                         <span class="t-label">FECHA</span>
                         <strong class="t-value">${friendlyDate}</strong>
                     </div>
@@ -495,7 +511,7 @@ export function showReservationTicket(reservation) {
                     </div>
                     <div class="ticket-item">
                         <span class="t-label">DURACIÓN</span>
-                        <strong class="t-value">${reservation.durationMinutes} Minutos</strong>
+                        <strong class="t-value">${formatDuration(reservation.durationMinutes)}</strong>
                     </div>
                     <div class="ticket-item">
                         <span class="t-label">TOTAL ESTIMADO</span>

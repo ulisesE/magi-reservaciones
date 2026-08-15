@@ -6,6 +6,7 @@ import {
     formatDateKey, 
     formatFriendlyDate, 
     format12Hour, 
+    formatDuration,
     generateTimeSlots, 
     timeToMinutes, 
     isOverlapping,
@@ -262,12 +263,16 @@ function openReservationDetailModal(reservation) {
                     <strong>${machine ? machine.name : 'PIU'} (${machine ? machine.model : ''})</strong>
                 </div>
                 <div class="detail-item">
+                    <span class="d-label">MODO DE JUEGO:</span>
+                    <strong>${reservation.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</strong>
+                </div>
+                <div class="detail-item">
                     <span class="d-label">FECHA:</span>
                     <strong>${formatFriendlyDate(reservation.date)}</strong>
                 </div>
                 <div class="detail-item">
                     <span class="d-label">HORARIO:</span>
-                    <strong>${format12Hour(reservation.startTime)} a ${format12Hour(reservation.endTime)} (${reservation.durationMinutes} min)</strong>
+                    <strong>${format12Hour(reservation.startTime)} a ${format12Hour(reservation.endTime)} (${formatDuration(reservation.durationMinutes)})</strong>
                 </div>
                 <div class="detail-item">
                     <span class="d-label">COSTO:</span>

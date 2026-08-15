@@ -3,7 +3,7 @@
 import { store } from '../core/store.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
-import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes } from '../core/timeUtils.js';
+import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes, calculateBookingCost } from '../core/timeUtils.js';
 import { showReservationTicket } from './clientBookingModal.js';
 
 let activeFilter = 'PENDING'; // 'PENDING', 'CONFIRMED', 'REJECTED', 'ALL'
@@ -100,12 +100,14 @@ export function renderRequestsView(container) {
                                     <span class="cost-lbl">Total:</span>
                                     <span class="cost-num highlight-gold">${business.currencySymbol}${r.totalCost} ${business.currency}</span>
                                 </div>
-                            </div>
-
-                            <div class="req-details-grid">
+                                <div class="req-details-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
                                 <div class="req-detail-item">
                                     <span class="rd-label">🕹️ Máquina</span>
                                     <strong>${machine ? machine.name : 'PIU Machine'}</strong>
+                                </div>
+                                <div class="req-detail-item">
+                                    <span class="rd-label">👥 Modo</span>
+                                    <strong>${r.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</strong>
                                 </div>
                                 <div class="req-detail-item">
                                     <span class="rd-label">📅 Fecha</span>
@@ -113,7 +115,7 @@ export function renderRequestsView(container) {
                                 </div>
                                 <div class="req-detail-item">
                                     <span class="rd-label">⏰ Horario</span>
-                                    <strong class="highlight-cyan">${format12Hour(r.startTime)} - ${format12Hour(r.endTime)} (${r.durationMinutes} min)</strong>
+                                    <strong class="highlight-cyan">${format12Hour(r.startTime)} - ${format12Hour(r.endTime)} (${formatDuration(r.durationMinutes)})</strong>
                                 </div>
                             </div>
 
@@ -338,11 +340,20 @@ export function openModifyModal(reservation) {
         <form id="form-modify-res" class="cyber-form">
             <p>Reasigna la máquina, fecha o bloque horario para <strong>${reservation.clientName}</strong>:</p>
 
-            <div class="form-group">
-                <label for="mod-machine"><span class="neon-arrow">◆</span> Máquina PIU</label>
-                <select id="mod-machine" class="cyber-select" required>
-                    ${machinesOptions}
-                </select>
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="mod-machine"><span class="neon-arrow">◆</span> Máquina PIU</label>
+                    <select id="mod-machine" class="cyber-select" required>
+                        ${machinesOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="mod-players-mode"><span class="neon-arrow">◆</span> Modo / Jugadores</label>
+                    <select id="mod-players-mode" class="cyber-select" required>
+                        <option value="1" ${reservation.playersMode === 1 || !reservation.playersMode ? 'selected' : ''}>👤 1 Jugador</option>
+                        <option value="2" ${reservation.playersMode === 2 ? 'selected' : ''}>👥 2 Jugadores</option>
+                    </select>
+                </div>
             </div>
 
             <div class="form-row grid-2">
@@ -462,8 +473,9 @@ export function openModifyModal(reservation) {
         const adminNotes = modalEl.querySelector('#mod-notes').value.trim();
         const errorDiv = modalEl.querySelector('#mod-error');
 
+        const playersMode = parseInt(modalEl.querySelector('#mod-players-mode')?.value, 10) || 1;
         const mach = store.getMachineById(machineId);
-        const totalCost = Math.round((durationMinutes / 60) * (mach ? mach.hourlyRate : 100));
+        const totalCost = calculateBookingCost(durationMinutes, playersMode, mach, business);
 
         try {
             await store.modifyReservation(reservation.id, {
@@ -472,6 +484,7 @@ export function openModifyModal(reservation) {
                 startTime,
                 endTime,
                 durationMinutes,
+                playersMode,
                 totalCost,
                 adminNotes: adminNotes || 'Horario modificado por encargado.'
             });

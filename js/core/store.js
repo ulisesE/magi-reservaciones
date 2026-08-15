@@ -44,6 +44,7 @@ const DEFAULT_MACHINES_BY_BIZ = {
             status: 'AVAILABLE',
             padsCondition: 'Sensores FSR calibrados a 4.5/5. Bares reforzados.',
             hourlyRate: 120,
+            hourlyRate2P: 195,
             imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
             features: ['55" 120Hz Display', 'Sound Subwoofer 2.1', 'AM.PASS Card Reader', 'Barra Pro'],
             createdAt: new Date().toISOString()
@@ -57,6 +58,7 @@ const DEFAULT_MACHINES_BY_BIZ = {
             status: 'AVAILABLE',
             padsCondition: 'Sensibilidad media-alta, pads originales Andamiro.',
             hourlyRate: 100,
+            hourlyRate2P: 160,
             imageUrl: 'https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?auto=format&fit=crop&w=600&q=80',
             features: ['50" HD Screen', 'Iluminación Neón LED', 'AM.PASS Compatible'],
             createdAt: new Date().toISOString()
@@ -70,6 +72,7 @@ const DEFAULT_MACHINES_BY_BIZ = {
             status: 'AVAILABLE',
             padsCondition: 'Ideal para principiantes y freestyle.',
             hourlyRate: 80,
+            hourlyRate2P: 130,
             imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=600&q=80',
             features: ['42" Screen', 'Clásico Sound System', 'Pads Suaves'],
             createdAt: new Date().toISOString()
@@ -85,6 +88,7 @@ const DEFAULT_MACHINES_BY_BIZ = {
             status: 'AVAILABLE',
             padsCondition: 'Pads FSR de competición ultra-sensibles.',
             hourlyRate: 130,
+            hourlyRate2P: 210,
             imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
             features: ['55" 4K', 'Camara Stream integrada', 'AM.PASS'],
             createdAt: new Date().toISOString()
@@ -98,6 +102,7 @@ const DEFAULT_MACHINES_BY_BIZ = {
             status: 'MAINTENANCE',
             padsCondition: 'Calibración de sensor flecha azul superior izquierda en progreso.',
             hourlyRate: 95,
+            hourlyRate2P: 150,
             imageUrl: 'https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?auto=format&fit=crop&w=600&q=80',
             features: ['50" HD', 'Subwoofer High-Power'],
             createdAt: new Date().toISOString()
@@ -360,15 +365,24 @@ class Store {
     }
 
     getMachines() {
-        return this.machines;
+        return this.machines.map(m => {
+            if (m.hourlyRate2P === undefined || m.hourlyRate2P === null) {
+                m.hourlyRate2P = m.hourlyRate === 80 ? 130 : Math.round(m.hourlyRate * 1.625);
+            }
+            return m;
+        });
     }
 
     getActiveMachines() {
-        return this.machines.filter(m => m.status === 'AVAILABLE');
+        return this.getMachines().filter(m => m.status === 'AVAILABLE');
     }
 
     getMachineById(id) {
-        return this.machines.find(m => m.id === id);
+        const m = this.machines.find(m => m.id === id);
+        if (m && (m.hourlyRate2P === undefined || m.hourlyRate2P === null)) {
+            m.hourlyRate2P = m.hourlyRate === 80 ? 130 : Math.round(m.hourlyRate * 1.625);
+        }
+        return m;
     }
 
     getReservations(filter = {}) {
@@ -638,7 +652,8 @@ class Store {
             version: machineData.version.trim(),
             status: machineData.status || 'AVAILABLE',
             padsCondition: machineData.padsCondition ? machineData.padsCondition.trim() : 'En buen estado.',
-            hourlyRate: Number(machineData.hourlyRate) || 100,
+            hourlyRate: Number(machineData.hourlyRate) || 80,
+            hourlyRate2P: Number(machineData.hourlyRate2P) || 130,
             imageUrl: machineData.imageUrl || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
             features: machineData.features || ['AM.PASS', 'HD Sound'],
             createdAt: new Date().toISOString()
