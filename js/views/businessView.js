@@ -820,6 +820,7 @@ export function renderBusinessView(container) {
             openingTime,
             closingTime,
             operatingHours,
+            hasSeededOvernightSchedule: business ? (business.hasSeededOvernightSchedule ?? true) : true,
             slotDuration: parseInt(container.querySelector('#biz-slot-dur').value, 10) || 60,
             maxAdvanceDays: parseInt(container.querySelector('#biz-max-advance').value, 10) || 14,
             minCancelNoticeHours: parseInt(container.querySelector('#biz-min-cancel').value, 10) || 2,

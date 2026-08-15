@@ -39,8 +39,8 @@ export const DEFAULT_BUSINESSES = [
         themeColor: '#ff2a5f',
         logoIcon: '🎮',
         imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
-        openingTime: '11:00',
-        closingTime: '22:00',
+        openingTime: '12:00',
+        closingTime: '04:00',
         slotDuration: 60,
         maxAdvanceDays: 14,
         minCancelNoticeHours: 2,
@@ -51,6 +51,15 @@ export const DEFAULT_BUSINESSES = [
         rules: '1. Uso obligatorio de tenis deportivos limpios.\n2. No pisar las barras de soporte con las suelas descalzas.\n3. Tolerancia de espera de 10 minutos antes de liberar la máquina.',
         wifiNetwork: 'PumpZone_Clientes',
         wifiPassword: 'StepManiaPhoenix',
+        operatingHours: {
+            0: { open: '15:00', close: '04:00', closed: false }, // Domingo: 3 PM - 4 AM Lunes
+            1: { open: '11:00', close: '22:00', closed: false }, // Lunes
+            2: { open: '11:00', close: '22:00', closed: false }, // Martes
+            3: { open: '11:00', close: '22:00', closed: false }, // Miércoles
+            4: { open: '11:00', close: '22:00', closed: false }, // Jueves
+            5: { open: '12:00', close: '04:00', closed: false }, // Viernes: 12 PM - 4 AM Sábado
+            6: { open: '12:00', close: '04:00', closed: false }  // Sábado: 12 PM - 4 AM Domingo
+        },
         createdAt: new Date().toISOString()
     },
     {
@@ -149,6 +158,51 @@ class TenantManager {
             if (isFirebaseAvailable && db) {
                 for (const b of loaded) {
                     try { await setDoc(doc(db, COLLECTIONS.BUSINESSES, b.id), b); } catch (e) {}
+                }
+            }
+        }
+
+        // Asegurar que los locales tengan operatingHours y aplicar el horario solicitado en 'biz_piu_centro'
+        let modified = false;
+        loaded = loaded.map(b => {
+            if (b.id === 'biz_piu_centro' && !b.hasSeededOvernightSchedule) {
+                b.operatingHours = {
+                    0: { open: '15:00', close: '04:00', closed: false },
+                    1: { open: '11:00', close: '22:00', closed: false },
+                    2: { open: '11:00', close: '22:00', closed: false },
+                    3: { open: '11:00', close: '22:00', closed: false },
+                    4: { open: '11:00', close: '22:00', closed: false },
+                    5: { open: '12:00', close: '04:00', closed: false },
+                    6: { open: '12:00', close: '04:00', closed: false }
+                };
+                b.openingTime = '12:00';
+                b.closingTime = '04:00';
+                b.hasSeededOvernightSchedule = true;
+                modified = true;
+            } else if (!b.operatingHours) {
+                b.operatingHours = {};
+                for (let i = 0; i < 7; i++) {
+                    b.operatingHours[i] = {
+                        open: b.openingTime || '11:00',
+                        close: b.closingTime || '22:00',
+                        closed: false
+                    };
+                }
+                modified = true;
+            }
+            return b;
+        });
+
+        if (modified) {
+            this.saveLocally(loaded);
+            if (isFirebaseAvailable && db) {
+                for (const b of loaded) {
+                    try {
+                        const businessRef = doc(db, COLLECTIONS.BUSINESSES, b.id);
+                        setDoc(businessRef, b).catch(() => {});
+                    } catch (e) {
+                        console.warn("Error guardando negocio migrado en Firebase:", e);
+                    }
                 }
             }
         }

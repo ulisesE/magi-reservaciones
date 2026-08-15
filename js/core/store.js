@@ -598,17 +598,16 @@ class Store {
         if (isFirebaseAvailable && db) {
             const reservationQuery = query(
                 collection(db, COLLECTIONS.RESERVATIONS),
-                where('businessId', '==', this.currentBusiness.id)
+                where('businessId', '==', this.currentBusiness.id),
+                where('date', '==', targetDate)
             );
-            await runTransaction(db, async (transaction) => {
-                const snapshot = await transaction.get(reservationQuery);
-                const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                const conflict = findReservationConflict(remoteReservations, targetMachine, targetDate, targetStart, targetEnd, reservationId);
-                if (conflict) {
-                    throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
-                }
-                transaction.update(doc(db, COLLECTIONS.RESERVATIONS, reservationId), persistedFields);
-            });
+            const snapshot = await getDocs(reservationQuery);
+            const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+            const conflict = findReservationConflict(remoteReservations, targetMachine, targetDate, targetStart, targetEnd, reservationId);
+            if (conflict) {
+                throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
+            }
+            await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), persistedFields);
         }
 
         Object.assign(res, persistedFields);

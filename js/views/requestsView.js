@@ -293,7 +293,7 @@ function openRejectModal(reservation) {
 /**
  * Modal para Modificar máquina, fecha u horario de una reservación
  */
-function openModifyModal(reservation) {
+export function openModifyModal(reservation) {
     const business = store.currentBusiness;
     const machines = store.getActiveMachines();
     const slotDuration = business.slotDuration || 60;

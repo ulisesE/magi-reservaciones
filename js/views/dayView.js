@@ -13,6 +13,7 @@ import {
     DAYS_OF_WEEK
 } from '../core/timeUtils.js';
 import { openBookingModal, showReservationTicket } from './clientBookingModal.js';
+import { openModifyModal } from './requestsView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 
@@ -299,11 +300,11 @@ function openReservationDetailModal(reservation) {
         footerHtml = `
             <button type="button" class="btn btn-danger btn-sm" id="btn-delete-res">🗑️ Eliminar</button>
             <div class="flex-spacer"></div>
+            <button type="button" class="btn btn-warning" id="btn-modify-res">✏️ Modificar</button>
             ${reservation.status === 'PENDING' ? `
                 <button type="button" class="btn btn-danger" id="btn-reject-res">Rechazar</button>
                 <button type="button" class="btn btn-success glow-green" id="btn-approve-res">Aprobar</button>
             ` : `
-                <button type="button" class="btn btn-secondary" id="btn-close-detail">Cerrar</button>
                 <button type="button" class="btn btn-info" id="btn-view-ticket">🎟️ Ticket</button>
             `}
         `;
@@ -322,6 +323,11 @@ function openReservationDetailModal(reservation) {
     modalEl.querySelector('#btn-view-ticket')?.addEventListener('click', () => {
         modal.close();
         showReservationTicket(reservation);
+    });
+
+    modalEl.querySelector('#btn-modify-res')?.addEventListener('click', () => {
+        modal.close();
+        openModifyModal(reservation);
     });
 
     // Acciones de Encargado

@@ -6,6 +6,8 @@ import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { authManager } from '../core/authManager.js';
 import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes } from '../core/timeUtils.js';
+import { clientDirManager } from './clientsView.js';
+import { openLoginModal } from '../components/header.js';
 
 /**
  * Abre el modal para solicitar o agendar una reservación
@@ -17,9 +19,23 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     const currentUser = authManager.getCurrentUser();
     const isClientUser = authManager.isClientUser();
 
+    if (!currentUser) {
+        toast.warning("Para poder reservar, necesitas iniciar sesión o crear una cuenta de jugador.");
+        openLoginModal('login');
+        return;
+    }
+
     if (machines.length === 0) {
         toast.warning("No hay máquinas disponibles en este momento para reservar.");
         return;
+    }
+
+    // Cargar la lista de clientes si es encargado/superusuario para autocompletado
+    let clients = [];
+    if (isStaff) {
+        clientDirManager.loadClients().then(list => {
+            clients = list;
+        }).catch(e => console.warn("Error cargando clientes para autocompletado:", e));
     }
 
     const defaultMachineId = machineId || machines[0].id;
@@ -126,13 +142,14 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             <div class="form-divider"></div>
 
             <div class="form-row grid-2">
-                <div class="form-group">
+                <div class="form-group" style="position: relative;">
                     <label for="book-name"><span class="neon-arrow">◆</span> Nombre / GamerTag *</label>
-                    <input type="text" id="book-name" class="cyber-input" value="${clientNameVal}" placeholder="Ej. Alex Step / PIU_Pro99" required>
+                    <input type="text" id="book-name" class="cyber-input" value="${clientNameVal}" placeholder="Ej. Alex Step / PIU_Pro99" required autocomplete="off">
+                    <div id="book-name-suggestions" class="hidden" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; background: var(--bg-dark-800, #1a1f29); border: 1px solid var(--piu-cyan, #00e5ff); border-radius: var(--radius-sm); max-height: 180px; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.8);"></div>
                 </div>
                 <div class="form-group">
-                    <label for="book-phone"><span class="neon-arrow">◆</span> Teléfono / WhatsApp *</label>
-                    <input type="tel" id="book-phone" class="cyber-input" value="${clientPhoneVal}" placeholder="Ej. 5512345678" required>
+                    <label for="book-phone"><span class="neon-arrow">◆</span> Teléfono / WhatsApp (Opcional)</label>
+                    <input type="tel" id="book-phone" class="cyber-input" value="${clientPhoneVal}" placeholder="Ej. 5512345678">
                 </div>
             </div>
 
@@ -264,6 +281,71 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
     updateCost();
 
+    // Autocompletado de Clientes para el Encargado/Superusuario
+    if (isStaff) {
+        const nameInput = modalEl.querySelector('#book-name');
+        const phoneInput = modalEl.querySelector('#book-phone');
+        const suggestionsDiv = modalEl.querySelector('#book-name-suggestions');
+
+        nameInput.addEventListener('input', (e) => {
+            const queryText = e.target.value.trim().toLowerCase();
+            if (!queryText) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.classList.add('hidden');
+                return;
+            }
+
+            const matches = clients.filter(c => 
+                (c.name && c.name.toLowerCase().includes(queryText)) || 
+                (c.username && c.username.toLowerCase().includes(queryText)) ||
+                (c.phone && c.phone.includes(queryText))
+            ).slice(0, 5);
+
+            if (matches.length === 0) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.classList.add('hidden');
+                return;
+            }
+
+            suggestionsDiv.innerHTML = matches.map(c => `
+                <div class="suggestion-item" data-id="${c.id}" data-name="${c.name}" data-phone="${c.phone || ''}" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; transition: background 0.2s; color:#ffffff;">
+                    <div>
+                        <span style="font-size:1.1rem; margin-right:6px;">${c.avatar || '🕺'}</span>
+                        <strong style="color:#ffffff;">${c.name}</strong>
+                        ${c.username ? `<span style="color:var(--piu-cyan); font-size:0.75rem; margin-left:6px;">@${c.username}</span>` : ''}
+                    </div>
+                    <span style="color:var(--text-muted); font-size:0.8rem;">${c.phone || ''}</span>
+                </div>
+            `).join('');
+
+            suggestionsDiv.classList.remove('hidden');
+
+            suggestionsDiv.querySelectorAll('.suggestion-item').forEach(item => {
+                item.addEventListener('mouseenter', () => {
+                    item.style.background = 'rgba(0, 229, 255, 0.15)';
+                });
+                item.addEventListener('mouseleave', () => {
+                    item.style.background = 'transparent';
+                });
+                item.addEventListener('click', (evt) => {
+                    evt.stopPropagation();
+                    nameInput.value = item.dataset.name;
+                    phoneInput.value = item.dataset.phone;
+                    suggestionsDiv.innerHTML = '';
+                    suggestionsDiv.classList.add('hidden');
+                });
+            });
+        });
+
+        // Cerrar sugerencias al hacer click fuera
+        document.addEventListener('click', (e) => {
+            if (e.target !== nameInput && e.target !== suggestionsDiv) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.classList.add('hidden');
+            }
+        });
+    }
+
     // Acciones de los botones
     modalEl.querySelector('#btn-cancel-book').onclick = () => modal.close();
 
@@ -278,8 +360,8 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         const notesInput = modalEl.querySelector('#book-notes');
         const errorMsg = modalEl.querySelector('#booking-error');
 
-        if (!nameInput.value.trim() || !phoneInput.value.trim() || !dateInput.value) {
-            errorMsg.textContent = 'Por favor completa tu nombre, teléfono y fecha.';
+        if (!nameInput.value.trim() || !dateInput.value) {
+            errorMsg.textContent = 'Por favor completa tu nombre y fecha.';
             errorMsg.classList.remove('hidden');
             return;
         }

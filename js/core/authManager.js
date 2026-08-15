@@ -1,7 +1,7 @@
 // js/core/authManager.js
 // Gestor de Autenticación, Roles y Control de Acceso Multi-Nivel
 // Niveles: SUPERADMIN, MANAGER (Encargado de Local), CLIENT (Cliente del Local)
-import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc } from '../firebaseConfig.js';
+import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc, query, where } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 
 const AUTH_STORAGE_KEY = 'piu_auth_current_user_v1';
@@ -204,12 +204,22 @@ class AuthManager {
             throw new Error("El PIN de seguridad debe contener al menos 4 dígitos.");
         }
 
-        // Verificar si el usuario ya existe en Staff o en Clientes
+        // Verificar si el usuario ya existe en Staff o en Clientes localmente
         const staffExists = this.staffUsers.some(u => u.username.toLowerCase() === cleanUsername);
         const clientExists = this.clientUsers.some(u => u.username?.toLowerCase() === cleanUsername);
 
         if (staffExists || clientExists) {
             throw new Error(`El nombre de usuario o GamerTag "${cleanUsername}" ya está registrado. Por favor elige otro.`);
+        }
+
+        // Verificar en tiempo real en Firebase
+        if (isFirebaseAvailable && db) {
+            const playersRef = collection(db, COLLECTIONS.PLAYERS);
+            const q = query(playersRef, where('username', '==', cleanUsername));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                throw new Error(`El nombre de usuario o GamerTag "${cleanUsername}" ya está registrado. Por favor elige otro.`);
+            }
         }
 
         const newPlayer = {

@@ -275,6 +275,12 @@ export function openLoginModal(initialTab = 'login') {
 
                     <div id="login-error" class="form-error-msg hidden"></div>
 
+                    <div style="text-align: right; margin-top: 8px; margin-bottom: 8px;">
+                        <a href="#" id="btn-forgot-pin" style="font-size: 0.8rem; color: var(--piu-cyan, #00e5ff); text-decoration: none; border-bottom: 1px dotted var(--piu-cyan, #00e5ff); transition: opacity 0.2s;">
+                            ¿Olvidaste tu PIN de acceso?
+                        </a>
+                    </div>
+
                     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
                         <button type="button" class="btn btn-secondary" id="btn-cancel-login">Cancelar</button>
                         <button type="submit" class="btn btn-primary glow-red" id="btn-submit-login">🔐 Iniciar Sesión</button>
@@ -413,6 +419,28 @@ export function openLoginModal(initialTab = 'login') {
 
     modalEl.querySelector('#btn-cancel-login').onclick = () => modal.close();
     modalEl.querySelector('#btn-cancel-reg').onclick = () => modal.close();
+
+    // Evento: Olvidé mi PIN
+    modalEl.querySelector('#btn-forgot-pin')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const activeBiz = store.currentBusiness || tenantManager.getActiveBusiness();
+        const whatsappNumber = activeBiz ? activeBiz.whatsapp : '';
+        const phoneFallback = activeBiz ? activeBiz.phone : '';
+        const bizName = activeBiz ? activeBiz.name : 'la sala';
+
+        const textMessage = `Hola, soy un jugador de Pump It Up y olvidé mi PIN de acceso para Magi Reservaciones en ${bizName}. ¿Me podrían ayudar a restablecerlo?`;
+        const encodedText = encodeURIComponent(textMessage);
+
+        const targetPhone = whatsappNumber || phoneFallback;
+        if (targetPhone) {
+            const cleanPhone = targetPhone.replace(/\D/g, '');
+            const waUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
+            window.open(waUrl, '_blank', 'noopener,noreferrer');
+            toast.info("Abriendo WhatsApp para contactar al encargado...");
+        } else {
+            toast.warning("No hay un número de WhatsApp de contacto configurado para esta sucursal. Por favor solicita ayuda en mostrador.");
+        }
+    });
 
     // Enviar Login
     modalEl.querySelector('#form-auth-login').onsubmit = async (e) => {

@@ -6,6 +6,7 @@ import { authManager } from '../core/authManager.js';
 import { catalogsManager } from '../core/catalogsManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { DAYS_OF_WEEK, format12Hour, timeToMinutes } from '../core/timeUtils.js';
 
 let activeCatalogTab = 'FEATURES'; // 'FEATURES', 'RULES', 'VERSIONS'
 
@@ -122,6 +123,11 @@ export async function renderCatalogsManagementView(container) {
             });
         });
     }
+
+    // Evento de redirección a Ajustes del Local
+    container.querySelector('#btn-edit-rules-shortcut')?.addEventListener('click', () => {
+        store.setCurrentView('BUSINESS');
+    });
 }
 
 function renderCatalogContent(tab, features, gameVersions, businesses, currentBusiness, isSuperAdmin) {
@@ -195,7 +201,7 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
                         <span class="t-icon">⏰</span>
                         <div>
                             <h3>Horarios de Apertura y Duración ${isSuperAdmin ? 'por Negocio' : `de ${currentBusiness.name}`}</h3>
-                            <small>${isSuperAdmin ? 'Configuración de bloques horarios por cada sucursal' : 'Reglas operativas y horarios configurados para esta sucursal'}</small>
+                            <small>${isSuperAdmin ? 'Configuración de bloques horarios por cada sucursal' : 'Reglas operativas y del local'}</small>
                         </div>
                     </div>
                 </div>
@@ -206,27 +212,90 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
                             <tr>
                                 <th>Sucursal / Local</th>
                                 <th>Ubicación</th>
-                                <th>Hora Apertura</th>
-                                <th>Hora Cierre</th>
+                                <th>Horario General</th>
                                 <th>Duración del Bloque</th>
                                 <th>Moneda</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${displayedBusinesses.map(b => `
-                                <tr>
-                                    <td><strong>${b.logoIcon || '🕹️'} ${b.name}</strong></td>
-                                    <td>${b.city}</td>
-                                    <td><span class="badge badge-dark">${b.openingTime}</span></td>
-                                    <td><span class="badge badge-dark">${b.closingTime}</span></td>
-                                    <td><span class="badge badge-primary">${b.slotDuration || 60} Minutos</span></td>
-                                    <td><strong class="highlight-gold">${b.currencySymbol} (${b.currency})</strong></td>
-                                </tr>
-                            `).join('')}
+                            ${displayedBusinesses.map(b => {
+                                const openMinutes = timeToMinutes(b.openingTime);
+                                const closeMinutes = timeToMinutes(b.closingTime);
+                                const isOvernight = closeMinutes < openMinutes;
+                                const hoursLabel = `${format12Hour(b.openingTime)} - ${format12Hour(b.closingTime)}${isOvernight ? ' (Siguiente día)' : ''}`;
+                                return `
+                                    <tr>
+                                        <td><strong>${b.logoIcon || '🕹️'} ${b.name}</strong></td>
+                                        <td>${b.city}</td>
+                                        <td><span class="badge badge-dark">${hoursLabel}</span></td>
+                                        <td><span class="badge badge-primary">${b.slotDuration || 60} Minutos</span></td>
+                                        <td><strong class="highlight-gold">${b.currencySymbol} (${b.currency})</strong></td>
+                                    </tr>
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            ${currentBusiness ? `
+                <div class="settings-card" style="margin-top: 20px;">
+                    <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <div class="title-with-icon">
+                            <span class="t-icon">📅</span>
+                            <div>
+                                <h3>Horario Operativo Semanal Detallado</h3>
+                                <span>Revisa los horarios específicos configurados por día para <strong>${currentBusiness.name}</strong></span>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-sm glow-red" id="btn-edit-rules-shortcut">
+                            ⚙️ Configurar Horarios en Ajustes
+                        </button>
+                    </div>
+
+                    <div class="catalogs-table-wrapper">
+                        <table class="catalogs-table">
+                            <thead>
+                                <tr>
+                                    <th>Día de la Semana</th>
+                                    <th>Estado</th>
+                                    <th>Hora Apertura</th>
+                                    <th>Hora Cierre</th>
+                                    <th>Rango de Servicio</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${DAYS_OF_WEEK.map(day => {
+                                    const dayConfig = currentBusiness.operatingHours?.[day.id] || currentBusiness.operatingHours?.[String(day.id)] || {
+                                        open: currentBusiness.openingTime || '11:00',
+                                        close: currentBusiness.closingTime || '22:00',
+                                        closed: false
+                                    };
+                                    const isOpen = !dayConfig.closed;
+                                    const isOvernight = isOpen && timeToMinutes(dayConfig.close) < timeToMinutes(dayConfig.open);
+                                    const rangeLabel = dayConfig.closed 
+                                        ? '<span style="color:var(--text-muted);">Cerrado</span>' 
+                                        : `${format12Hour(dayConfig.open)} - ${format12Hour(dayConfig.close)}${isOvernight ? ' <small style="color:var(--color-neon-lime);">(Siguiente día)</small>' : ''}`;
+                                    
+                                    return `
+                                        <tr>
+                                            <td><strong style="color:#ffffff;">${day.name}</strong></td>
+                                            <td>
+                                                <span class="badge ${isOpen ? 'badge-success' : 'badge-danger'}">
+                                                    ${isOpen ? 'ABIERTO' : 'CERRADO'}
+                                                </span>
+                                            </td>
+                                            <td>${isOpen ? `<code>${dayConfig.open}</code>` : '-'}</td>
+                                            <td>${isOpen ? `<code>${dayConfig.close}</code>` : '-'}</td>
+                                            <td>${rangeLabel}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ` : ''}
         `;
     }
 
