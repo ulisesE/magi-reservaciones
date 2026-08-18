@@ -19,10 +19,10 @@ import { tenantManager } from './tenantManager.js';
 import { store } from './store.js';
 
 export const TIERS = {
-    BRONCE: { name: 'Bronce', minPoints: 0, maxPoints: 99, discount: 0.00, color: '#cd7f32', class: 'tier-bronce', badge: '🟫' },
-    PLATA: { name: 'Plata', minPoints: 100, maxPoints: 299, discount: 0.05, color: '#c0c0c0', class: 'tier-plata', badge: '⬜' },
-    ORO: { name: 'Oro', minPoints: 300, maxPoints: 599, discount: 0.10, color: '#ffd700', class: 'tier-oro', badge: '🟨' },
-    PLATINO: { name: 'Platino', minPoints: 600, maxPoints: Infinity, discount: 0.15, color: '#e5e4e2', class: 'tier-platino', badge: '🟦' }
+    BRONCE: { name: 'Bronce', minPoints: 0, maxPoints: 99, minVisits: 0, maxVisits: 9, discount: 0.00, color: '#cd7f32', class: 'tier-bronce', badge: '🟫' },
+    PLATA: { name: 'Plata', minPoints: 100, maxPoints: 299, minVisits: 10, maxVisits: 29, discount: 0.05, color: '#c0c0c0', class: 'tier-plata', badge: '⬜' },
+    ORO: { name: 'Oro', minPoints: 300, maxPoints: 599, minVisits: 30, maxVisits: 59, discount: 0.10, color: '#ffd700', class: 'tier-oro', badge: '🟨' },
+    PLATINO: { name: 'Platino', minPoints: 600, maxPoints: Infinity, minVisits: 60, maxVisits: Infinity, discount: 0.15, color: '#e5e4e2', class: 'tier-platino', badge: '🟦' }
 };
 
 export const DEFAULT_REWARDS = [
@@ -33,35 +33,110 @@ export const DEFAULT_REWARDS = [
 ];
 
 class LoyaltyManager {
-    calculateTier(points) {
-        const pts = Number(points) || 0;
-        if (pts >= TIERS.PLATINO.minPoints) return TIERS.PLATINO;
-        if (pts >= TIERS.ORO.minPoints) return TIERS.ORO;
-        if (pts >= TIERS.PLATA.minPoints) return TIERS.PLATA;
-        return TIERS.BRONCE;
+    getBusinessTiers(business) {
+        const defaultTiers = {
+            BRONCE: { name: 'Bronce', minPoints: 0, maxPoints: 99, minVisits: 0, maxVisits: 9, discount: 0.00, color: '#cd7f32', class: 'tier-bronce', badge: '🟫' },
+            PLATA: { name: 'Plata', minPoints: 100, maxPoints: 299, minVisits: 10, maxVisits: 29, discount: 0.05, color: '#c0c0c0', class: 'tier-plata', badge: '⬜' },
+            ORO: { name: 'Oro', minPoints: 300, maxPoints: 599, minVisits: 30, maxVisits: 59, discount: 0.10, color: '#ffd700', class: 'tier-oro', badge: '🟨' },
+            PLATINO: { name: 'Platino', minPoints: 600, maxPoints: Infinity, minVisits: 60, maxVisits: Infinity, discount: 0.15, color: '#e5e4e2', class: 'tier-platino', badge: '🟦' }
+        };
+
+        const biz = business || tenantManager.getActiveBusiness();
+        if (!biz) return defaultTiers;
+
+        const customTiers = biz.loyaltyTiers;
+        if (customTiers) {
+            const tiers = JSON.parse(JSON.stringify(defaultTiers));
+            
+            // Bronce
+            if (customTiers.BRONCE) {
+                tiers.BRONCE.minPoints = Number(customTiers.BRONCE.minPoints) || 0;
+                tiers.BRONCE.minVisits = Number(customTiers.BRONCE.minVisits) || 0;
+                tiers.BRONCE.discount = Number(customTiers.BRONCE.discount) || 0;
+            }
+            // Plata
+            if (customTiers.PLATA) {
+                tiers.PLATA.minPoints = Number(customTiers.PLATA.minPoints) || 100;
+                tiers.PLATA.minVisits = Number(customTiers.PLATA.minVisits) || 10;
+                tiers.PLATA.discount = Number(customTiers.PLATA.discount) || 0.05;
+            }
+            // Oro
+            if (customTiers.ORO) {
+                tiers.ORO.minPoints = Number(customTiers.ORO.minPoints) || 300;
+                tiers.ORO.minVisits = Number(customTiers.ORO.minVisits) || 30;
+                tiers.ORO.discount = Number(customTiers.ORO.discount) || 0.10;
+            }
+            // Platino
+            if (customTiers.PLATINO) {
+                tiers.PLATINO.minPoints = Number(customTiers.PLATINO.minPoints) || 600;
+                tiers.PLATINO.minVisits = Number(customTiers.PLATINO.minVisits) || 60;
+                tiers.PLATINO.discount = Number(customTiers.PLATINO.discount) || 0.15;
+            }
+
+            // Recalcular maxPoints y maxVisits dinámicamente según el siguiente nivel
+            tiers.BRONCE.maxPoints = tiers.PLATA.minPoints - 1;
+            tiers.BRONCE.maxVisits = tiers.PLATA.minVisits - 1;
+
+            tiers.PLATA.maxPoints = tiers.ORO.minPoints - 1;
+            tiers.PLATA.maxVisits = tiers.ORO.minVisits - 1;
+
+            tiers.ORO.maxPoints = tiers.PLATINO.minPoints - 1;
+            tiers.ORO.maxVisits = tiers.PLATINO.minVisits - 1;
+
+            return tiers;
+        }
+
+        return defaultTiers;
     }
 
-    getDiscountForTier(tierName) {
+    calculateTier(value, mode = null, business = null) {
+        const val = Number(value) || 0;
+        const biz = business || tenantManager.getActiveBusiness();
+        const activeMode = mode || biz?.loyaltyMode || 'POINTS';
+        const tiers = this.getBusinessTiers(biz);
+        
+        if (activeMode === 'VISITS') {
+            if (val >= tiers.PLATINO.minVisits) return tiers.PLATINO;
+            if (val >= tiers.ORO.minVisits) return tiers.ORO;
+            if (val >= tiers.PLATA.minVisits) return tiers.PLATA;
+            return tiers.BRONCE;
+        } else {
+            if (val >= tiers.PLATINO.minPoints) return tiers.PLATINO;
+            if (val >= tiers.ORO.minPoints) return tiers.ORO;
+            if (val >= tiers.PLATA.minPoints) return tiers.PLATA;
+            return tiers.BRONCE;
+        }
+    }
+
+    getDiscountForTier(tierName, business = null) {
         const name = (tierName || '').toUpperCase();
-        return TIERS[name]?.discount || TIERS.BRONCE.discount;
+        const biz = business || tenantManager.getActiveBusiness();
+        const tiers = this.getBusinessTiers(biz);
+        return tiers[name]?.discount || tiers.BRONCE.discount;
     }
 
-    getPointsNeededForNextTier(points) {
-        const pts = Number(points) || 0;
-        const currentTier = this.calculateTier(pts);
+    getPointsNeededForNextTier(value, mode = null, business = null) {
+        const val = Number(value) || 0;
+        const biz = business || tenantManager.getActiveBusiness();
+        const activeMode = mode || biz?.loyaltyMode || 'POINTS';
+        const tiers = this.getBusinessTiers(biz);
+        const currentTier = this.calculateTier(val, activeMode, biz);
         
         let nextTier = null;
-        if (currentTier.name === 'Bronce') nextTier = TIERS.PLATA;
-        else if (currentTier.name === 'Plata') nextTier = TIERS.ORO;
-        else if (currentTier.name === 'Oro') nextTier = TIERS.PLATINO;
+        if (currentTier.name === 'Bronce') nextTier = tiers.PLATA;
+        else if (currentTier.name === 'Plata') nextTier = tiers.ORO;
+        else if (currentTier.name === 'Oro') nextTier = tiers.PLATINO;
         
         if (!nextTier) {
             return { pointsNeeded: 0, nextTierName: null, progressPercent: 100 };
         }
         
-        const pointsNeeded = nextTier.minPoints - pts;
-        const range = nextTier.minPoints - currentTier.minPoints;
-        const progress = Math.min(100, Math.max(0, ((pts - currentTier.minPoints) / range) * 100));
+        const minVal = activeMode === 'VISITS' ? nextTier.minVisits : nextTier.minPoints;
+        const currentMinVal = activeMode === 'VISITS' ? currentTier.minVisits : currentTier.minPoints;
+        
+        const pointsNeeded = minVal - val;
+        const range = minVal - currentMinVal;
+        const progress = Math.min(100, Math.max(0, ((val - currentMinVal) / (range || 1)) * 100));
         
         return { pointsNeeded, nextTierName: nextTier.name, progressPercent: Math.round(progress) };
     }
@@ -258,17 +333,35 @@ class LoyaltyManager {
                         throw new Error("El jugador no existe.");
                     }
                     
-                    const currentPoints = playerDoc.data().loyaltyPoints || 0;
-                    if (currentPoints < pointsCost) {
-                        throw new Error(`Puntos insuficientes. Tienes ${currentPoints} de ${pointsCost} requeridos.`);
+                    const playerData = playerDoc.data();
+                    const loyaltyMap = playerData.loyalty || {};
+                    const bizLoyalty = loyaltyMap[businessId] || { points: 0, visits: 0, tier: 'Bronce' };
+
+                    const bizRef = doc(db, COLLECTIONS.BUSINESSES, businessId);
+                    const bizSnap = await transaction.get(bizRef);
+                    const bizMode = (bizSnap.exists() && bizSnap.data().loyaltyMode) || 'POINTS';
+
+                    const isVisits = bizMode === 'VISITS';
+                    const balance = isVisits ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
+
+                    if (balance < pointsCost) {
+                        throw new Error(`${isVisits ? 'Visitas' : 'Puntos'} insuficientes. Tienes ${balance} de ${pointsCost} requeridos.`);
                     }
 
-                    const nextPoints = currentPoints - pointsCost;
-                    const nextTier = this.calculateTier(nextPoints).name;
+                    const nextPoints = Math.max(0, (bizLoyalty.points || 0) - pointsCost);
+                    const nextVisits = isVisits ? Math.max(0, (bizLoyalty.visits || 0) - pointsCost) : (bizLoyalty.visits || 0);
+                    
+                    const valueForTier = isVisits ? nextVisits : nextPoints;
+                    const nextTier = this.calculateTier(valueForTier, bizMode).name;
+
+                    loyaltyMap[businessId] = {
+                        points: nextPoints,
+                        visits: nextVisits,
+                        tier: nextTier
+                    };
 
                     transaction.update(playerRef, {
-                        loyaltyPoints: nextPoints,
-                        loyaltyTier: nextTier
+                        loyalty: loyaltyMap
                     });
 
                     const redemptionRef = doc(db, COLLECTIONS.REDEMPTIONS, newRedemption.id);
@@ -284,13 +377,33 @@ class LoyaltyManager {
             const pIdx = players.findIndex(p => p.id === userId);
             if (pIdx === -1) throw new Error("Jugador no encontrado localmente.");
 
-            const currentPoints = players[pIdx].loyaltyPoints || 0;
-            if (currentPoints < pointsCost) {
-                throw new Error(`Puntos insuficientes. Tienes ${currentPoints} de ${pointsCost} requeridos.`);
+            const loyaltyMap = players[pIdx].loyalty || {};
+            const bizLoyalty = loyaltyMap[businessId] || { points: 0, visits: 0, tier: 'Bronce' };
+
+            const businesses = JSON.parse(localStorage.getItem('piu_businesses') || '[]');
+            const biz = businesses.find(b => b.id === businessId);
+            const bizMode = (biz && biz.loyaltyMode) || 'POINTS';
+
+            const isVisits = bizMode === 'VISITS';
+            const balance = isVisits ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
+
+            if (balance < pointsCost) {
+                throw new Error(`${isVisits ? 'Visitas' : 'Puntos'} insuficientes. Tienes ${balance} de ${pointsCost} requeridos.`);
             }
 
-            players[pIdx].loyaltyPoints = currentPoints - pointsCost;
-            players[pIdx].loyaltyTier = this.calculateTier(players[pIdx].loyaltyPoints).name;
+            const nextPoints = Math.max(0, (bizLoyalty.points || 0) - pointsCost);
+            const nextVisits = isVisits ? Math.max(0, (bizLoyalty.visits || 0) - pointsCost) : (bizLoyalty.visits || 0);
+
+            const valueForTier = isVisits ? nextVisits : nextPoints;
+            const nextTier = this.calculateTier(valueForTier, bizMode).name;
+
+            loyaltyMap[businessId] = {
+                points: nextPoints,
+                visits: nextVisits,
+                tier: nextTier
+            };
+
+            players[pIdx].loyalty = loyaltyMap;
             localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
 
             const localKey = `piu_redemptions_${userId}`;
@@ -335,48 +448,200 @@ class LoyaltyManager {
         return true;
     }
 
+    async cancelRedemption(redemptionId, businessId, refundPoints = false) {
+        if (isFirebaseAvailable && db) {
+            try {
+                const ref = doc(db, COLLECTIONS.REDEMPTIONS, redemptionId);
+                const redSnap = await getDoc(ref);
+                if (!redSnap.exists()) throw new Error("Canje no encontrado.");
+                const redData = redSnap.data();
+
+                if (refundPoints && redData.clientId) {
+                    // Devolver los puntos/visitas en una transacción
+                    const playerRef = doc(db, COLLECTIONS.PLAYERS, redData.clientId);
+                    await runTransaction(db, async (transaction) => {
+                        const playerDoc = await transaction.get(playerRef);
+                        if (playerDoc.exists()) {
+                            const playerData = playerDoc.data();
+                            const loyaltyMap = playerData.loyalty || {};
+                            const bizLoyalty = loyaltyMap[businessId] || { points: 0, visits: 0, tier: 'Bronce' };
+
+                            const bizRef = doc(db, COLLECTIONS.BUSINESSES, businessId);
+                            const bizSnap = await transaction.get(bizRef);
+                            const bizMode = (bizSnap.exists() && bizSnap.data().loyaltyMode) || 'POINTS';
+
+                            const pointsRefund = Number(redData.pointsCost) || 0;
+                            const isVisits = bizMode === 'VISITS';
+
+                            const nextPoints = (bizLoyalty.points || 0) + pointsRefund;
+                            const nextVisits = isVisits ? (bizLoyalty.visits || 0) + pointsRefund : (bizLoyalty.visits || 0);
+
+                            const valueForTier = isVisits ? nextVisits : nextPoints;
+                            const nextTier = this.calculateTier(valueForTier, bizMode).name;
+
+                            loyaltyMap[businessId] = {
+                                points: nextPoints,
+                                visits: nextVisits,
+                                tier: nextTier
+                            };
+
+                            transaction.update(playerRef, { loyalty: loyaltyMap });
+                        }
+                    });
+                }
+
+                await updateDoc(ref, {
+                    status: 'CANCELLED',
+                    cancelledAt: new Date().toISOString()
+                });
+            } catch (e) {
+                console.error("Error cancelando canje en Firebase:", e);
+                throw e;
+            }
+        } else {
+            // Local fallback
+            const players = JSON.parse(localStorage.getItem('piu_registered_players_cache') || '[]');
+            let foundClient = null;
+            let foundRedData = null;
+
+            for (const p of players) {
+                const localKey = `piu_redemptions_${p.id}`;
+                const list = JSON.parse(localStorage.getItem(localKey) || '[]');
+                const idx = list.findIndex(r => r.id === redemptionId);
+                if (idx !== -1) {
+                    foundRedData = list[idx];
+                    foundClient = p;
+                    list[idx].status = 'CANCELLED';
+                    list[idx].cancelledAt = new Date().toISOString();
+                    localStorage.setItem(localKey, JSON.stringify(list));
+                    break;
+                }
+            }
+
+            if (!foundRedData) throw new Error("Canje no encontrado localmente.");
+
+            if (refundPoints && foundClient) {
+                const loyaltyMap = foundClient.loyalty || {};
+                const bizLoyalty = loyaltyMap[businessId] || { points: 0, visits: 0, tier: 'Bronce' };
+
+                const businesses = JSON.parse(localStorage.getItem('piu_businesses') || '[]');
+                const biz = businesses.find(b => b.id === businessId);
+                const bizMode = (biz && biz.loyaltyMode) || 'POINTS';
+
+                const pointsRefund = Number(foundRedData.pointsCost) || 0;
+                const isVisits = bizMode === 'VISITS';
+
+                const nextPoints = (bizLoyalty.points || 0) + pointsRefund;
+                const nextVisits = isVisits ? (bizLoyalty.visits || 0) + pointsRefund : (bizLoyalty.visits || 0);
+
+                const valueForTier = isVisits ? nextVisits : nextPoints;
+                const nextTier = this.calculateTier(valueForTier, bizMode).name;
+
+                loyaltyMap[businessId] = {
+                    points: nextPoints,
+                    visits: nextVisits,
+                    tier: nextTier
+                };
+
+                foundClient.loyalty = loyaltyMap;
+                localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
+            }
+        }
+        return true;
+    }
+
     // ==========================================
     // AJUSTE MANUAL DE PUNTOS POR ADMIN
     // ==========================================
-    async adjustPlayerPoints(playerId, pointsChange, visitsChange, reason = '') {
-        const ptsChange = Number(pointsChange) || 0;
-        const vtsChange = Number(visitsChange) || 0;
+    async adjustPlayerPoints(businessId, playerId, pointsChange, visitsChange, reason = '') {
+        // Soporte de compatibilidad si se llama con la firma anterior (playerId, points, visits, reason)
+        let actualBusinessId = businessId;
+        let actualPlayerId = playerId;
+        let actualPointsChange = pointsChange;
+        let actualVisitsChange = visitsChange;
+        let actualReason = reason;
+
+        if (typeof businessId === 'string' && businessId.startsWith('p_')) {
+            // Se llamó con la firma anterior: adjustPlayerPoints(playerId, pointsChange, visitsChange, reason)
+            actualBusinessId = tenantManager.getActiveBusiness()?.id || '';
+            actualPlayerId = businessId;
+            actualPointsChange = playerId;
+            actualVisitsChange = pointsChange;
+            actualReason = visitsChange || '';
+        }
+
+        if (!actualBusinessId) throw new Error("ID de local no provisto para el ajuste.");
+        if (!actualPlayerId) throw new Error("ID de jugador no provisto para el ajuste.");
+
+        const ptsChange = Number(actualPointsChange) || 0;
+        const vtsChange = Number(actualVisitsChange) || 0;
 
         if (isFirebaseAvailable && db) {
             try {
-                const playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
+                const playerRef = doc(db, COLLECTIONS.PLAYERS, actualPlayerId);
+                const bizRef = doc(db, COLLECTIONS.BUSINESSES, actualBusinessId);
+
                 await runTransaction(db, async (transaction) => {
                     const playerDoc = await transaction.get(playerRef);
                     if (!playerDoc.exists()) throw new Error("Jugador no encontrado.");
                     
-                    const curPts = playerDoc.data().loyaltyPoints || 0;
-                    const curVts = playerDoc.data().loyaltyVisits || 0;
+                    const bizSnap = await transaction.get(bizRef);
+                    const bizMode = (bizSnap.exists() && bizSnap.data().loyaltyMode) || 'POINTS';
+
+                    const playerData = playerDoc.data();
+                    const loyaltyMap = playerData.loyalty || {};
+                    const bizLoyalty = loyaltyMap[actualBusinessId] || { points: 0, visits: 0, tier: 'Bronce' };
+
+                    const curPts = bizLoyalty.points || 0;
+                    const curVts = bizLoyalty.visits || 0;
                     
                     const newPts = Math.max(0, curPts + ptsChange);
                     const newVts = Math.max(0, curVts + vtsChange);
-                    const newTier = this.calculateTier(newPts).name;
+                    const valueForTier = bizMode === 'VISITS' ? newVts : newPts;
+                    const newTier = this.calculateTier(valueForTier, bizMode).name;
+
+                    loyaltyMap[actualBusinessId] = {
+                        points: newPts,
+                        visits: newVts,
+                        tier: newTier
+                    };
 
                     transaction.update(playerRef, {
-                        loyaltyPoints: newPts,
-                        loyaltyVisits: newVts,
-                        loyaltyTier: newTier
+                        loyalty: loyaltyMap
                     });
                 });
             } catch (err) {
-                console.error("Error ajustando puntos en Firebase:", err);
+                console.error("Error ajustando puntos por local en Firebase:", err);
                 throw err;
             }
         } else {
             const players = JSON.parse(localStorage.getItem('piu_registered_players_cache') || '[]');
-            const idx = players.findIndex(p => p.id === playerId);
+            const idx = players.findIndex(p => p.id === actualPlayerId);
             if (idx === -1) throw new Error("Jugador no encontrado localmente.");
 
-            const curPts = players[idx].loyaltyPoints || 0;
-            const curVts = players[idx].loyaltyVisits || 0;
+            const loyaltyMap = players[idx].loyalty || {};
+            const bizLoyalty = loyaltyMap[actualBusinessId] || { points: 0, visits: 0, tier: 'Bronce' };
 
-            players[idx].loyaltyPoints = Math.max(0, curPts + ptsChange);
-            players[idx].loyaltyVisits = Math.max(0, curVts + vtsChange);
-            players[idx].loyaltyTier = this.calculateTier(players[idx].loyaltyPoints).name;
+            const curPts = bizLoyalty.points || 0;
+            const curVts = bizLoyalty.visits || 0;
+
+            const newPts = Math.max(0, curPts + ptsChange);
+            const newVts = Math.max(0, curVts + vtsChange);
+
+            const businesses = JSON.parse(localStorage.getItem('piu_businesses') || '[]');
+            const biz = businesses.find(b => b.id === actualBusinessId);
+            const bizMode = (biz && biz.loyaltyMode) || 'POINTS';
+
+            const valueForTier = bizMode === 'VISITS' ? newVts : newPts;
+            const newTier = this.calculateTier(valueForTier, bizMode).name;
+
+            loyaltyMap[actualBusinessId] = {
+                points: newPts,
+                visits: newVts,
+                tier: newTier
+            };
+
+            players[idx].loyalty = loyaltyMap;
             localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
         }
 

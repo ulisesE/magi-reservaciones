@@ -4,41 +4,46 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## Funcionalidades recientes
+## Funcionalidades recientes y optimizaciones
 
-### Página principal por local
-- Al seleccionar una sucursal, el cliente llega a su dashboard público con imagen, dirección, ciudad, horario, contacto, WhatsApp, Maps y redes sociales configuradas.
-- Los enlaces compartibles (`?local=<id-del-local>`) abren directamente esa página principal.
-- Desde el dashboard, el botón **Ver horarios y reservar** lleva a la Vista Día para consultar la disponibilidad de las máquinas.
+### 🎁 Programa de Lealtad Flexible (Puntos vs Visitas)
+* **Modos de Acumulación**: Configurable por local desde la pestaña de administración:
+  * **Modo Consumo (Puntos)**: Acumula puntos de forma proporcional al costo total de la reserva (ej. $10 gastados = 1 punto).
+  * **Modo Visitas**: Otorga **1 Visita** (crédito) por cada reservación confirmada.
+* **Estructura Dinámica de Tiers**:
+  * 🟫 **Bronce**: 0-99 Pts / 0-9 Visitas (Sin descuento)
+  * ⬜ **Plata**: 100-299 Pts / 10-29 Visitas (**5% de descuento** automático)
+  * 🟨 **Oro**: 300-599 Pts / 30-59 Visitas (**10% de descuento** automático)
+  * 🟦 **Platino**: 600+ Pts / 60+ Visitas (**15% de descuento** automático)
+* **Catálogo de Premios por Sucursal**: Permite a los encargados registrar recompensas que los jugadores pueden canjear en mostrador utilizando sus puntos acumulados.
 
-### Reservas por intervalos configurables
-- Cada local configura su propio intervalo de reserva: 30, 45, 60, 90 o 120 minutos.
-- El formulario muestra **Hora de inicio** y **Duración**. Las duraciones son múltiplos del intervalo del local y se ajustan automáticamente a la hora de cierre.
-- Ejemplo: con intervalos de 30 minutos se puede elegir 30 min, 1 hora, 1 hora 30 min, 2 horas, etc.; con intervalos de 60 minutos se muestran 1, 2, 3 horas, etc.
+### 💳 Tarjeta de Identificación Digital (Pass) con QR
+* **Pase de Jugador**: Disponible desde la pestaña "Mi Perfil" del cliente.
+* **Código QR Interactivo**: Al hacer clic, abre un modal con un diseño futurista de **RFID Arcade Pass** personalizado con el color de su Tier de lealtad y el nombre dinámico del local activo.
+* **Escaneo**: Permite al staff en recepción escanear el QR desde el teléfono del jugador para registrar sus asistencias de inmediato.
 
-### Experiencia móvil
-- La navegación de vistas se agrupa en un menú hamburguesa en pantallas pequeñas.
-- Los controles de fecha de la Vista Día mantienen juntas las flechas anterior/siguiente para evitar saltos de línea.
+### ⚡ Rendimiento y Optimización de Base de Datos
+* **Paginación en Directorios**: El listado de clientes en la consola de administración incluye botones de navegación interactivos y carga fluida de hasta 150 registros en memoria para evitar saturar las lecturas en la base de datos.
+* **Suscripciones de Calendario por Rango**: Las consultas de reservas en Firestore se filtran dinámicamente según la vista activa (Día, Semana o Mes) en lugar de descargar todo el historial.
+* **Metadata Dinámica OpenGraph**: El servidor PowerShell detecta el local compartido en la URL (`?local=<id>`) y responde inyectando etiquetas `<meta>` dinámicas (nombre del local, banner y descripción) en lugar del nombre genérico de la aplicación.
 
 ---
 
-## 🌟 Novedades: Módulos de Administración de Catálogos por Negocio
+## 🌟 Módulos de Administración de Catálogos por Negocio
 
 ### 1. 🕹️ Catálogo de Máquinas por Negocio (CRUD y Reasignación)
 - **Agregar / Registrar**: Alta de nuevos gabinetes PIU con modelo (LX 55", TX 50", FX 42", etc.), versión de software, tarifa por hora, fotos y calibración de sensores FSR.
-- **Editar / Modificar**: Modifica en cualquier momento tarifas, estado operativo (*Disponible*, *En Mantenimiento*, *Fuera de Servicio*), y notas técnicas de los pads.
-- **Eliminar**: Baja definitiva de máquinas del inventario local.
-- **🔀 Reasignar / Transferir**: Permite mover o reasignar una máquina de un local a otro con 1 clic (ej. transferir un gabinete LX de *Pump Zone Centro* a *Arcade Galaxy Norte*).
+- **Editar / Modificar**: Modifica en cualquier momento tarifas, estado operativo (*Disponible*, *En Mantenimiento*, *Fuera de Servicio*), y notas de pads.
+- **🔀 Reasignar / Transferir**: Permite mover o reasignar una máquina de un local a otro con 1 clic.
 
 ### 2. 💿 Catálogo Maestro de Versiones de Software
-- Módulo centralizado para registrar, editar y catalogar versiones oficiales del juego (*Phoenix 2024*, *XX 20th Anniversary*, *Prime 2*, *Fiesta*, etc.).
-- Soporte para especificar año de lanzamiento, último parche (*v1.08.0*) y modos de juego compatibles (*Single, Double, Co-Op, Premium*).
+- Módulo centralizado para registrar, editar y catalogar versiones oficiales del juego (*Phoenix 2024*, *XX*, *Prime 2*, *Fiesta*, etc.), especificando modos compatibles.
 
 ### 3. 👥 Catálogo de Encargados y Personal por Local
-- El Superadmin puede crear, editar usuarios, contraseñas/PINs y reasignar encargados de sucursal.
+- El Superadmin puede crear y editar usuarios, contraseñas/PINs y reasignar encargados de sucursal.
 
-### 4. 🕺 Directorio de Clientes / Jugadores por Negocio
-- Los encargados administran a sus clientes habituales (Gamertags, teléfonos, WhatsApp directo, correo, nivel de juego y notas de calibración).
+### 4. 🕺 Directorio de Clientes / Jugadores con Privacidad de Datos
+- Panel con paginación optimizada para gestionar Gamertags, teléfonos y liga. **Los datos sensibles de contacto como teléfono y correo electrónico están estrictamente ocultos para otros clientes**, visibles solo para el Encargado y el Superadmin.
 
 ---
 
@@ -91,18 +96,20 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 ---
 
 ## 📅 Vistas de Calendario Disponibles
-1. **⚡ Vista Día (Grid de Horas × Máquinas)**: Matriz interactiva de horas (filas) vs máquinas (columnas). Celdas disponibles para reservar con 1 clic; celdas ocupadas con nombre del jugador y horario.
-2. **📊 Vista Semana**: Tarjetas de los 7 días con conteo de reservas, desglose de estados y atajo para reservar.
-3. **🗓️ Vista Mes**: Calendario mensual con badges numéricos de reservaciones por fecha.
+1. **⚡ Vista Día**: Matriz de horas (filas) vs máquinas (columnas). Celdas disponibles para reservar con 1 clic.
+2. **📊 Vista Semana**: Conteo de reservas diarias y atajos rápidos.
+3. **🗓️ Vista Mes**: Calendario con badges numéricos de reservaciones.
 
 ---
 
-## 🗄️ Catálogos Aislados en Firebase Firestore (Prefijo `piu_`):
-1. `piu_businesses`: Negocios y sucursales.
-2. `piu_staff_users`: Usuarios de Superadmin y Encargados asignados por negocio.
-3. `piu_machines`: Gabinetes PIU (LX 55", TX 50", FX, sensores FSR).
-4. `piu_reservations`: Solicitudes y reservaciones.
-5. `piu_operating_rules`: Horarios de apertura y reglas operativas por día.
-6. `piu_game_versions`: Versiones del juego (*Phoenix 2024*, *XX*, *Prime 2*).
-7. `piu_players`: Directorio de jugadores y Gamertags.
-8. `piu_audit_logs`: Bitácora de auditoría para encargados.
+## 🗄️ Estructura en Firebase Firestore (Prefijo `piu_`):
+1. `piu_businesses`: Negocios y sucursales (incluye configuración de lealtad: `loyaltyEnabled`, `loyaltyMode`, `pointsRatio`).
+2. `piu_staff_users`: Superadmin y Encargados.
+3. `piu_machines`: Gabinetes PIU.
+4. `piu_reservations`: Solicitudes y reservas.
+5. `piu_operating_rules`: Horarios y reglas operativas.
+6. `piu_game_versions`: Versiones del juego.
+7. `piu_players`: Jugadores y Gamertags (incluye `loyaltyPoints` y `loyaltyVisits`).
+8. `piu_rewards`: Catálogo de premios de lealtad por negocio.
+9. `piu_redemptions`: Solicitudes de canjes validadas.
+10. `piu_audit_logs`: Bitácora de auditoría para encargados.

@@ -7,11 +7,12 @@ import {
     isFirebaseAvailable, 
     COLLECTIONS, 
     collection, 
-    getDocs, 
-    setDoc, 
-    doc, 
-    updateDoc, 
-    deleteDoc, 
+    getDoc,
+    getDocs,
+    setDoc,
+    doc,
+    updateDoc,
+    deleteDoc,
     query, 
     where, 
     limit 
@@ -21,6 +22,8 @@ import { toast } from '../components/toast.js';
 import { loyaltyManager } from '../core/loyaltyManager.js';
 
 let currentClientsSearchQuery = '';
+let currentClientsPage = 1;
+const clientsPageSize = 15;
 
 class ClientDirectoryManager {
     constructor() {
@@ -29,22 +32,38 @@ class ClientDirectoryManager {
 
     async loadClients(searchQuery = '') {
         let loaded = [];
-        const limitVal = 15;
+        const limitVal = 150;
         
         if (isFirebaseAvailable && db) {
             try {
                 let q;
                 if (searchQuery) {
                     const term = searchQuery.trim().toLowerCase();
-                    const termPhone = term.replace(/\D/g, '');
-                    if (termPhone) {
-                        q = query(collection(db, COLLECTIONS.PLAYERS), where("phone", "==", termPhone), limit(limitVal));
-                    } else {
-                        q = query(collection(db, COLLECTIONS.PLAYERS), where("username", "==", term), limit(limitVal));
-                    }
                     
-                    let snap = await getDocs(q);
-                    snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                    // Si el término tiene el formato de un ID de jugador (p_...)
+                    if (term.startsWith('p_') || term.length > 15) {
+                        try {
+                            const docRef = doc(db, COLLECTIONS.PLAYERS, searchQuery.trim());
+                            const docSnap = await getDoc(docRef);
+                            if (docSnap.exists()) {
+                                loaded.push({ id: docSnap.id, ...docSnap.data() });
+                            }
+                        } catch (err) {
+                            console.warn("Error buscando cliente por ID:", err);
+                        }
+                    }
+
+                    if (loaded.length === 0) {
+                        const termPhone = term.replace(/\D/g, '');
+                        if (termPhone) {
+                            q = query(collection(db, COLLECTIONS.PLAYERS), where("phone", "==", termPhone), limit(limitVal));
+                        } else {
+                            q = query(collection(db, COLLECTIONS.PLAYERS), where("username", "==", term), limit(limitVal));
+                        }
+                        
+                        let snap = await getDocs(q);
+                        snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                    }
 
                     if (loaded.length === 0) {
                         // Prefijo de nombre
@@ -54,7 +73,7 @@ class ClientDirectoryManager {
                             where("name", "<=", searchQuery + '\uf8ff'),
                             limit(limitVal)
                         );
-                        snap = await getDocs(q);
+                        let snap = await getDocs(q);
                         snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
                     }
                 } else {
@@ -174,11 +193,23 @@ class ClientDirectoryManager {
 export const clientDirManager = new ClientDirectoryManager();
 
 export async function renderClientsView(container, queryVal = '') {
-    currentClientsSearchQuery = queryVal;
+    // Si la búsqueda cambia, reiniciar a página 1
+    if (queryVal !== currentClientsSearchQuery) {
+        currentClientsSearchQuery = queryVal;
+        currentClientsPage = 1;
+    }
+    
     const business = store.currentBusiness;
-    const clients = await clientDirManager.loadClients(currentClientsSearchQuery);
+    const allClients = await clientDirManager.loadClients(currentClientsSearchQuery);
     const reservations = store.getReservations();
     const isSuperAdmin = authManager.isSuperAdmin();
+
+    const totalCount = allClients.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / clientsPageSize));
+    if (currentClientsPage > totalPages) currentClientsPage = totalPages;
+
+    const startIdx = (currentClientsPage - 1) * clientsPageSize;
+    const pageClients = allClients.slice(startIdx, startIdx + clientsPageSize);
 
     container.innerHTML = `
         <div class="clients-view-wrapper animate-fade-in">
@@ -196,25 +227,32 @@ export async function renderClientsView(container, queryVal = '') {
             </div>
 
             <!-- Buscador -->
-            <div style="display:flex; gap:10px; margin-bottom:20px; max-width:600px;">
-                <input type="text" id="input-search-clients" class="cyber-input" placeholder="🔍 Buscar por nombre, GamerTag o teléfono..." value="${currentClientsSearchQuery}" style="flex:1;">
+            <div style="display:flex; gap:10px; margin-bottom:20px; max-width:600px; flex-wrap:wrap;">
+                <input type="text" id="input-search-clients" class="cyber-input" placeholder="🔍 Buscar por nombre, GamerTag o teléfono..." value="${currentClientsSearchQuery}" style="flex:1; min-width:200px;">
                 <button class="btn btn-secondary" id="btn-search-clients">Buscar</button>
+                <button class="btn btn-primary" id="btn-scan-client-qr" style="display:flex; align-items:center; gap:6px; background:var(--color-neon-lime); color:#000; font-weight:bold; border:none; box-shadow: 0 0 10px rgba(104,242,5,0.3);">
+                    <span>📸 Escanear QR</span>
+                </button>
                 ${currentClientsSearchQuery ? `<button class="btn btn-outline" id="btn-clear-search">Limpiar</button>` : ''}
             </div>
 
             <!-- Grid de Clientes -->
             <div class="clients-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:18px;">
-                ${clients.length === 0 ? `
-                    <div class="empty-state">
-                        <div class="empty-icon">👥</div>
+                ${pageClients.length === 0 ? `
+                    <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 48px;">
+                        <div class="empty-icon" style="font-size:3rem; margin-bottom:12px;">👥</div>
                         <h3>No hay jugadores registrados en la plataforma</h3>
-                        <p>Los jugadores pueden crear sus cuentas desde la pantalla principal o el Superadmin puede registrarlos.</p>
+                        <p style="color:var(--text-secondary);">Los jugadores pueden crear sus cuentas desde la pantalla principal o el encargado/superadmin puede registrarlos.</p>
                     </div>
-                ` : clients.map(c => {
+                ` : pageClients.map(c => {
                     const totalBookings = reservations.filter(r => (r.clientName || '').toLowerCase() === (c.name || '').toLowerCase()).length;
                     const cleanPhone = (c.phone || '').replace(/\D/g, '');
                     const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
-                    const tier = loyaltyManager.calculateTier(c.loyaltyPoints || 0);
+                    const activeMode = business ? business.loyaltyMode : 'POINTS';
+                    const activeBusinessId = business ? business.id : '';
+                    const bizLoyalty = (c.loyalty && activeBusinessId && c.loyalty[activeBusinessId]) ? c.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
+                    const valueForTier = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
+                    const tier = loyaltyManager.calculateTier(valueForTier, activeMode);
 
                     return `
                         <div class="client-card settings-card" style="padding:18px; display:flex; flex-direction:column; gap:12px;">
@@ -255,13 +293,17 @@ export async function renderClientsView(container, queryVal = '') {
                                     <span style="color:var(--piu-cyan);">${c.preferredMode || 'Single / Double'}</span>
                                 </div>
                                 ${business && business.loyaltyEnabled ? `
-                                    <div style="border-top:1px dashed rgba(255,255,255,0.1); padding-top:6px; margin-top:2px;">
-                                        <span style="color:var(--text-muted); font-weight:700;">🎁 Lealtad:</span>
-                                        <span class="badge ${tier.class}" style="font-size:0.72rem; padding: 2px 6px;">${tier.badge} ${tier.name}</span>
-                                        <strong style="color:var(--color-neon-lime); margin-left:6px;">${c.loyaltyPoints || 0} Pts</strong>
-                                        <span style="color:var(--text-secondary); margin-left:6px;">(${c.loyaltyVisits || 0} visitas)</span>
-                                    </div>
-                                ` : ''}
+                                     <div style="border-top:1px dashed rgba(255,255,255,0.1); padding-top:6px; margin-top:2px;">
+                                         <span style="color:var(--text-muted); font-weight:700;">🎁 Lealtad:</span>
+                                         <span class="badge ${tier.class}" style="font-size:0.72rem; padding: 2px 6px;">${tier.badge} ${tier.name}</span>
+                                         ${activeMode === 'VISITS' ? `
+                                             <strong style="color:var(--color-neon-lime); margin-left:6px;">${bizLoyalty.visits || 0} Visitas</strong>
+                                         ` : `
+                                             <strong style="color:var(--color-neon-lime); margin-left:6px;">${bizLoyalty.points || 0} Pts</strong>
+                                             <span style="color:var(--text-secondary); margin-left:6px;">(${bizLoyalty.visits || 0} visitas)</span>
+                                         `}
+                                     </div>
+                                 ` : ''}
                             </div>
 
                             ${c.notes ? `
@@ -271,19 +313,28 @@ export async function renderClientsView(container, queryVal = '') {
                             ` : ''}
 
                             <div style="display:flex; gap:8px; margin-top:auto; padding-top:8px; border-top:1px solid var(--border-color); flex-wrap:wrap;">
-                                <button class="btn btn-outline btn-xs btn-edit-client" data-id="${c.id}" style="flex:1;">
+                                <button class="btn btn-outline btn-xs btn-edit-client" data-id="${c.id}" style="flex:1; min-width:60px;">
                                     ✏️ Editar
                                 </button>
                                 ${business && business.loyaltyEnabled ? `
-                                    <button class="btn btn-secondary btn-xs btn-adjust-loyalty" data-id="${c.id}" style="flex:1;">
-                                        ⭐ Puntos
+                                    ${activeMode === 'VISITS' ? `
+                                        <button class="btn btn-success btn-xs btn-quick-visit" data-id="${c.id}" style="flex:1.5; background:var(--color-neon-lime); color:#000; font-weight:bold; border:none; min-width:110px;" title="Registrar 1 visita al instante">
+                                            ➕ Visita
+                                        </button>
+                                    ` : `
+                                        <button class="btn btn-success btn-xs btn-quick-spend" data-id="${c.id}" style="flex:1.5; background:var(--color-neon-lime); color:#000; font-weight:bold; border:none; min-width:110px;" title="Registrar compra y acumular puntos">
+                                            ➕ Consumo
+                                        </button>
+                                    `}
+                                    <button class="btn btn-secondary btn-xs btn-adjust-loyalty" data-id="${c.id}" style="flex:1; min-width:60px;">
+                                        ⭐ Ajustar
                                     </button>
-                                    <button class="btn btn-outline btn-xs btn-view-redemptions" data-id="${c.id}" style="flex:1;" title="Validar premios canjeados de este jugador">
+                                    <button class="btn btn-outline btn-xs btn-view-redemptions" data-id="${c.id}" style="flex:1; min-width:60px;" title="Validar premios canjeados de este jugador">
                                         🎁 Canjes
                                     </button>
                                 ` : ''}
                                 ${isSuperAdmin ? `
-                                    <button class="btn btn-danger btn-xs btn-delete-client" data-id="${c.id}" title="Eliminar jugador">
+                                    <button class="btn btn-danger btn-xs btn-delete-client" data-id="${c.id}" title="Eliminar jugador" style="flex:0.3; min-width:30px;">
                                         🗑️
                                     </button>
                                 ` : ''}
@@ -291,6 +342,17 @@ export async function renderClientsView(container, queryVal = '') {
                         </div>
                     `;
                 }).join('')}
+            </div>
+
+            <!-- Controles de Paginación -->
+            <div class="clients-pagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:24px; padding:12px 0; border-top:1px solid var(--border-color);">
+                <div style="font-size:0.85rem; color:var(--text-muted);">
+                    Jugadores <strong style="color:#ffffff;">${totalCount > 0 ? startIdx + 1 : 0}</strong> - <strong style="color:#ffffff;">${Math.min(startIdx + pageClients.length, totalCount)}</strong> de <strong style="color:#ffffff;">${totalCount}</strong>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-prev-clients-page" style="padding:6px 16px; font-size:0.8rem;" ${currentClientsPage === 1 ? 'disabled' : ''}>◀ Anterior</button>
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-next-clients-page" style="padding:6px 16px; font-size:0.8rem;" ${currentClientsPage === totalPages ? 'disabled' : ''}>Siguiente ▶</button>
+                </div>
             </div>
         </div>
     `;
@@ -311,6 +373,159 @@ export async function renderClientsView(container, queryVal = '') {
 
     clearBtn?.addEventListener('click', () => {
         renderClientsView(container, '');
+    });
+
+    // Escáner de QR por cámara
+    container.querySelector('#btn-scan-client-qr')?.addEventListener('click', () => {
+        const scannerId = "qr-reader-element";
+        modal.open({
+            title: 'Escanear Código QR de Jugador',
+            icon: '📷',
+            contentHtml: `
+                <div style="text-align:center; padding:10px;">
+                    <p style="margin-bottom:16px; font-size:0.9rem; color:var(--text-secondary);">Apunta la cámara de tu dispositivo hacia el QR del pase del jugador:</p>
+                    <div id="${scannerId}" style="width: 100%; max-width: 320px; margin: 0 auto; border: 2px dashed var(--color-neon-lime); border-radius: 8px; overflow: hidden; background:#000; box-shadow:0 0 15px rgba(104,242,5,0.15);"></div>
+                    <div id="qr-scan-feedback" style="margin-top:14px; font-size:0.85rem; color:var(--text-muted);">Iniciando cámara...</div>
+                </div>
+            `,
+            footerHtml: `<button class="btn btn-secondary" id="btn-close-scanner">Cancelar</button>`,
+            maxWidth: '360px'
+        });
+
+        const feedbackEl = document.getElementById('qr-scan-feedback');
+        let html5QrCodeScanner = null;
+
+        try {
+            if (typeof Html5Qrcode === 'undefined') {
+                feedbackEl.textContent = "Error: Librería de QR no cargada. Inténtalo de nuevo.";
+                feedbackEl.style.color = "var(--color-neon-lime)";
+                return;
+            }
+
+            html5QrCodeScanner = new Html5Qrcode(scannerId);
+            
+            const onScanSuccess = (decodedText) => {
+                feedbackEl.textContent = `¡QR Detectado! Procesando...`;
+                feedbackEl.style.color = "var(--color-neon-lime)";
+                
+                // Detener la cámara de manera segura y sincronizada
+                if (html5QrCodeScanner && html5QrCodeScanner.isScanning) {
+                    html5QrCodeScanner.stop().then(() => {
+                        modal.close();
+                        toast.success("¡Jugador escaneado exitosamente!");
+                        renderClientsView(container, decodedText.trim());
+                    }).catch(err => {
+                        console.warn("Falla al detener cámara en éxito:", err);
+                        modal.close();
+                        renderClientsView(container, decodedText.trim());
+                    });
+                } else {
+                    modal.close();
+                    renderClientsView(container, decodedText.trim());
+                }
+            };
+
+            const onScanFailure = () => {
+                // Silencioso durante la búsqueda de fotogramas
+            };
+
+            // Listar cámaras para soportar laptops, PCs y móviles por igual
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length > 0) {
+                    // Buscar cámara trasera en móviles, si no usar la primera disponible
+                    const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('trasera') || d.label.toLowerCase().includes('environment'));
+                    const cameraId = backCam ? backCam.id : devices[0].id;
+                    
+                    html5QrCodeScanner.start(
+                        cameraId,
+                        {
+                            fps: 10,
+                            qrbox: { width: 220, height: 220 }
+                        },
+                        onScanSuccess,
+                        onScanFailure
+                    ).then(() => {
+                        feedbackEl.textContent = "Buscando código QR...";
+                        feedbackEl.style.color = "var(--piu-cyan)";
+                    }).catch(err => {
+                        console.error(err);
+                        feedbackEl.textContent = "Error al iniciar la cámara seleccionada. Concede permisos.";
+                        feedbackEl.style.color = "red";
+                    });
+                } else {
+                    // Si getCameras falla o viene vacío, intentar por facingMode como fallback directo
+                    html5QrCodeScanner.start(
+                        { facingMode: "environment" },
+                        {
+                            fps: 10,
+                            qrbox: { width: 220, height: 220 }
+                        },
+                        onScanSuccess,
+                        onScanFailure
+                    ).then(() => {
+                        feedbackEl.textContent = "Buscando código QR...";
+                        feedbackEl.style.color = "var(--piu-cyan)";
+                    }).catch(err => {
+                        console.error(err);
+                        feedbackEl.textContent = "No se encontraron cámaras compatibles.";
+                        feedbackEl.style.color = "red";
+                    });
+                }
+            }).catch(err => {
+                console.warn("No se pudieron listar cámaras, usando fallback...", err);
+                // Fallback directo
+                html5QrCodeScanner.start(
+                    { facingMode: "environment" },
+                    {
+                        fps: 10,
+                        qrbox: { width: 220, height: 220 }
+                    },
+                    onScanSuccess,
+                    onScanFailure
+                ).then(() => {
+                    feedbackEl.textContent = "Buscando código QR...";
+                    feedbackEl.style.color = "var(--piu-cyan)";
+                }).catch(e => {
+                    feedbackEl.textContent = "Error al acceder a la cámara.";
+                    feedbackEl.style.color = "red";
+                });
+            });
+
+        } catch (e) {
+            console.error(e);
+            feedbackEl.textContent = "Error inesperado al arrancar el escáner.";
+        }
+
+        document.getElementById('btn-close-scanner').onclick = () => {
+            if (html5QrCodeScanner && html5QrCodeScanner.isScanning) {
+                html5QrCodeScanner.stop().then(() => {
+                    modal.close();
+                }).catch(err => {
+                    console.warn("Falla al detener cámara al cerrar:", err);
+                    modal.close();
+                });
+            } else {
+                modal.close();
+            }
+        };
+    });
+
+    // Paginación click
+    const prevPageBtn = container.querySelector('#btn-prev-clients-page');
+    const nextPageBtn = container.querySelector('#btn-next-clients-page');
+
+    prevPageBtn?.addEventListener('click', () => {
+        if (currentClientsPage > 1) {
+            currentClientsPage--;
+            renderClientsView(container, currentClientsSearchQuery);
+        }
+    });
+
+    nextPageBtn?.addEventListener('click', () => {
+        if (currentClientsPage < totalPages) {
+            currentClientsPage++;
+            renderClientsView(container, currentClientsSearchQuery);
+        }
     });
 
     // Evento Registrar
@@ -335,7 +550,7 @@ export async function renderClientsView(container, queryVal = '') {
     container.querySelectorAll('.btn-edit-client').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = btn.dataset.id;
-            const client = clients.find(c => c.id === id);
+            const client = allClients.find(c => c.id === id);
             if (client) openClientFormModal(client, container);
         });
     });
@@ -343,7 +558,7 @@ export async function renderClientsView(container, queryVal = '') {
     container.querySelectorAll('.btn-adjust-loyalty').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = btn.dataset.id;
-            const client = clients.find(c => c.id === id);
+            const client = allClients.find(c => c.id === id);
             if (client) openAdjustPointsModal(client, container);
         });
     });
@@ -351,8 +566,58 @@ export async function renderClientsView(container, queryVal = '') {
     container.querySelectorAll('.btn-view-redemptions').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = btn.dataset.id;
-            const client = clients.find(c => c.id === id);
+            const client = allClients.find(c => c.id === id);
             if (client) openClientRedemptionsModal(client, business.id, container);
+        });
+    });
+
+    // Registrar Visita Rápida (1 visita/punto al instante)
+    container.querySelectorAll('.btn-quick-visit').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            const client = allClients.find(c => c.id === id);
+            if (!client) return;
+
+            if (confirm(`¿Registrar visita para ${client.name}? Esto le sumará 1 visita y 1 punto/crédito de lealtad.`)) {
+                try {
+                    await loyaltyManager.adjustPlayerPoints(business.id, client.id, 1, 1, 'Registro rápido de visita en recepción');
+                    toast.success(`¡Visita registrada para ${client.name}!`);
+                    renderClientsView(container, currentClientsSearchQuery);
+                } catch (e) {
+                    toast.error(e.message);
+                }
+            }
+        });
+    });
+
+    // Registrar Consumo Rápido (Calcula puntos según ratio)
+    container.querySelectorAll('.btn-quick-spend').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            const client = allClients.find(c => c.id === id);
+            if (!client) return;
+
+            const spentStr = prompt(`Registrar consumo para ${client.name}.\nIngresa el monto gastado en el local ($):`);
+            if (spentStr === null) return; // Cancelado
+
+            const spent = parseFloat(spentStr);
+            if (isNaN(spent) || spent <= 0) {
+                toast.error("Por favor ingresa un monto válido mayor a 0.");
+                return;
+            }
+
+            const ratio = Number(business.pointsRatio) || 10;
+            const ptsEarned = Math.floor(spent / ratio);
+
+            if (confirm(`Registrando $${spent.toFixed(2)}. Esto equivale a +${ptsEarned} puntos de lealtad (Ratio: ${ratio}) y +1 visita. ¿Confirmar?`)) {
+                try {
+                    await loyaltyManager.adjustPlayerPoints(business.id, client.id, ptsEarned, 1, `Consumo registrado en local: $${spent}`);
+                    toast.success(`¡Consumo registrado! +${ptsEarned} puntos acreditados a ${client.name}.`);
+                    renderClientsView(container, currentClientsSearchQuery);
+                } catch (e) {
+                    toast.error(e.message);
+                }
+            }
         });
     });
 }
@@ -456,12 +721,15 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
 }
 
 function openAdjustPointsModal(client, mainContainer) {
+    const activeBusinessId = store.currentBusiness?.id || '';
+    const bizLoyalty = (client.loyalty && activeBusinessId && client.loyalty[activeBusinessId]) ? client.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
+
     const contentHtml = `
         <form id="form-adjust-loyalty" class="cyber-form">
             <p style="font-size:0.9rem; color:var(--text-secondary);">Ajustando puntos para <strong>${client.name}</strong> (@${client.username || 'gamertag'})</p>
             <div style="background:var(--bg-dark-700); padding:10px; border-radius:4px; margin-bottom:12px; font-size:0.85rem;">
-                Puntos actuales: <strong style="color:var(--color-neon-lime);">${client.loyaltyPoints || 0} Pts</strong><br>
-                Visitas actuales: <strong style="color:var(--piu-cyan);">${client.loyaltyVisits || 0}</strong>
+                Puntos actuales: <strong style="color:var(--color-neon-lime);">${bizLoyalty.points || 0} Pts</strong><br>
+                Visitas actuales: <strong style="color:var(--piu-cyan);">${bizLoyalty.visits || 0}</strong>
             </div>
             
             <div class="form-row grid-2">
@@ -508,7 +776,7 @@ function openAdjustPointsModal(client, mainContainer) {
         }
 
         try {
-            await loyaltyManager.adjustPlayerPoints(client.id, ptsChange, vtsChange, reason);
+            await loyaltyManager.adjustPlayerPoints(store.currentBusiness?.id, client.id, ptsChange, vtsChange, reason);
             toast.success("Puntos/Visitas ajustados correctamente.");
             modal.close();
             renderClientsView(mainContainer, currentClientsSearchQuery);
@@ -520,7 +788,7 @@ function openAdjustPointsModal(client, mainContainer) {
 
 async function openClientRedemptionsModal(client, businessId, mainContainer) {
     const redemptions = await loyaltyManager.getRedemptions(client.id);
-    const bizRedemptions = redemptions.filter(r => r.businessId === businessId);
+    const bizRedemptions = redemptions.filter(r => r.businessId === businessId && r.status !== 'CANCELLED');
 
     const contentHtml = `
         <div class="client-redemptions-dialog" style="max-height:400px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
@@ -546,11 +814,21 @@ async function openClientRedemptionsModal(client, businessId, mainContainer) {
                         </div>
                         <div>
                             ${isPending ? `
-                                <button class="btn btn-success btn-xs btn-claim-voucher" data-red-id="${r.id}">
-                                    ✔️ Entregar Premio
-                                </button>
+                                <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch;">
+                                    <button class="btn btn-success btn-xs btn-claim-voucher" data-red-id="${r.id}" style="width:100%;">
+                                        ✔️ Entregar
+                                    </button>
+                                    <button class="btn btn-outline btn-xs btn-cancel-voucher" data-red-id="${r.id}" style="width:100%; border-color:var(--color-neon-lime); color:var(--color-neon-lime);" title="Cancelar canje sin devolver puntos">
+                                        ❌ Cancelar
+                                    </button>
+                                    <button class="btn btn-danger btn-xs btn-refund-voucher" data-red-id="${r.id}" style="width:100%;" title="Cancelar y reembolsar puntos">
+                                        🔄 Devolver
+                                    </button>
+                                </div>
                             ` : `
-                                <span class="badge badge-dark" style="color:var(--text-muted); font-size:0.75rem;">Entregado</span>
+                                <span class="badge ${r.status === 'CANCELLED' ? 'badge-danger' : 'badge-dark'}" style="font-size:0.75rem;">
+                                    ${r.status === 'CANCELLED' ? 'Cancelado' : 'Entregado'}
+                                </span>
                             `}
                         </div>
                     </div>
@@ -583,6 +861,38 @@ async function openClientRedemptionsModal(client, businessId, mainContainer) {
                 openClientRedemptionsModal(client, businessId, mainContainer);
             } catch (e) {
                 toast.error(e.message);
+            }
+        };
+    });
+
+    modalEl.querySelectorAll('.btn-cancel-voucher').forEach(btn => {
+        btn.onclick = async () => {
+            const redId = btn.dataset.redId;
+            if (confirm("¿Estás seguro de cancelar este canje? Los puntos/visitas NO se le devolverán al jugador.")) {
+                try {
+                    await loyaltyManager.cancelRedemption(redId, businessId, false);
+                    toast.success("¡Canje cancelado!");
+                    modal.close();
+                    openClientRedemptionsModal(client, businessId, mainContainer);
+                } catch (e) {
+                    toast.error(e.message);
+                }
+            }
+        };
+    });
+
+    modalEl.querySelectorAll('.btn-refund-voucher').forEach(btn => {
+        btn.onclick = async () => {
+            const redId = btn.dataset.redId;
+            if (confirm("¿Estás seguro de cancelar este canje y devolver los puntos/visitas al saldo del jugador?")) {
+                try {
+                    await loyaltyManager.cancelRedemption(redId, businessId, true);
+                    toast.success("¡Canje cancelado y puntos devueltos!");
+                    modal.close();
+                    openClientRedemptionsModal(client, businessId, mainContainer);
+                } catch (e) {
+                    toast.error(e.message);
+                }
             }
         };
     });

@@ -481,15 +481,22 @@ export function renderBusinessView(container) {
                         </div>
 
                         <div class="settings-form-body">
-                            <div class="form-row grid-2">
+                            <div class="form-row grid-3">
                                 <div class="form-group">
                                     <label for="biz-loyalty-enabled"><span class="neon-arrow">◆</span> Programa de Lealtad</label>
                                     <select id="biz-loyalty-enabled" class="cyber-select">
-                                        <option value="true" ${business.loyaltyEnabled ? 'selected' : ''}>✅ ACTIVO - Clientes acumulan visitas y puntos</option>
+                                        <option value="true" ${business.loyaltyEnabled ? 'selected' : ''}>✅ ACTIVO - Configuración Habilitada</option>
                                         <option value="false" ${!business.loyaltyEnabled ? 'selected' : ''}>❌ INACTIVO - Programa deshabilitado</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
+                                    <label for="biz-loyalty-mode"><span class="neon-arrow">◆</span> Modo del Programa</label>
+                                    <select id="biz-loyalty-mode" class="cyber-select">
+                                        <option value="POINTS" ${business.loyaltyMode !== 'VISITS' ? 'selected' : ''}>💰 Por Consumo (Puntos)</option>
+                                        <option value="VISITS" ${business.loyaltyMode === 'VISITS' ? 'selected' : ''}>📅 Por Cantidad de Visitas</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="group-points-ratio" style="${business.loyaltyMode === 'VISITS' ? 'display:none;' : ''}">
                                     <label for="biz-points-ratio"><span class="neon-arrow">◆</span> Tasa de Acumulación (Puntos)</label>
                                     <input type="number" id="biz-points-ratio" class="cyber-input" value="${business.pointsRatio || 10}" min="1" placeholder="Ej. 10 ($10 gastados = 1 punto)">
                                     <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:4px;">1 punto otorgado por cada X unidades de tu moneda consumidas.</small>
@@ -865,6 +872,19 @@ export function renderBusinessView(container) {
         });
     });
 
+    // Alternar visibilidad de ratio de puntos según modo de lealtad
+    const loyaltyModeSelect = container.querySelector('#biz-loyalty-mode');
+    const pointsRatioGroup = container.querySelector('#group-points-ratio');
+    if (loyaltyModeSelect && pointsRatioGroup) {
+        loyaltyModeSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'VISITS') {
+                pointsRatioGroup.style.display = 'none';
+            } else {
+                pointsRatioGroup.style.display = 'block';
+            }
+        });
+    }
+
     // =========================================================================
     // GUARDAR TODAS LAS CONFIGURACIONES DEL LOCAL
     // =========================================================================
@@ -920,6 +940,7 @@ export function renderBusinessView(container) {
             wifiPassword: container.querySelector('#biz-wifi-pass').value.trim(),
             disableChangeLocal: container.querySelector('#biz-disable-change-local').checked,
             loyaltyEnabled: container.querySelector('#biz-loyalty-enabled').value === 'true',
+            loyaltyMode: container.querySelector('#biz-loyalty-mode').value,
             pointsRatio: parseInt(container.querySelector('#biz-points-ratio').value, 10) || 10
         };
 

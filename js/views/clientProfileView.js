@@ -4,6 +4,7 @@ import { authManager } from '../core/authManager.js';
 import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { toast } from '../components/toast.js';
+import { modal } from '../components/modal.js';
 import { openLoginModal } from '../components/header.js';
 import { openBookingModal, showReservationTicket } from './clientBookingModal.js';
 import { formatFriendlyDate, format12Hour, formatDuration } from '../core/timeUtils.js';
@@ -82,7 +83,8 @@ export async function renderClientProfileView(container) {
     let myRedemptions = [];
     if (business.loyaltyEnabled) {
         try {
-            myRedemptions = await loyaltyManager.getRedemptions(currentUser.id);
+            const rawRed = await loyaltyManager.getRedemptions(currentUser.id);
+            myRedemptions = rawRed.filter(r => r.status !== 'CANCELLED');
         } catch (e) {
             console.warn("Error cargando canjes:", e);
         }
@@ -94,9 +96,14 @@ export async function renderClientProfileView(container) {
         .filter(r => r.status === 'CONFIRMED')
         .reduce((sum, r) => sum + ((r.durationMinutes || 60) / 60), 0);
 
-    // Calcular estatus de lealtad
-    const currentTier = loyaltyManager.calculateTier(currentUser.loyaltyPoints || 0);
-    const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(currentUser.loyaltyPoints || 0);
+    // Calcular estatus de lealtad según el modo activo y el local
+    const activeMode = business.loyaltyMode || 'POINTS';
+    const activeBusinessId = business ? business.id : '';
+    const bizLoyalty = (currentUser.loyalty && activeBusinessId && currentUser.loyalty[activeBusinessId]) ? currentUser.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
+
+    const valueForTier = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
+    const currentTier = loyaltyManager.calculateTier(valueForTier, activeMode);
+    const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(valueForTier, activeMode);
     const catalogRewards = business.loyaltyEnabled ? await loyaltyManager.getRewardsCatalog(business.id) : [];
     const discountPct = loyaltyManager.getDiscountForTier(currentTier.name);
     const discountText = discountPct > 0 ? `${discountPct * 100}%` : '';
@@ -129,21 +136,35 @@ export async function renderClientProfileView(container) {
                         </div>
                     </div>
 
-                    <!-- Estadísticas Rápidas -->
-                    <div style="display:flex; gap:16px; flex-wrap:wrap;">
-                        ${business.loyaltyEnabled ? `
-                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
-                                <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Puntos Lealtad</span>
-                                <strong style="font-size:1.3rem; color:var(--color-neon-lime);">${currentUser.loyaltyPoints || 0} Pts</strong>
+                    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+                        <!-- Código QR de Jugador -->
+                        <div id="player-qr-container" style="display:flex; align-items:center; gap:12px; background:var(--bg-dark-700); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border-color); box-shadow:0 0 10px rgba(0,0,0,0.3); cursor:pointer;" title="Haz clic para ampliar QR">
+                            <div style="text-align:left;">
+                                <span style="font-size:0.75rem; color:var(--text-muted); display:block; font-weight:700;">PASS JUGADOR</span>
+                                <small style="font-size:0.65rem; color:var(--piu-cyan); display:block; margin-top:2px;">Escanea en recepción</small>
+                                <code style="font-size:0.7rem; color:var(--text-muted); display:block; margin-top:4px; font-family:var(--font-mono);">${currentUser.id.slice(-6).toUpperCase()}</code>
                             </div>
-                        ` : ''}
-                        <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
-                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas</span>
-                            <strong style="font-size:1.3rem; color:var(--piu-cyan);">${currentUser.loyaltyVisits || 0}</strong>
+                            <div style="background:#ffffff; padding:4px; border-radius:4px; display:flex; align-items:center; justify-content:center;">
+                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${currentUser.id}" alt="QR ID Jugador" style="width:48px; height:48px; display:block;">
+                            </div>
                         </div>
-                        <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
-                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas Jugadas</span>
-                            <strong style="font-size:1.3rem; color:#ffffff;">${totalHours}h</strong>
+
+                        <!-- Estadísticas Rápidas -->
+                        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                            ${business.loyaltyEnabled ? `
+                                <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Puntos Lealtad</span>
+                                    <strong style="font-size:1.3rem; color:var(--color-neon-lime);">${bizLoyalty.points || 0} Pts</strong>
+                                </div>
+                            ` : ''}
+                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                                <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas</span>
+                                <strong style="font-size:1.3rem; color:var(--piu-cyan);">${bizLoyalty.visits || 0}</strong>
+                            </div>
+                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                                <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas Jugadas</span>
+                                <strong style="font-size:1.3rem; color:#ffffff;">${totalHours}h</strong>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -247,9 +268,14 @@ export async function renderClientProfileView(container) {
                                             ${currentTier.badge} ${currentTier.name}
                                         </span>
                                     </span>
-                                    <span style="font-size:0.82rem; color:var(--text-muted);">${currentUser.loyaltyVisits || 0} Visitas</span>
+                                    <span style="font-size:0.82rem; color:var(--text-muted);">${bizLoyalty.visits || 0} Visitas</span>
                                 </div>
-                                <div style="font-size:1.7rem; font-weight:bold; color:var(--color-neon-lime);">${currentUser.loyaltyPoints || 0} <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:normal;">Puntos acumulados</span></div>
+                                <div style="font-size:1.7rem; font-weight:bold; color:var(--color-neon-lime);">
+                                    ${activeMode === 'VISITS' 
+                                        ? `${bizLoyalty.visits || 0} <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:normal;">Visitas acumuladas</span>`
+                                        : `${bizLoyalty.points || 0} <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:normal;">Puntos acumulados</span>`
+                                    }
+                                </div>
                                 ${discountText ? `<div style="font-size:0.82rem; color:var(--piu-cyan); font-weight:bold; margin-top:6px;">⚡ ¡Tienes ${discountText} de descuento directo en tus reservas!</div>` : ''}
                             </div>
 
@@ -258,7 +284,7 @@ export async function renderClientProfileView(container) {
                                 <div>
                                     <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-secondary); margin-bottom:6px;">
                                         <span>Progreso a <strong>Nivel ${nextTierName}</strong></span>
-                                        <span>Faltan <strong>${pointsNeeded}</strong> Pts</span>
+                                        <span>Faltan <strong>${pointsNeeded}</strong> ${activeMode === 'VISITS' ? 'Visitas' : 'Pts'}</span>
                                     </div>
                                     <div style="background:rgba(255,255,255,0.06); height:12px; border-radius:10px; overflow:hidden;">
                                         <div style="width:${progressPercent}%; background:linear-gradient(90deg, ${currentTier.color} 0%, var(--color-neon-lime) 100%); height:100%; transition: width 0.4s ease;"></div>
@@ -274,10 +300,17 @@ export async function renderClientProfileView(container) {
                             <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
                                 <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles y Beneficios:</h4>
                                 <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
-                                    <li>🟫 <strong>Bronce</strong> (0-99 pts): Sin descuento.</li>
-                                    <li>⬜ <strong>Plata</strong> (100-299 pts): <strong>5% de descuento</strong> automático en reservas.</li>
-                                    <li>🟨 <strong>Oro</strong> (300-599 pts): <strong>10% de descuento</strong> automático en reservas.</li>
-                                    <li>🟦 <strong>Platino</strong> (600+ pts): <strong>15% de descuento</strong> automático en reservas.</li>
+                                    ${activeMode === 'VISITS' ? `
+                                        <li>🟫 <strong>Bronce</strong> (0-9 visitas): Sin descuento.</li>
+                                        <li>⬜ <strong>Plata</strong> (10-29 visitas): <strong>5% de descuento</strong> automático en reservas.</li>
+                                        <li>🟨 <strong>Oro</strong> (30-59 visitas): <strong>10% de descuento</strong> automático en reservas.</li>
+                                        <li>🟦 <strong>Platino</strong> (60+ visitas): <strong>15% de descuento</strong> automático en reservas.</li>
+                                    ` : `
+                                        <li>🟫 <strong>Bronce</strong> (0-99 pts): Sin descuento.</li>
+                                        <li>⬜ <strong>Plata</strong> (100-299 pts): <strong>5% de descuento</strong> automático en reservas.</li>
+                                        <li>🟨 <strong>Oro</strong> (300-599 pts): <strong>10% de descuento</strong> automático en reservas.</li>
+                                        <li>🟦 <strong>Platino</strong> (600+ pts): <strong>15% de descuento</strong> automático en reservas.</li>
+                                    `}
                                 </ul>
                             </div>
                         </div>
@@ -290,14 +323,14 @@ export async function renderClientProfileView(container) {
                                 ${catalogRewards.length === 0 ? `
                                     <p style="color:var(--text-muted); font-size:0.9rem; text-align:center; padding:20px;">No hay premios disponibles en el catálogo en este momento.</p>
                                 ` : catalogRewards.map(r => {
-                                    const canRedeem = (currentUser.loyaltyPoints || 0) >= r.costPoints;
+                                    const canRedeem = (bizLoyalty.points || 0) >= r.costPoints;
                                     return `
                                         <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; gap:10px;">
                                             <div style="text-align:left;">
                                                 <span style="font-size:1.3rem; margin-right:6px;">${r.icon || '🎁'}</span>
                                                 <strong style="color:#fff; font-size:0.95rem;">${r.name}</strong>
                                                 <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${r.description || ''}</div>
-                                                <div style="margin-top:4px;"><span class="badge badge-success" style="font-weight:bold;">${r.costPoints} Puntos</span></div>
+                                                <div style="margin-top:4px;"><span class="badge badge-success" style="font-weight:bold;">${r.costPoints} ${activeMode === 'VISITS' ? 'Visitas' : 'Puntos'}</span></div>
                                             </div>
                                             <div>
                                                 <button class="btn btn-primary btn-xs btn-redeem-reward glow-red" data-rew-id="${r.id}" ${canRedeem ? '' : 'disabled'} style="font-size:0.75rem;">
@@ -426,6 +459,53 @@ export async function renderClientProfileView(container) {
 
         </div>
     `;
+
+    // Código QR expandible al hacer clic
+    container.querySelector('#player-qr-container')?.addEventListener('click', () => {
+        const qrLargeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${currentUser.id}`;
+        modal.open({
+            title: 'Tarjeta de Identificación de Jugador',
+            icon: '💳',
+            contentHtml: `
+                <div style="padding: 8px;">
+                    <div class="cyber-pass-card" style="background: linear-gradient(135deg, #0d111a 0%, #151d30 100%); border: 2px solid ${currentTier.color}; box-shadow: 0 0 25px ${currentTier.color}44; border-radius: 12px; padding: 24px; text-align: center; position: relative; overflow: hidden;">
+                        <!-- Marca de Agua Decorativa -->
+                        <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: ${currentTier.color}0b; border-radius: 50%; border: 1px solid ${currentTier.color}15;"></div>
+                        
+                        <div style="font-family: var(--font-heading); font-size: 1rem; color: #fff; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight:700;">
+                            🎮 ${business ? business.name : 'PIU PHOENIX'} PASS
+                        </div>
+                        
+                        <div style="background: #ffffff; padding: 12px; border-radius: 8px; display: inline-block; margin-bottom: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                            <img src="${qrLargeUrl}" alt="QR Pass" style="width: 180px; height: 180px; display: block;">
+                        </div>
+                        
+                        <div style="text-align: left; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 6px; border-left: 3px solid ${currentTier.color}; border: 1px solid var(--border-color); border-left: 3px solid ${currentTier.color};">
+                            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight:700; letter-spacing:1px;">GamerTag</div>
+                            <strong style="font-size: 1.15rem; color: #ffffff;">@${currentUser.username || 'gamertag'}</strong>
+                            
+                            <div style="display: flex; justify-content: space-between; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+                                <div>
+                                    <span style="font-size: 0.65rem; color: var(--text-muted); display: block; text-transform: uppercase; font-weight:700;">ID Jugador</span>
+                                    <code style="font-size: 0.78rem; color: var(--piu-cyan); font-family: var(--font-mono); font-weight:700;">${currentUser.id.toUpperCase()}</code>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span style="font-size: 0.65rem; color: var(--text-muted); display: block; text-transform: uppercase; font-weight:700;">Nivel Lealtad</span>
+                                    <span style="font-size: 0.78rem; color: ${currentTier.color}; font-weight: bold;">${currentTier.badge} ${currentTier.name}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <small style="color: var(--text-secondary); font-size: 0.72rem; display: block; margin-top: 14px; line-height: 1.3;">Presenta esta tarjeta digital en recepción para registrar tus visitas y validar premios.</small>
+                    </div>
+                </div>
+            `,
+            footerHtml: `<button class="btn btn-secondary" id="btn-close-qr-modal">Cerrar</button>`,
+            maxWidth: '400px'
+        });
+        
+        document.getElementById('btn-close-qr-modal').onclick = () => modal.close();
+    });
 
     // Eventos de Pestañas
     const tabs = container.querySelectorAll('.btn-profile-tab');

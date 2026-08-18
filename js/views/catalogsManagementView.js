@@ -86,6 +86,10 @@ export async function renderCatalogsManagementView(container) {
         });
     });
 
+    container.querySelector('#btn-edit-tiers')?.addEventListener('click', () => {
+        openConfigureTiersModal(business, container);
+    });
+
     // ==========================================
     // Eventos de Accesorios / Hardware (Local)
     // ==========================================
@@ -394,6 +398,10 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
     }
 
     if (tab === 'REWARDS') {
+        const isVisitsMode = store.currentBusiness?.loyaltyMode === 'VISITS';
+        const activeMode = currentBusiness.loyaltyMode || 'POINTS';
+        const tiers = loyaltyManager.getBusinessTiers(currentBusiness);
+
         return `
             <div class="settings-card">
                 <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -415,7 +423,7 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
                             <tr>
                                 <th>Icono</th>
                                 <th>Nombre del Premio</th>
-                                <th>Costo (Puntos)</th>
+                                <th>Costo (${isVisitsMode ? 'Visitas' : 'Puntos'})</th>
                                 <th>Descripción</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
@@ -428,7 +436,7 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
                                     <tr>
                                         <td style="font-size:1.5rem; text-align:center;">${r.icon || '🎁'}</td>
                                         <td><strong style="color:#ffffff;">${r.name}</strong></td>
-                                        <td><span class="badge badge-success" style="font-weight:bold; font-size:0.85rem;">${r.costPoints} Puntos</span></td>
+                                        <td><span class="badge badge-success" style="font-weight:bold; font-size:0.85rem;">${r.costPoints} ${isVisitsMode ? 'Visitas' : 'Puntos'}</span></td>
                                         <td style="font-size:0.82rem; color:var(--text-secondary);">${r.description || 'Sin descripción'}</td>
                                         <td>
                                             <span class="badge ${isActive ? 'badge-success' : 'badge-danger'}">
@@ -441,6 +449,54 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
                                                 <button class="btn btn-danger btn-xs btn-delete-reward" data-id="${r.id}" title="Eliminar premio">🗑️</button>
                                             </div>
                                         </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Estructura de Niveles y Beneficios por Local -->
+            <div class="settings-card" style="margin-top:24px;">
+                <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div class="title-with-icon">
+                        <span class="t-icon">🏆</span>
+                        <div>
+                            <h3>Estructura de Niveles (Tiers) y Beneficios</h3>
+                            <small>Rangos de fidelización y porcentajes de descuento por nivel para <strong>${currentBusiness.name}</strong></small>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="btn-edit-tiers" style="background:transparent; border:1px solid var(--border-color); color:#fff; font-weight:700;">
+                        ✏️ Configurar Niveles y Beneficios
+                    </button>
+                </div>
+
+                <div class="catalogs-table-wrapper">
+                    <table class="catalogs-table">
+                        <thead>
+                            <tr>
+                                <th>Icono</th>
+                                <th>Nombre del Nivel</th>
+                                <th>Requisito (${isVisitsMode ? 'Visitas' : 'Puntos'})</th>
+                                <th>Descuento Directo</th>
+                                <th>Color de Badge</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${Object.values(tiers).map(t => {
+                                const requirement = activeMode === 'VISITS' 
+                                    ? (t.name === 'Bronce' ? '0 visitas' : `${t.minVisits}+ visitas`)
+                                    : (t.name === 'Bronce' ? '0 pts' : `${t.minPoints}+ pts`);
+                                return `
+                                    <tr>
+                                        <td style="font-size:1.5rem; text-align:center;">${t.badge}</td>
+                                        <td>
+                                            <span class="badge ${t.class}" style="font-size:0.85rem; padding:4px 8px;">${t.name}</span>
+                                        </td>
+                                        <td><code style="font-size:0.9rem;">${requirement}</code></td>
+                                        <td><strong style="color:var(--color-neon-lime); font-size:0.95rem;">${t.discount * 100}%</strong></td>
+                                        <td><span style="display:inline-block; width:14px; height:14px; border-radius:50%; background:${t.color}; margin-right:6px; vertical-align:middle;"></span> <code>${t.color}</code></td>
                                     </tr>
                                 `;
                             }).join('')}
@@ -674,7 +730,7 @@ function openRewardModal(businessId, reward = null, mainContainer) {
                     <input type="text" id="rew-name" class="cyber-input" value="${reward ? reward.name : ''}" placeholder="Ej. 1 Hora de Juego Gratis" required>
                 </div>
                 <div class="form-group">
-                    <label for="rew-points"><span class="neon-arrow">◆</span> Costo en Puntos *</label>
+                    <label for="rew-points"><span class="neon-arrow">◆</span> Costo en ${store.currentBusiness?.loyaltyMode === 'VISITS' ? 'Visitas' : 'Puntos'} *</label>
                     <input type="number" id="rew-points" class="cyber-input" value="${reward ? reward.costPoints : '50'}" min="1" required>
                 </div>
             </div>
@@ -743,6 +799,141 @@ function openRewardModal(businessId, reward = null, mainContainer) {
                 });
                 toast.success(`Premio "${name}" registrado en la sucursal.`);
             }
+            modal.close();
+            renderCatalogsManagementView(mainContainer);
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
+}
+
+function openConfigureTiersModal(business, mainContainer) {
+    const activeMode = business.loyaltyMode || 'POINTS';
+    const tiers = loyaltyManager.getBusinessTiers(business);
+
+    const contentHtml = `
+        <form id="form-configure-tiers" class="cyber-form">
+            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:14px;">
+                Configura los requisitos de entrada y descuentos en porcentaje (%) para cada nivel en este local.
+            </p>
+            
+            <!-- Bronce -->
+            <div style="background:var(--bg-dark-700); padding:10px 14px; border-radius:4px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="font-size:1.2rem; margin-right:6px;">🟫</span>
+                    <strong>Bronce (Inicial)</strong>
+                </div>
+                <div style="font-size:0.85rem; color:var(--text-muted);">
+                    Por defecto: 0 ${activeMode === 'VISITS' ? 'visitas' : 'pts'} | 0% desc.
+                </div>
+            </div>
+
+            <!-- Plata -->
+            <div style="border:1px solid var(--border-color); padding:14px; border-radius:4px; margin-bottom:14px; background:rgba(255,255,255,0.01);">
+                <h4 style="margin:0 0 10px 0; color:#fff; display:flex; align-items:center; gap:6px;">
+                    <span>⬜</span> Plata
+                </h4>
+                <div class="form-row grid-2">
+                    <div class="form-group">
+                        <label for="tier-plata-req"><span class="neon-arrow">◆</span> Requisito Mínimo (${activeMode === 'VISITS' ? 'Visitas' : 'Puntos'})</label>
+                        <input type="number" id="tier-plata-req" class="cyber-input" value="${activeMode === 'VISITS' ? tiers.PLATA.minVisits : tiers.PLATA.minPoints}">
+                    </div>
+                    <div class="form-group">
+                        <label for="tier-plata-desc"><span class="neon-arrow">◆</span> Descuento (%)</label>
+                        <input type="number" id="tier-plata-desc" class="cyber-input" value="${tiers.PLATA.discount * 100}" min="0" max="100">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Oro -->
+            <div style="border:1px solid var(--border-color); padding:14px; border-radius:4px; margin-bottom:14px; background:rgba(255,255,255,0.01);">
+                <h4 style="margin:0 0 10px 0; color:#fff; display:flex; align-items:center; gap:6px;">
+                    <span>🟨</span> Oro
+                </h4>
+                <div class="form-row grid-2">
+                    <div class="form-group">
+                        <label for="tier-oro-req"><span class="neon-arrow">◆</span> Requisito Mínimo (${activeMode === 'VISITS' ? 'Visitas' : 'Puntos'})</label>
+                        <input type="number" id="tier-oro-req" class="cyber-input" value="${activeMode === 'VISITS' ? tiers.ORO.minVisits : tiers.ORO.minPoints}">
+                    </div>
+                    <div class="form-group">
+                        <label for="tier-oro-desc"><span class="neon-arrow">◆</span> Descuento (%)</label>
+                        <input type="number" id="tier-oro-desc" class="cyber-input" value="${tiers.ORO.discount * 100}" min="0" max="100">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Platino -->
+            <div style="border:1px solid var(--border-color); padding:14px; border-radius:4px; margin-bottom:10px; background:rgba(255,255,255,0.01);">
+                <h4 style="margin:0 0 10px 0; color:#fff; display:flex; align-items:center; gap:6px;">
+                    <span>🟦</span> Platino
+                </h4>
+                <div class="form-row grid-2">
+                    <div class="form-group">
+                        <label for="tier-platino-req"><span class="neon-arrow">◆</span> Requisito Mínimo (${activeMode === 'VISITS' ? 'Visitas' : 'Puntos'})</label>
+                        <input type="number" id="tier-platino-req" class="cyber-input" value="${activeMode === 'VISITS' ? tiers.PLATINO.minVisits : tiers.PLATINO.minPoints}">
+                    </div>
+                    <div class="form-group">
+                        <label for="tier-platino-desc"><span class="neon-arrow">◆</span> Descuento (%)</label>
+                        <input type="number" id="tier-platino-desc" class="cyber-input" value="${tiers.PLATINO.discount * 100}" min="0" max="100">
+                    </div>
+                </div>
+            </div>
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-tiers">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-save-tiers">💾 Guardar Configuración</button>
+    `;
+
+    const modalEl = modal.open({
+        title: `Niveles de Lealtad: ${business.name}`,
+        icon: '🏆',
+        contentHtml,
+        footerHtml,
+        maxWidth: '500px'
+    });
+
+    modalEl.querySelector('#btn-cancel-tiers').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-tiers').onclick = async () => {
+        const plataReq = parseInt(modalEl.querySelector('#tier-plata-req').value, 10) || 0;
+        const plataDesc = parseFloat(modalEl.querySelector('#tier-plata-desc').value) / 100 || 0;
+
+        const oroReq = parseInt(modalEl.querySelector('#tier-oro-req').value, 10) || 0;
+        const oroDesc = parseFloat(modalEl.querySelector('#tier-oro-desc').value) / 100 || 0;
+
+        const platinoReq = parseInt(modalEl.querySelector('#tier-platino-req').value, 10) || 0;
+        const platinoDesc = parseFloat(modalEl.querySelector('#tier-platino-desc').value) / 100 || 0;
+
+        // Validaciones de progresión lógica
+        if (plataReq >= oroReq || oroReq >= platinoReq) {
+            toast.error("Los requisitos deben ir en progresión ascendente (Plata < Oro < Platino).");
+            return;
+        }
+
+        const loyaltyTiers = {
+            BRONCE: { minPoints: 0, minVisits: 0, discount: 0.00 },
+            PLATA: {
+                minPoints: activeMode === 'VISITS' ? plataReq * 10 : plataReq,
+                minVisits: activeMode === 'VISITS' ? plataReq : Math.floor(plataReq / 10),
+                discount: plataDesc
+            },
+            ORO: {
+                minPoints: activeMode === 'VISITS' ? oroReq * 10 : oroReq,
+                minVisits: activeMode === 'VISITS' ? oroReq : Math.floor(oroReq / 10),
+                discount: oroDesc
+            },
+            PLATINO: {
+                minPoints: activeMode === 'VISITS' ? platinoReq * 10 : platinoReq,
+                minVisits: activeMode === 'VISITS' ? platinoReq : Math.floor(platinoReq / 10),
+                discount: platinoDesc
+            }
+        };
+
+        try {
+            await tenantManager.updateBusiness(business.id, { loyaltyTiers });
+            toast.success("Estructura de niveles y beneficios guardada exitosamente.");
             modal.close();
             renderCatalogsManagementView(mainContainer);
         } catch (e) {

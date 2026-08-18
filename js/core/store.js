@@ -560,11 +560,11 @@ class Store {
         };
 
         if (newReservation.status === 'CONFIRMED' && newReservation.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
-            const pts = Math.floor(newReservation.totalCost / ratio);
-            if (pts > 0) {
+            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+            const pts = isVisitsMode ? 1 : Math.floor(newReservation.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
+            if (pts > 0 || isVisitsMode) {
                 try {
-                    await loyaltyManager.adjustPlayerPoints(newReservation.clientId, pts, 1);
+                    await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, newReservation.clientId, pts, 1);
                 } catch (e) {
                     console.warn("Error crediting points on direct creation:", e);
                 }
@@ -628,10 +628,10 @@ class Store {
         }
 
         if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
-            const pts = Math.floor(res.totalCost / ratio);
+            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+            const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
             try {
-                await loyaltyManager.adjustPlayerPoints(res.clientId, -pts, -1);
+                await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, -pts, -1);
             } catch (e) {
                 console.warn("Error reverting points on cancel:", e);
             }
@@ -663,10 +663,10 @@ class Store {
         }
 
         if (res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
-            const pts = Math.floor(res.totalCost / ratio);
+            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+            const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
             try {
-                await loyaltyManager.adjustPlayerPoints(res.clientId, pts, 1);
+                await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, pts, 1);
             } catch (e) {
                 console.warn("Error crediting points on approval:", e);
             }
@@ -696,10 +696,10 @@ class Store {
         }
 
         if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
-            const pts = Math.floor(res.totalCost / ratio);
+            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+            const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
             try {
-                await loyaltyManager.adjustPlayerPoints(res.clientId, -pts, -1);
+                await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, -pts, -1);
             } catch (e) {
                 console.warn("Error deducting points on reject:", e);
             }
@@ -756,14 +756,17 @@ class Store {
         this.saveLocalReservations(this.currentBusiness.id, this.reservations);
 
         if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
-            const oldPts = Math.floor(oldCost / ratio);
-            const newPts = Math.floor(res.totalCost / ratio);
-            const diff = newPts - oldPts;
-            if (diff !== 0) {
-                try {
-                    await loyaltyManager.adjustPlayerPoints(res.clientId, diff, 0);
-                } catch(e) {}
+            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+            if (!isVisitsMode) {
+                const ratio = Number(this.currentBusiness.pointsRatio) || 10;
+                const oldPts = Math.floor(oldCost / ratio);
+                const newPts = Math.floor(res.totalCost / ratio);
+                const diff = newPts - oldPts;
+                if (diff !== 0) {
+                    try {
+                        await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, diff, 0);
+                    } catch(e) {}
+                }
             }
         }
 
@@ -783,10 +786,10 @@ class Store {
         }
 
         if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
-            const pts = Math.floor(res.totalCost / ratio);
+            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+            const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
             try {
-                await loyaltyManager.adjustPlayerPoints(res.clientId, -pts, -1);
+                await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, -pts, -1);
             } catch(e) {}
         }
 

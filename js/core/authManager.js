@@ -389,12 +389,25 @@ class AuthManager {
         return true;
     }
 
-    getCurrentUserDiscount() {
+    getCurrentUserDiscount(business) {
         if (!this.currentUser || this.currentUser.role !== 'CLIENT') return 0;
-        const pts = Number(this.currentUser.loyaltyPoints) || 0;
-        if (pts >= 600) return 0.15; // Platino
-        if (pts >= 300) return 0.10; // Oro
-        if (pts >= 100) return 0.05; // Plata
+        if (!business || !business.loyaltyEnabled) return 0;
+
+        const loyaltyMap = this.currentUser.loyalty || {};
+        const bizLoyalty = loyaltyMap[business.id] || { points: 0, visits: 0, tier: 'Bronce' };
+
+        const activeMode = business.loyaltyMode || 'POINTS';
+        const val = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
+
+        if (activeMode === 'VISITS') {
+            if (val >= 60) return 0.15; // Platino
+            if (val >= 30) return 0.10; // Oro
+            if (val >= 10) return 0.05; // Plata
+        } else {
+            if (val >= 600) return 0.15; // Platino
+            if (val >= 300) return 0.10; // Oro
+            if (val >= 100) return 0.05; // Plata
+        }
         return 0; // Bronce
     }
 

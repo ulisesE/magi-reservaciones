@@ -324,7 +324,7 @@ export function calculateBookingCost(durationMinutes, numPlayers, machine, busin
 
     // 3. Aplicar descuento de lealtad si está activo en la sucursal
     if (business && business.loyaltyEnabled) {
-        const discount = authManager && authManager.getCurrentUserDiscount ? authManager.getCurrentUserDiscount() : 0;
+        const discount = authManager && authManager.getCurrentUserDiscount ? authManager.getCurrentUserDiscount(business) : 0;
         if (discount > 0) {
             price = Math.round(price * (1 - discount));
         }

@@ -21,10 +21,12 @@ Este documento está estructurado para detallar el flujo de trabajo, responsabil
 | **Mantenimiento y Respaldos JSON globales** | Si | No | No | No |
 | **Reasignar/Transferir máquinas de local** | Si | Si | No | No |
 | **Configurar marca, horario y costos del local** | Si | Si | No | No |
+| **Configurar modo de lealtad (Consumo vs Visitas)** | Si | Si | No | No |
 | **Aprobar, rechazar o reprogramar reservas** | Si | Si | No | No |
 | **Crear reservas directas en mostrador** | Si | Si | No | No |
-| **Registrar y editar clientes locales** | Si | Si (Solo lectura/WA) | Si (Propio perfil) | No |
-| **Consultar historial personal y estadísticas** | No | No | Si | No |
+| **Registrar y editar clientes locales** | Si | Si (Paginado) | Si (Propio perfil) | No |
+| **Ver datos sensibles (teléfono/correo) de otros** | Si | Si | No (Privado) | No |
+| **Consultar historial personal y estadísticas** | No | No | Si (Pass QR) | No |
 | **Ver disponibilidad en tiempo real (Día/Sem/Mes)**| Si | Si | Si | Si |
 | **Enviar solicitud de reservación en línea** | Si | Si | Si (Auto-llenado) | Si (Llenado manual) |
 
@@ -84,6 +86,20 @@ El **Superadministrador** posee control absoluto sobre toda la plataforma y tien
 ### 🕺 Directorio Global de Jugadores (Pestaña "Clientes / Jugadores")
 * Visualiza la lista completa de usuarios registrados en el sistema de manera global.
 * El Superadmin tiene permisos para **Crear**, **Editar** y **Eliminar** cuentas de jugadores directamente desde esta consola, incluyendo la modificación de sus Ligas, Gamertags y números de contacto.
+* **Escaneo de QR / Pass de Jugadores**: El sistema ofrece dos métodos para que el encargado o Superadmin lea el pase digital de un jugador:
+  * **Método A: Cámara del Dispositivo (Celular, Tablet o Laptop)**:
+    1. En la pestaña **Clientes**, pulsa el botón **`📸 Escanear QR`**.
+    2. Concede los permisos de cámara si el navegador los solicita.
+    3. Apunta la cámara (trasera por defecto en móviles) al código QR del pase digital en el teléfono del jugador. El sistema lo leerá automáticamente, cerrará el escáner y mostrará los datos del jugador.
+  * **Método B: Pistola o Lector QR Físico (USB / Bluetooth)**:
+    1. Haz clic en la caja de texto del buscador del directorio de clientes.
+    2. Escanea el código QR de la pantalla del cliente. El lector ingresará el ID único (`p_...`) y presionará Enter.
+  * *Resultado*: Ambos métodos filtran la vista para mostrar únicamente la tarjeta de ese jugador específico. A continuación, el encargado dispone de las siguientes acciones rápidas en la tarjeta:
+    * **`➕ Visita` (Disponible en modo Visitas)**: Botón de un solo clic que acredita instantáneamente 1 visita al saldo del jugador en mostrador.
+    * **`➕ Consumo` (Disponible en modo Puntos)**: Abre un diálogo emergente para ingresar el monto en pesos gastado por el jugador y acredita de forma automática los puntos correspondientes según la tasa configurada en el local.
+    * **`⭐ Ajustar`**: Permite realizar modificaciones manuales y directas (tanto positivas como negativas) de puntos o visitas, detallando un motivo de auditoría.
+    * **`🎁 Canjes`**: Muestra la lista de cupones y premios solicitados por el jugador en este local, permitiendo al encargado marcar el premio como **Entregado** al momento de dárselo físicamente al cliente.
+* Cuenta con navegación optimizada por páginas (15 registros por vista) para asegurar un rendimiento de carga instantáneo en todo momento.
 
 ### 🖥️ Catálogos Maestros de Gabinetes y Software (Pestañas "Modelos" y "Versiones")
 * **Modelos de Gabinete:** Permite definir los estándares globales de hardware que las sucursales pueden poseer (ej. *LX de 55 pulgadas*, *TX de 50 pulgadas*, *FX de 42 pulgadas*).
@@ -134,19 +150,22 @@ Muestra el catálogo activo de gabinetes de la sucursal.
 Este panel centraliza la personalización visual y operativa del negocio:
 
 1. **Identidad y Branding:** Ajusta el nombre de la sucursal, eslogan publicitario, icono (emoji distintivo), color de neón e **Imagen de Banner**.
-   > [!TIP]
-   > Para el banner del local, puedes pegar directamente cualquier enlace público de imagen JPG/PNG (por ejemplo, imágenes subidas a Facebook, Imgur o Unsplash). El sistema cuenta con una vista previa en vivo y validación de carga.
 2. **Ubicación y Contacto:** Dirección detallada, ciudad, teléfono y un enlace directo a Google Maps/Waze. También el teléfono de WhatsApp que recibirá los mensajes de confirmación de los clientes.
-3. **Reglas Operativas:**
+3. **🎁 Programa de Lealtad (Configurable):**
+   * **Modo de Acumulación**: El encargado elige entre modo **"Por Consumo"** (acumula según el costo de la reserva) o **"Por Cantidad de Visitas"** (cada reserva asistida otorga exactamente 1 visita).
+   * **Tasa de Acumulación (Ratio)**: Si se selecciona el modo por consumo, se define el valor de conversión (ej. $10 pesos = 1 punto). Esta opción se oculta automáticamente al seleccionar el modo por visitas.
+   * **Premios de Lealtad**: Catálogo interactivo de premios donde el encargado puede registrar el nombre del premio, ícono decorativo, descripción y costo en puntos o visitas requeridas.
+   * **Estructura de Niveles y Beneficios**: Permite al encargado definir las metas de puntos/visitas necesarias para subir a los tiers **Plata**, **Oro** y **Platino**, así como configurar el porcentaje de descuento en reservaciones que cada nivel otorga de forma automática.
+4. **Reglas Operativas**:
    * **Horas de Apertura y Cierre:** Límite para las cuadrículas del calendario.
    * **Intervalo / Duración de Slot:** Configura la duración base de los turnos de juego (30, 45, 60, 90 o 120 minutos). Las reservaciones de los clientes se ajustarán obligatoriamente a múltiplos de este bloque.
    * **Límites de anticipación y cancelación:** Días máximos con los que un cliente puede reservar al futuro (ej. 14 días) y horas de aviso previo requeridas para cancelar de forma autónoma (ej. 2 horas antes).
    * **Reservas simultáneas:** Límite de reservaciones activas permitidas por jugador.
-4. **Políticas de Pago:**
+5. **Políticas de Pago:**
    * Habilita o deshabilita la exigencia de un anticipo para confirmar el turno.
    * Establece el porcentaje requerido (25%, 50%, 75% o 100%).
    * Redacta las instrucciones de pago (ej. *número de tarjeta/CLABE, banco titular y solicitud de enviar captura por WhatsApp*).
-5. **WiFi y Reglamento:** Campo para el nombre de red y contraseña del WiFi de la sala (visible para los clientes con sesión iniciada) y las reglas internas del local.
+6. **WiFi y Reglamento:** Campo para el nombre de red y contraseña del WiFi de la sala (visible para los clientes con sesión iniciada) y las reglas internas del local.
 
 ---
 
@@ -154,12 +173,20 @@ Este panel centraliza la personalización visual y operativa del negocio:
 
 El **Cliente Registrado** es un jugador de la comunidad que cuenta con un perfil personalizado y acceso a herramientas de autogestión de sus reservaciones.
 
+### 🔒 Privacidad de Datos y Seguridad
+Para proteger la integridad de los jugadores de la comunidad, **toda la información de contacto sensible (como número telefónico y dirección de correo electrónico) de un cliente es completamente invisible para otros usuarios**. Solo los Encargados de Sucursal y el Superadministrador pueden ver los datos de contacto desde la consola de administración.
+
 ### 📝 Registro e Inicio de Sesión
 * **Registro:** Se realiza desde el menú `🔐 Acceso Staff` o la pestaña `Mi Perfil` cuando no hay sesión activa. Solo requiere:
   * Nombre / GamerTag único (sin espacios, ej. `alex_piu`).
   * PIN numérico de acceso de al menos 4 dígitos (actúa como contraseña rápida).
   * Teléfono de contacto y Correo electrónico.
   * Opcionalmente, nivel de liga (Ligas Potosinas) y modo de juego preferido.
+
+### 💳 Phoenix Pass (Tarjeta Digital de Identificación)
+* En la parte superior de la vista "Mi Perfil", el cliente dispone de su tarjeta digital personalizada con su GamerTag y el nombre dinámico del local actual (`[LOCAL] PASS`).
+* Al pulsar sobre el código QR decorativo, se abre una tarjeta de identificación digital expandida en alta resolución con el color oficial de su nivel de lealtad.
+* Presenta este código QR en la recepción física del local para que el encargado pueda buscar tu GamerTag al instante y registrar tu visita.
 
 ### ⚡ Reservar con Perfil Activo
 * Cuando un cliente con sesión iniciada visita la **Vista Día** y hace clic en un slot disponible (`＋ Disponible`), el formulario de solicitud se abre con sus datos ya cargados y una insignia verde que lo reconoce como jugador oficial.
@@ -170,11 +197,14 @@ El **Cliente Registrado** es un jugador de la comunidad que cuenta con un perfil
 Al iniciar sesión, se habilita la pestaña `Mi Perfil` en el menú principal:
 
 * **Estadísticas de Juego:** Muestra el total de reservas acumuladas, cuántas han sido confirmadas por el staff y las horas totales que ha jugado en esa sucursal.
+* **Estatus de Lealtad (Puntos vs Visitas)**: 
+  * Muestra los puntos o visitas acumuladas de forma histórica.
+  * Barra de progreso al siguiente Tier de descuento.
+  * Tabla informativa de los beneficios asociados a cada rango según la modalidad de la sucursal activa.
+* **Canje de Recompensas**: Muestra los premios activos del catálogo del local y permite al jugador solicitar el canje en tiempo real si cuenta con los puntos o visitas necesarias.
 * **Mis Reservaciones:** Lista interactiva de todas sus solicitudes pasadas y futuras ordenadas por fecha.
-  * **Ver Comprobante:** Abre el ticket o pase digital con el folio único de su reservación. Desde ahí, puede hacer clic en `Confirmar / Notificar por WhatsApp` para enviar un mensaje estructurado con un solo clic al encargado.
-  * **Cancelar Reserva:** Si el tiempo restante respeta el límite establecido por el local (ej. 2 horas antes), el cliente puede cancelar su reserva directamente con un botón, liberando el slot para otros jugadores.
-
-* **Administrar Perfil:** Pestaña secundaria donde el jugador puede actualizar su avatar emoji, GamerTag, teléfono, PIN de acceso, nivel de liga actual y notas de calibración de sensores preferida (ej. *"Juego con barra, doble"*).
+  * **Ver Comprobante**: Abre el ticket con el folio único.
+  * **Cancelar Reserva**: Si respeta el límite establecido por el local (ej. 2 horas antes), puede liberar el slot directamente.
 
 ---
 
