@@ -17,6 +17,9 @@ export function renderWeekView(container) {
     // Obtener los 7 días de la semana actual
     const weekDays = getWeekDays(new Date(selectedDate + 'T00:00:00'));
     
+    // Actualizar suscripción de reservas en el store para el rango semanal
+    store.updateReservationsSubscription(weekDays[0].dateKey, weekDays[weekDays.length - 1].dateKey);
+
     // Navegación de semana (-7 días, +7 días)
     const currentFirstDay = new Date(weekDays[0].rawDate);
     const prevWeekDate = new Date(currentFirstDay);

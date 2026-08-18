@@ -16,7 +16,9 @@ import {
     getDoc,
     runTransaction,
     serverTimestamp,
-    orderBy
+    orderBy,
+    limit,
+    startAfter
 } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
 // Configuración de Firebase
@@ -71,7 +73,9 @@ export const COLLECTIONS = {
     PLAYERS: `${FIRESTORE_PREFIX}_players`,
     CABINET_MODELS: `${FIRESTORE_PREFIX}_cabinet_models`,
     MACHINE_FEATURES: `${FIRESTORE_PREFIX}_machine_features`,
-    AUDIT_LOGS: `${FIRESTORE_PREFIX}_audit_logs`
+    AUDIT_LOGS: `${FIRESTORE_PREFIX}_audit_logs`,
+    LOYALTY_REWARDS: `${FIRESTORE_PREFIX}_loyalty_rewards`,
+    REDEMPTIONS: `${FIRESTORE_PREFIX}_redemptions`
 };
 
 export { 
@@ -91,5 +95,7 @@ export {
     getDoc,
     runTransaction,
     serverTimestamp,
-    orderBy
+    orderBy,
+    limit,
+    startAfter
 };

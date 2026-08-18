@@ -2,71 +2,101 @@
 // Directorio Global de Clientes y Jugadores de la Plataforma
 import { store } from '../core/store.js';
 import { authManager } from '../core/authManager.js';
-import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc } from '../firebaseConfig.js';
+import { 
+    db, 
+    isFirebaseAvailable, 
+    COLLECTIONS, 
+    collection, 
+    getDocs, 
+    setDoc, 
+    doc, 
+    updateDoc, 
+    deleteDoc, 
+    query, 
+    where, 
+    limit 
+} from '../firebaseConfig.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { loyaltyManager } from '../core/loyaltyManager.js';
+
+let currentClientsSearchQuery = '';
 
 class ClientDirectoryManager {
     constructor() {
         this.clients = [];
     }
 
-    async loadClients() {
+    async loadClients(searchQuery = '') {
         let loaded = [];
+        const limitVal = 15;
+        
         if (isFirebaseAvailable && db) {
             try {
-                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
-                snap.forEach(d => {
-                    loaded.push({ id: d.id, ...d.data() });
-                });
+                let q;
+                if (searchQuery) {
+                    const term = searchQuery.trim().toLowerCase();
+                    const termPhone = term.replace(/\D/g, '');
+                    if (termPhone) {
+                        q = query(collection(db, COLLECTIONS.PLAYERS), where("phone", "==", termPhone), limit(limitVal));
+                    } else {
+                        q = query(collection(db, COLLECTIONS.PLAYERS), where("username", "==", term), limit(limitVal));
+                    }
+                    
+                    let snap = await getDocs(q);
+                    snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+
+                    if (loaded.length === 0) {
+                        // Prefijo de nombre
+                        q = query(
+                            collection(db, COLLECTIONS.PLAYERS), 
+                            where("name", ">=", searchQuery), 
+                            where("name", "<=", searchQuery + '\uf8ff'),
+                            limit(limitVal)
+                        );
+                        snap = await getDocs(q);
+                        snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                    }
+                } else {
+                    q = query(collection(db, COLLECTIONS.PLAYERS), limit(limitVal));
+                    const snap = await getDocs(q);
+                    snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                }
             } catch (e) {
                 console.warn("Error cargando clientes de Firebase:", e);
             }
         }
 
-        // Combinar con jugadores registrados en authManager
-        const authPlayers = authManager.getClientUsers() || [];
-        authPlayers.forEach(ap => {
-            if (!loaded.some(l => l.id === ap.id || (l.username && l.username === ap.username))) {
-                loaded.push(ap);
-            }
-        });
-
+        // Fallback local si Firebase no cargó nada
         if (loaded.length === 0) {
+            const authPlayers = authManager.getClientUsers() || [];
+            authPlayers.forEach(ap => {
+                if (!loaded.some(l => l.id === ap.id || (l.username && l.username === ap.username))) {
+                    loaded.push(ap);
+                }
+            });
+
             const local = localStorage.getItem('piu_registered_players_cache');
             if (local) {
-                try { loaded = JSON.parse(local); } catch (e) { loaded = []; }
+                try {
+                    const parsed = JSON.parse(local);
+                    parsed.forEach(p => {
+                        if (!loaded.some(l => l.id === p.id)) {
+                            loaded.push(p);
+                        }
+                    });
+                } catch (e) {}
             }
         }
 
-        if (loaded.length === 0) {
-            loaded = [
-                {
-                    id: 'usr_player_alex',
-                    name: 'Alex "StepMaster"',
-                    username: 'alex_piu',
-                    phone: '5511223344',
-                    email: 'alex.piu@gmail.com',
-                    skillLevel: 'Liga SSS',
-                    preferredMode: 'Single Speed & Stream',
-                    notes: 'Jugador competitivo nacional. Usa barra.',
-                    avatar: '⚡',
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    id: 'usr_player_valeria',
-                    name: 'Valeria G.',
-                    username: 'valeria_dance',
-                    phone: '5599887766',
-                    email: 'valeria.dance@outlook.com',
-                    skillLevel: 'Liga A',
-                    preferredMode: 'Co-Op & K-Pop Songs',
-                    notes: 'Viene los fines de semana en grupo.',
-                    avatar: '💃',
-                    createdAt: new Date().toISOString()
-                }
-            ];
-            localStorage.setItem('piu_registered_players_cache', JSON.stringify(loaded));
+        // Filtrar localmente si no hay Firebase
+        if (searchQuery && (!isFirebaseAvailable || !db)) {
+            const term = searchQuery.toLowerCase().trim();
+            loaded = loaded.filter(c => 
+                (c.name || '').toLowerCase().includes(term) ||
+                (c.username || '').toLowerCase().includes(term) ||
+                (c.phone || '').includes(term)
+            );
         }
 
         this.clients = loaded;
@@ -90,6 +120,9 @@ class ClientDirectoryManager {
             notes: clientData.notes?.trim() || '',
             avatar: clientData.avatar || '🕺',
             role: 'CLIENT',
+            loyaltyPoints: 0,
+            loyaltyVisits: 0,
+            loyaltyTier: 'Bronce',
             createdAt: new Date().toISOString()
         };
 
@@ -140,9 +173,10 @@ class ClientDirectoryManager {
 
 export const clientDirManager = new ClientDirectoryManager();
 
-export async function renderClientsView(container) {
+export async function renderClientsView(container, queryVal = '') {
+    currentClientsSearchQuery = queryVal;
     const business = store.currentBusiness;
-    const clients = await clientDirManager.loadClients();
+    const clients = await clientDirManager.loadClients(currentClientsSearchQuery);
     const reservations = store.getReservations();
     const isSuperAdmin = authManager.isSuperAdmin();
 
@@ -161,6 +195,13 @@ export async function renderClientsView(container) {
                 ` : ''}
             </div>
 
+            <!-- Buscador -->
+            <div style="display:flex; gap:10px; margin-bottom:20px; max-width:600px;">
+                <input type="text" id="input-search-clients" class="cyber-input" placeholder="🔍 Buscar por nombre, GamerTag o teléfono..." value="${currentClientsSearchQuery}" style="flex:1;">
+                <button class="btn btn-secondary" id="btn-search-clients">Buscar</button>
+                ${currentClientsSearchQuery ? `<button class="btn btn-outline" id="btn-clear-search">Limpiar</button>` : ''}
+            </div>
+
             <!-- Grid de Clientes -->
             <div class="clients-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:18px;">
                 ${clients.length === 0 ? `
@@ -173,6 +214,7 @@ export async function renderClientsView(container) {
                     const totalBookings = reservations.filter(r => (r.clientName || '').toLowerCase() === (c.name || '').toLowerCase()).length;
                     const cleanPhone = (c.phone || '').replace(/\D/g, '');
                     const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
+                    const tier = loyaltyManager.calculateTier(c.loyaltyPoints || 0);
 
                     return `
                         <div class="client-card settings-card" style="padding:18px; display:flex; flex-direction:column; gap:12px;">
@@ -212,6 +254,14 @@ export async function renderClientsView(container) {
                                     <span style="color:var(--text-muted); font-weight:700;">🎮 Modo Preferido:</span>
                                     <span style="color:var(--piu-cyan);">${c.preferredMode || 'Single / Double'}</span>
                                 </div>
+                                ${business && business.loyaltyEnabled ? `
+                                    <div style="border-top:1px dashed rgba(255,255,255,0.1); padding-top:6px; margin-top:2px;">
+                                        <span style="color:var(--text-muted); font-weight:700;">🎁 Lealtad:</span>
+                                        <span class="badge ${tier.class}" style="font-size:0.72rem; padding: 2px 6px;">${tier.badge} ${tier.name}</span>
+                                        <strong style="color:var(--color-neon-lime); margin-left:6px;">${c.loyaltyPoints || 0} Pts</strong>
+                                        <span style="color:var(--text-secondary); margin-left:6px;">(${c.loyaltyVisits || 0} visitas)</span>
+                                    </div>
+                                ` : ''}
                             </div>
 
                             ${c.notes ? `
@@ -220,22 +270,24 @@ export async function renderClientsView(container) {
                                 </div>
                             ` : ''}
 
-                            ${isSuperAdmin ? `
-                                <div style="display:flex; gap:8px; margin-top:auto; padding-top:8px; border-top:1px solid var(--border-color);">
-                                    <button class="btn btn-outline btn-sm btn-edit-client" data-id="${c.id}" style="flex:1;">
-                                        ✏️ Editar Datos
+                            <div style="display:flex; gap:8px; margin-top:auto; padding-top:8px; border-top:1px solid var(--border-color); flex-wrap:wrap;">
+                                <button class="btn btn-outline btn-xs btn-edit-client" data-id="${c.id}" style="flex:1;">
+                                    ✏️ Editar
+                                </button>
+                                ${business && business.loyaltyEnabled ? `
+                                    <button class="btn btn-secondary btn-xs btn-adjust-loyalty" data-id="${c.id}" style="flex:1;">
+                                        ⭐ Puntos
                                     </button>
-                                    <button class="btn btn-danger btn-sm btn-delete-client" data-id="${c.id}" title="Eliminar jugador">
+                                    <button class="btn btn-outline btn-xs btn-view-redemptions" data-id="${c.id}" style="flex:1;" title="Validar premios canjeados de este jugador">
+                                        🎁 Canjes
+                                    </button>
+                                ` : ''}
+                                ${isSuperAdmin ? `
+                                    <button class="btn btn-danger btn-xs btn-delete-client" data-id="${c.id}" title="Eliminar jugador">
                                         🗑️
                                     </button>
-                                </div>
-                            ` : cleanPhone ? `
-                                <div style="margin-top:auto; padding-top:8px; border-top:1px solid var(--border-color);">
-                                    <a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display:flex; justify-content:center; align-items:center; gap:6px; color:#25D366; border-color:rgba(37, 211, 102, 0.4); text-decoration:none;">
-                                        <span>💬 Escribir por WhatsApp</span>
-                                    </a>
-                                </div>
-                            ` : ''}
+                                ` : ''}
+                            </div>
                         </div>
                     `;
                 }).join('')}
@@ -243,18 +295,28 @@ export async function renderClientsView(container) {
         </div>
     `;
 
-    // Eventos (Solo para Superadmin)
+    // Eventos del buscador
+    const searchInput = container.querySelector('#input-search-clients');
+    const searchBtn = container.querySelector('#btn-search-clients');
+    const clearBtn = container.querySelector('#btn-clear-search');
+
+    const executeSearch = () => {
+        renderClientsView(container, searchInput.value.trim());
+    };
+
+    searchBtn?.addEventListener('click', executeSearch);
+    searchInput?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') executeSearch();
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        renderClientsView(container, '');
+    });
+
+    // Evento Registrar
     if (isSuperAdmin) {
         container.querySelector('#btn-add-client')?.addEventListener('click', () => {
             openClientFormModal(null, container);
-        });
-
-        container.querySelectorAll('.btn-edit-client').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = btn.dataset.id;
-                const client = clientDirManager.clients.find(c => c.id === id);
-                if (client) openClientFormModal(client, container);
-            });
         });
 
         container.querySelectorAll('.btn-delete-client').forEach(btn => {
@@ -263,11 +325,36 @@ export async function renderClientsView(container) {
                 if (confirm("¿Estás seguro de eliminar este jugador del directorio global?")) {
                     await clientDirManager.deleteClient(id);
                     toast.info("Jugador eliminado del directorio.");
-                    renderClientsView(container);
+                    renderClientsView(container, currentClientsSearchQuery);
                 }
             });
         });
     }
+
+    // Eventos editar, ajustar y canjes
+    container.querySelectorAll('.btn-edit-client').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const client = clients.find(c => c.id === id);
+            if (client) openClientFormModal(client, container);
+        });
+    });
+
+    container.querySelectorAll('.btn-adjust-loyalty').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const client = clients.find(c => c.id === id);
+            if (client) openAdjustPointsModal(client, container);
+        });
+    });
+
+    container.querySelectorAll('.btn-view-redemptions').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const client = clients.find(c => c.id === id);
+            if (client) openClientRedemptionsModal(client, business.id, container);
+        });
+    });
 }
 
 export function openClientFormModal(client = null, mainContainer = null, onSavedCallback = null) {
@@ -361,9 +448,142 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
             }
             modal.close();
             if (onSavedCallback) onSavedCallback();
-            if (mainContainer) renderClientsView(mainContainer);
+            if (mainContainer) renderClientsView(mainContainer, currentClientsSearchQuery);
         } catch (e) {
             toast.error(e.message);
         }
     };
+}
+
+function openAdjustPointsModal(client, mainContainer) {
+    const contentHtml = `
+        <form id="form-adjust-loyalty" class="cyber-form">
+            <p style="font-size:0.9rem; color:var(--text-secondary);">Ajustando puntos para <strong>${client.name}</strong> (@${client.username || 'gamertag'})</p>
+            <div style="background:var(--bg-dark-700); padding:10px; border-radius:4px; margin-bottom:12px; font-size:0.85rem;">
+                Puntos actuales: <strong style="color:var(--color-neon-lime);">${client.loyaltyPoints || 0} Pts</strong><br>
+                Visitas actuales: <strong style="color:var(--piu-cyan);">${client.loyaltyVisits || 0}</strong>
+            </div>
+            
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="adj-points"><span class="neon-arrow">◆</span> Modificar Puntos (+/-)</label>
+                    <input type="number" id="adj-points" class="cyber-input" value="0" placeholder="Ej. 20 o -10">
+                </div>
+                <div class="form-group">
+                    <label for="adj-visits"><span class="neon-arrow">◆</span> Modificar Visitas (+/-)</label>
+                    <input type="number" id="adj-visits" class="cyber-input" value="0" placeholder="Ej. 1 o -1">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="adj-reason"><span class="neon-arrow">◆</span> Motivo del Ajuste</label>
+                <input type="text" id="adj-reason" class="cyber-input" placeholder="Ej. Participación en Torneo, Corrección, etc.">
+            </div>
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-adj">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-save-adj">💾 Guardar Ajuste</button>
+    `;
+
+    const modalEl = modal.open({
+        title: 'Ajuste Manual de Puntos / Visitas',
+        icon: '⭐',
+        contentHtml,
+        footerHtml,
+        maxWidth: '460px'
+    });
+
+    modalEl.querySelector('#btn-cancel-adj').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-adj').onclick = async () => {
+        const ptsChange = parseInt(modalEl.querySelector('#adj-points').value, 10) || 0;
+        const vtsChange = parseInt(modalEl.querySelector('#adj-visits').value, 10) || 0;
+        const reason = modalEl.querySelector('#adj-reason').value.trim();
+
+        if (ptsChange === 0 && vtsChange === 0) {
+            toast.warning("No ingresaste ningún cambio en los puntos ni visitas.");
+            return;
+        }
+
+        try {
+            await loyaltyManager.adjustPlayerPoints(client.id, ptsChange, vtsChange, reason);
+            toast.success("Puntos/Visitas ajustados correctamente.");
+            modal.close();
+            renderClientsView(mainContainer, currentClientsSearchQuery);
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
+}
+
+async function openClientRedemptionsModal(client, businessId, mainContainer) {
+    const redemptions = await loyaltyManager.getRedemptions(client.id);
+    const bizRedemptions = redemptions.filter(r => r.businessId === businessId);
+
+    const contentHtml = `
+        <div class="client-redemptions-dialog" style="max-height:400px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
+            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:10px;">Premios canjeados por <strong>${client.name}</strong> en este local:</p>
+            
+            ${bizRedemptions.length === 0 ? `
+                <div class="empty-state" style="padding:20px; text-align:center;">
+                    <p style="color:var(--text-muted); font-size:0.9rem;">El jugador no tiene premios solicitados o canjeados en este local.</p>
+                </div>
+            ` : bizRedemptions.map(r => {
+                const isPending = r.status === 'PENDING';
+                return `
+                    <div style="background:var(--bg-dark-700); padding:12px; border-radius:4px; border:1px solid ${isPending ? 'var(--color-neon-lime)' : 'var(--border-color)'}; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                        <div style="text-align:left;">
+                            <span style="font-size:1.3rem; margin-right:6px;">${r.rewardIcon || '🎁'}</span>
+                            <strong style="color:#fff;">${r.rewardName}</strong>
+                            <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:2px;">
+                                Código: <code style="color:var(--piu-cyan); font-weight:bold; font-size:0.85rem;">${r.code}</code>
+                            </div>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">
+                                Solicitado: ${new Date(r.createdAt).toLocaleDateString()}
+                            </div>
+                        </div>
+                        <div>
+                            ${isPending ? `
+                                <button class="btn btn-success btn-xs btn-claim-voucher" data-red-id="${r.id}">
+                                    ✔️ Entregar Premio
+                                </button>
+                            ` : `
+                                <span class="badge badge-dark" style="color:var(--text-muted); font-size:0.75rem;">Entregado</span>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-close-redemptions">Cerrar</button>
+    `;
+
+    const modalEl = modal.open({
+        title: `Premios de ${client.name}`,
+        icon: '🎁',
+        contentHtml,
+        footerHtml,
+        maxWidth: '500px'
+    });
+
+    modalEl.querySelector('#btn-close-redemptions').onclick = () => modal.close();
+
+    modalEl.querySelectorAll('.btn-claim-voucher').forEach(btn => {
+        btn.onclick = async () => {
+            const redId = btn.dataset.redId;
+            try {
+                await loyaltyManager.claimRedemption(redId, businessId);
+                toast.success("¡Premio marcado como Entregado!");
+                modal.close();
+                openClientRedemptionsModal(client, businessId, mainContainer);
+            } catch (e) {
+                toast.error(e.message);
+            }
+        };
+    });
 }

@@ -1,7 +1,7 @@
 // js/core/authManager.js
 // Gestor de Autenticación, Roles y Control de Acceso Multi-Nivel
 // Niveles: SUPERADMIN, MANAGER (Encargado de Local), CLIENT (Cliente del Local)
-import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc, query, where } from '../firebaseConfig.js';
+import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc, query, where, getDoc } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 
 const AUTH_STORAGE_KEY = 'piu_auth_current_user_v1';
@@ -107,7 +107,20 @@ class AuthManager {
                 let exists = this.staffUsers.find(u => u.username === user.username && u.pin === user.pin);
                 // Si no, buscar en clientes
                 if (!exists) {
-                    exists = this.clientUsers.find(u => (u.id === user.id || u.username === user.username) && u.pin === user.pin);
+                    if (isFirebaseAvailable && db && user.id) {
+                        try {
+                            const docRef = doc(db, COLLECTIONS.PLAYERS, user.id);
+                            const docSnap = await getDoc(docRef);
+                            if (docSnap.exists()) {
+                                exists = { id: docSnap.id, ...docSnap.data() };
+                            }
+                        } catch (e) {
+                            console.warn("Error refreshing user on init:", e);
+                        }
+                    }
+                    if (!exists) {
+                        exists = this.clientUsers.find(u => (u.id === user.id || u.username === user.username) && u.pin === user.pin);
+                    }
                 }
 
                 if (exists) {
@@ -172,9 +185,27 @@ class AuthManager {
 
         // 2. Si no es staff, buscar en Clientes / Jugadores Registrados
         if (!user) {
-            user = this.clientUsers.find(
-                u => (u.username?.toLowerCase() === uTrim || u.phone?.replace(/\D/g, '') === uTrim.replace(/\D/g, '')) && u.pin === pTrim
-            );
+            if (isFirebaseAvailable && db) {
+                try {
+                    const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                    snap.forEach(d => {
+                        const data = d.data();
+                        const matchesUsername = data.username?.toLowerCase() === uTrim;
+                        const matchesPhone = data.phone?.replace(/\D/g, '') === uTrim.replace(/\D/g, '');
+                        if ((matchesUsername || matchesPhone) && data.pin === pTrim) {
+                            user = { id: d.id, ...data };
+                        }
+                    });
+                } catch (err) {
+                    console.warn("Error login query Firestore:", err);
+                }
+            }
+
+            if (!user) {
+                user = this.clientUsers.find(
+                    u => (u.username?.toLowerCase() === uTrim || u.phone?.replace(/\D/g, '') === uTrim.replace(/\D/g, '')) && u.pin === pTrim
+                );
+            }
         }
 
         if (!user) {
@@ -234,6 +265,9 @@ class AuthManager {
             skillLevel: clientData.skillLevel || 'Liga C',
             preferredMode: clientData.preferredMode || 'Single / Double',
             notes: clientData.notes?.trim() || 'Jugador de la comunidad Pump It Up',
+            loyaltyPoints: 0,
+            loyaltyVisits: 0,
+            loyaltyTier: 'Bronce',
             createdAt: new Date().toISOString()
         };
 
@@ -353,6 +387,15 @@ class AuthManager {
 
         this.notify();
         return true;
+    }
+
+    getCurrentUserDiscount() {
+        if (!this.currentUser || this.currentUser.role !== 'CLIENT') return 0;
+        const pts = Number(this.currentUser.loyaltyPoints) || 0;
+        if (pts >= 600) return 0.15; // Platino
+        if (pts >= 300) return 0.10; // Oro
+        if (pts >= 100) return 0.05; // Plata
+        return 0; // Bronce
     }
 
     subscribe(callback) {

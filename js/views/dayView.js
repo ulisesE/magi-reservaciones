@@ -25,6 +25,9 @@ export function renderDayView(container) {
     const selectedDate = store.selectedDate || formatDateKey(new Date());
     const isStaff = authManager.isStaff();
 
+    // Actualizar suscripción de reservas en el store
+    store.updateReservationsSubscription(selectedDate, selectedDate);
+
     // Generar slots horarios según configuración del negocio
     const { openingTime, closingTime, closed } = getBusinessHoursForDate(business, selectedDate);
     const slots = closed ? [] : generateTimeSlots(
@@ -241,6 +244,14 @@ function openReservationDetailModal(reservation) {
     const business = store.currentBusiness;
     const machine = store.getMachineById(reservation.machineId);
     const isStaff = authManager.isStaff();
+    const currentUser = authManager.getCurrentUser();
+    
+    const isOwner = currentUser && (
+        (reservation.clientId && reservation.clientId === currentUser.id) ||
+        (reservation.clientUsername && reservation.clientUsername === currentUser.username) ||
+        (reservation.clientPhone && currentUser.phone && reservation.clientPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, ''))
+    );
+    const canSeeSensitive = isStaff || isOwner;
 
     const contentHtml = `
         <div class="res-detail-dialog">
@@ -248,7 +259,12 @@ function openReservationDetailModal(reservation) {
                 <div class="client-avatar">🕺</div>
                 <div>
                     <h3 class="detail-client-name">${reservation.clientName}</h3>
-                    <p class="detail-phone">📞 ${reservation.clientPhone || 'Sin teléfono'}</p>
+                    ${canSeeSensitive ? `
+                        <p class="detail-phone">📞 ${reservation.clientPhone || 'Sin teléfono'}</p>
+                        ${reservation.clientEmail ? `<p class="detail-email" style="font-size:0.78rem; color:var(--text-muted); margin-top:2px;">✉️ ${reservation.clientEmail}</p>` : ''}
+                    ` : `
+                        <p class="detail-phone" style="color:var(--text-muted); font-size:0.82rem; font-style:italic;">📞 Teléfono: [Oculto por Privacidad]</p>
+                    `}
                 </div>
                 <div class="detail-status">
                     <span class="badge ${reservation.status === 'CONFIRMED' ? 'badge-success' : 'badge-warning'}">

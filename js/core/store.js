@@ -13,11 +13,13 @@ import {
     onSnapshot, 
     runTransaction,
     query, 
-    where 
+    where,
+    limit 
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
-import { formatDateKey, isOverlapping, getBusinessHoursForDate } from './timeUtils.js';
+import { formatDateKey, isOverlapping, getBusinessHoursForDate, calculateBookingCost } from './timeUtils.js';
+import { loyaltyManager } from './loyaltyManager.js';
 
 function findReservationConflict(reservations, machineId, date, startTime, endTime, excludeReservationId = null) {
     const business = tenantManager.getActiveBusiness();
@@ -275,7 +277,13 @@ class Store {
                 const machSnap = await getDocs(machQuery);
                 machSnap.forEach(d => loadedMachines.push({ id: d.id, ...d.data() }));
 
-                const resQuery = query(collection(db, COLLECTIONS.RESERVATIONS), where("businessId", "==", bizId));
+                // Inicialmente cargamos solo las reservas de hoy para no traer todo el histórico
+                const todayStr = new Date().toISOString().split('T')[0];
+                const resQuery = query(
+                    collection(db, COLLECTIONS.RESERVATIONS),
+                    where("businessId", "==", bizId),
+                    where("date", "==", todayStr)
+                );
                 const resSnap = await getDocs(resQuery);
                 resSnap.forEach(d => loadedReservations.push({ id: d.id, ...d.data() }));
                 loadedFromFirestore = true;
@@ -348,6 +356,74 @@ class Store {
 
     saveLocalReservations(bizId, reservations) {
         localStorage.setItem(`piu_reservations_${bizId}`, JSON.stringify(reservations));
+    }
+
+    updateReservationsSubscription(startDateStr, endDateStr) {
+        if (!isFirebaseAvailable || !db || !this.currentBusiness) return;
+        if (this.currentSubscriptionRange?.start === startDateStr && this.currentSubscriptionRange?.end === endDateStr) {
+            return; // Rango sin cambios
+        }
+        
+        this.currentSubscriptionRange = { start: startDateStr, end: endDateStr };
+        const bizId = this.currentBusiness.id;
+        
+        this.unsubscribeReservations?.();
+        this.unsubscribeReservations = null;
+
+        let q;
+        if (startDateStr === endDateStr) {
+            q = query(
+                collection(db, COLLECTIONS.RESERVATIONS), 
+                where("businessId", "==", bizId),
+                where("date", "==", startDateStr)
+            );
+        } else {
+            // Rango de fechas: usamos solo filtro de fecha para evitar requerir índices compuestos en Firestore
+            q = query(
+                collection(db, COLLECTIONS.RESERVATIONS), 
+                where("date", ">=", startDateStr),
+                where("date", "<=", endDateStr)
+            );
+        }
+
+        this.unsubscribeReservations = onSnapshot(q, (snapshot) => {
+            let realtimeRes = [];
+            snapshot.forEach(docSnap => {
+                realtimeRes.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            if (startDateStr !== endDateStr) {
+                // Filtrar localmente por local
+                realtimeRes = realtimeRes.filter(r => r.businessId === bizId);
+            }
+            this.reservations = realtimeRes;
+            this.saveLocalReservations(bizId, realtimeRes);
+            this.notify();
+        }, (error) => console.warn('Error de sincronización de reservas por rango:', error));
+    }
+
+    async loadReservationsForTray() {
+        if (!this.currentBusiness) return [];
+        const bizId = this.currentBusiness.id;
+        
+        if (isFirebaseAvailable && db) {
+            try {
+                // Cargar hasta 150 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
+                const q = query(
+                    collection(db, COLLECTIONS.RESERVATIONS),
+                    where("businessId", "==", bizId),
+                    limit(150)
+                );
+                const snap = await getDocs(q);
+                const loaded = [];
+                snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                loaded.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+                return loaded;
+            } catch (err) {
+                console.warn("Error cargando bandeja de reservas de Firestore, usando local:", err);
+            }
+        }
+        
+        return [...this.reservations].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
     }
 
     async syncMachinesToFirebase(machines) {
@@ -455,8 +531,8 @@ class Store {
         }
 
         const machine = this.getMachineById(bookingData.machineId);
-        const hours = (bookingData.durationMinutes || 60) / 60;
-        const totalCost = Math.round(hours * (machine ? machine.hourlyRate : 100));
+        const playersMode = bookingData.playersMode || 1;
+        const totalCost = calculateBookingCost(bookingData.durationMinutes || 60, playersMode, machine, this.currentBusiness);
         const isStaff = this.userRole === 'MANAGER' || this.userRole === 'SUPERADMIN';
 
         const isClient = authManager.isClientUser();
@@ -475,12 +551,25 @@ class Store {
             startTime: bookingData.startTime,
             endTime: bookingData.endTime,
             durationMinutes: bookingData.durationMinutes || 60,
+            playersMode: playersMode,
             status: isStaff ? 'CONFIRMED' : 'PENDING',
             totalCost: totalCost,
             notes: bookingData.notes ? bookingData.notes.trim() : '',
             adminNotes: isStaff ? 'Asignada directamente por Encargado' : '',
             createdAt: new Date().toISOString()
         };
+
+        if (newReservation.status === 'CONFIRMED' && newReservation.clientId && this.currentBusiness?.loyaltyEnabled) {
+            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
+            const pts = Math.floor(newReservation.totalCost / ratio);
+            if (pts > 0) {
+                try {
+                    await loyaltyManager.adjustPlayerPoints(newReservation.clientId, pts, 1);
+                } catch (e) {
+                    console.warn("Error crediting points on direct creation:", e);
+                }
+            }
+        }
 
         if (isFirebaseAvailable && db) {
             try {
@@ -521,6 +610,7 @@ class Store {
         const res = this.reservations.find(r => r.id === reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
+        const wasConfirmed = res.status === 'CONFIRMED';
         res.status = 'CANCELLED';
         res.adminNotes = 'Cancelada por el jugador.';
         res.updatedAt = new Date().toISOString();
@@ -536,6 +626,17 @@ class Store {
                 });
             } catch (e) {}
         }
+
+        if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
+            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
+            const pts = Math.floor(res.totalCost / ratio);
+            try {
+                await loyaltyManager.adjustPlayerPoints(res.clientId, -pts, -1);
+            } catch (e) {
+                console.warn("Error reverting points on cancel:", e);
+            }
+        }
+
         this.notify();
         return res;
     }
@@ -560,6 +661,17 @@ class Store {
                 });
             } catch (e) {}
         }
+
+        if (res.clientId && this.currentBusiness?.loyaltyEnabled) {
+            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
+            const pts = Math.floor(res.totalCost / ratio);
+            try {
+                await loyaltyManager.adjustPlayerPoints(res.clientId, pts, 1);
+            } catch (e) {
+                console.warn("Error crediting points on approval:", e);
+            }
+        }
+
         this.notify();
         return res;
     }
@@ -568,6 +680,7 @@ class Store {
         const res = this.reservations.find(r => r.id === reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
+        const wasConfirmed = res.status === 'CONFIRMED';
         res.status = 'REJECTED';
         res.rejectionReason = reason || 'Horario no disponible / Cancelada por encargado.';
         res.updatedAt = new Date().toISOString();
@@ -581,6 +694,17 @@ class Store {
                 });
             } catch (e) {}
         }
+
+        if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
+            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
+            const pts = Math.floor(res.totalCost / ratio);
+            try {
+                await loyaltyManager.adjustPlayerPoints(res.clientId, -pts, -1);
+            } catch (e) {
+                console.warn("Error deducting points on reject:", e);
+            }
+        }
+
         this.notify();
         return res;
     }
@@ -598,6 +722,9 @@ class Store {
             const availability = this.checkAvailability(targetMachine, targetDate, targetStart, targetEnd, reservationId);
             if (!availability.available) throw new Error(availability.reason);
         }
+
+        const wasConfirmed = res.status === 'CONFIRMED';
+        const oldCost = res.totalCost || 0;
 
         const persistedFields = {
             ...updatedFields,
@@ -628,17 +755,41 @@ class Store {
 
         this.saveLocalReservations(this.currentBusiness.id, this.reservations);
 
+        if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
+            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
+            const oldPts = Math.floor(oldCost / ratio);
+            const newPts = Math.floor(res.totalCost / ratio);
+            const diff = newPts - oldPts;
+            if (diff !== 0) {
+                try {
+                    await loyaltyManager.adjustPlayerPoints(res.clientId, diff, 0);
+                } catch(e) {}
+            }
+        }
+
         this.notify();
         return res;
     }
 
     async deleteReservation(reservationId) {
+        const res = this.reservations.find(r => r.id === reservationId);
+        const wasConfirmed = res && res.status === 'CONFIRMED';
+
         this.reservations = this.reservations.filter(r => r.id !== reservationId);
         this.saveLocalReservations(this.currentBusiness.id, this.reservations);
 
         if (isFirebaseAvailable && db) {
             try { await deleteDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId)); } catch (e) {}
         }
+
+        if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
+            const ratio = Number(this.currentBusiness.pointsRatio) || 10;
+            const pts = Math.floor(res.totalCost / ratio);
+            try {
+                await loyaltyManager.adjustPlayerPoints(res.clientId, -pts, -1);
+            } catch(e) {}
+        }
+
         this.notify();
         return true;
     }

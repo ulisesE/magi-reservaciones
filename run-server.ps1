@@ -33,9 +33,76 @@ try {
         $response = $context.Response
         
         $url = $request.Url.LocalPath
-        if ($url -eq "/") { $url = "/index.html" }
         
-        # Ruta de archivo física relativa al directorio actual
+        # 1. Endpoint POST para guardar la metadata del local
+        if ($request.HttpMethod -eq "POST" -and ($url -eq "/api/save-metadata" -or $url -eq "/api/save-metadata/")) {
+            $reader = New-Object System.IO.StreamReader($request.InputStream)
+            $body = $reader.ReadToEnd()
+            $reader.Close()
+            
+            $metaPath = Join-Path $PSScriptRoot "metadata.json"
+            $body | Out-File -FilePath $metaPath -Encoding utf8
+            
+            $response.StatusCode = 200
+            $response.ContentType = "application/json; charset=utf-8"
+            $buffer = [System.Text.Encoding]::UTF8.GetBytes('{"success":true}')
+            $response.ContentLength64 = $buffer.Length
+            $response.OutputStream.Write($buffer, 0, $buffer.Length)
+            $response.Close()
+            continue
+        }
+        
+        # 2. Interceptar peticiones a la raíz index.html para inyección dinámica de meta tags
+        if ($url -eq "/" -or $url -eq "/index.html" -or $url -eq "/index.html/") {
+            $filePath = Join-Path $PSScriptRoot "index.html"
+            $html = [System.IO.File]::ReadAllText($filePath)
+            
+            $query = $request.Url.Query
+            $localId = ""
+            if ($query -match "local=([^&]+)") { $localId = $Matches[1] }
+            elseif ($query -match "sucursal=([^&]+)") { $localId = $Matches[1] }
+            
+            if ($localId) {
+                $metaPath = Join-Path $PSScriptRoot "metadata.json"
+                $bizName = "Magi Reservaciones"
+                $bizTagline = "Reserva tu sesión de baile Pump It Up"
+                $bizImg = "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=600"
+                
+                if (Test-Path $metaPath) {
+                    try {
+                        $metaData = Get-Content -Raw -Path $metaPath | ConvertFrom-Json
+                        $biz = $null
+                        # Buscar el negocio por ID
+                        if ($metaData.Count -gt 1) {
+                            $biz = $metaData | Where-Object { $_.id -eq $localId }
+                        } else {
+                            if ($metaData.id -eq $localId) { $biz = $metaData }
+                        }
+                        
+                        if ($biz -and $biz.name) {
+                            $bizName = $biz.name
+                            $bizTagline = "Reserva en " + $biz.name + " (" + $biz.tagline + ")"
+                            if ($biz.imageUrl) { $bizImg = $biz.imageUrl }
+                        }
+                    } catch {}
+                }
+                
+                # Reemplazo de tags
+                $html = $html -replace "<title>.*?</title>", "<title>$bizName</title>"
+                $html = $html -replace '<meta property="og:title" content=".*?"\s*/?>', "<meta property=`"og:title`" content=`"$bizName`" />"
+                $html = $html -replace '<meta property="og:description" content=".*?"\s*/?>', "<meta property=`"og:description`" content=`"$bizTagline`" />"
+                $html = $html -replace '<meta property="og:image" content=".*?"\s*/?>', "<meta property=`"og:image`" content=`"$bizImg`" />"
+            }
+            
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($html)
+            $response.ContentType = "text/html; charset=utf-8"
+            $response.ContentLength64 = $bytes.Length
+            $response.OutputStream.Write($bytes, 0, $bytes.Length)
+            $response.Close()
+            continue
+        }
+
+        if ($url -eq "/") { $url = "/index.html" }
         $urlClean = $url.TrimStart('/')
         $filePath = Join-Path $PSScriptRoot $urlClean
         

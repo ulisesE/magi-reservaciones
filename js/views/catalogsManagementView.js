@@ -7,6 +7,7 @@ import { catalogsManager } from '../core/catalogsManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { DAYS_OF_WEEK, format12Hour, timeToMinutes } from '../core/timeUtils.js';
+import { loyaltyManager } from '../core/loyaltyManager.js';
 
 let activeCatalogTab = 'FEATURES'; // 'FEATURES', 'RULES', 'VERSIONS'
 
@@ -15,6 +16,7 @@ export async function renderCatalogsManagementView(container) {
     const businesses = tenantManager.getAllBusinesses();
     const gameVersions = catalogsManager.getGameVersions();
     const features = await catalogsManager.getFeaturesByBusiness(business.id);
+    const rewards = await loyaltyManager.getRewardsCatalog(business.id);
     const isSuperAdmin = authManager.isSuperAdmin();
 
     container.innerHTML = `
@@ -38,11 +40,14 @@ export async function renderCatalogsManagementView(container) {
                 <button class="filter-tab ${activeCatalogTab === 'VERSIONS' ? 'active' : ''}" data-cat-tab="VERSIONS">
                     <span>💿 Versiones de Software PIU (${gameVersions.length})</span>
                 </button>
+                <button class="filter-tab ${activeCatalogTab === 'REWARDS' ? 'active' : ''}" data-cat-tab="REWARDS">
+                    <span>🎁 Premios de Lealtad (${rewards.length})</span>
+                </button>
             </div>
 
             <!-- Contenido de Pestaña -->
             <div id="catalog-tab-content">
-                ${renderCatalogContent(activeCatalogTab, features, gameVersions, businesses, business, isSuperAdmin)}
+                ${renderCatalogContent(activeCatalogTab, features, gameVersions, businesses, business, isSuperAdmin, rewards)}
             </div>
         </div>
     `;
@@ -52,6 +57,32 @@ export async function renderCatalogsManagementView(container) {
         tab.addEventListener('click', () => {
             activeCatalogTab = tab.dataset.catTab;
             renderCatalogsManagementView(container);
+        });
+    });
+
+    // ==========================================
+    // Eventos de Recompensas (Local)
+    // ==========================================
+    container.querySelector('#btn-add-reward')?.addEventListener('click', () => {
+        openRewardModal(business.id, null, container);
+    });
+
+    container.querySelectorAll('.btn-edit-reward').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const rew = rewards.find(r => r.id === id);
+            if (rew) openRewardModal(business.id, rew, container);
+        });
+    });
+
+    container.querySelectorAll('.btn-delete-reward').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            if (confirm("¿Estás seguro de eliminar este premio del catálogo del local?")) {
+                await loyaltyManager.deleteReward(business.id, id);
+                toast.info("Premio eliminado del catálogo.");
+                renderCatalogsManagementView(container);
+            }
         });
     });
 
@@ -130,7 +161,7 @@ export async function renderCatalogsManagementView(container) {
     });
 }
 
-function renderCatalogContent(tab, features, gameVersions, businesses, currentBusiness, isSuperAdmin) {
+function renderCatalogContent(tab, features, gameVersions, businesses, currentBusiness, isSuperAdmin, rewards = []) {
     if (tab === 'FEATURES') {
         return `
             <div class="settings-card">
@@ -362,6 +393,64 @@ function renderCatalogContent(tab, features, gameVersions, businesses, currentBu
         `;
     }
 
+    if (tab === 'REWARDS') {
+        return `
+            <div class="settings-card">
+                <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div class="title-with-icon">
+                        <span class="t-icon">🎁</span>
+                        <div>
+                            <h3>Catálogo de Premios y Recompensas de Lealtad</h3>
+                            <small>Premios y artículos que los clientes pueden canjear en la sucursal con sus puntos</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm glow-red" id="btn-add-reward">
+                        <span>➕ Registrar Nuevo Premio</span>
+                    </button>
+                </div>
+
+                <div class="catalogs-table-wrapper">
+                    <table class="catalogs-table">
+                        <thead>
+                            <tr>
+                                <th>Icono</th>
+                                <th>Nombre del Premio</th>
+                                <th>Costo (Puntos)</th>
+                                <th>Descripción</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rewards.map(r => {
+                                const isActive = r.active !== false;
+                                return `
+                                    <tr>
+                                        <td style="font-size:1.5rem; text-align:center;">${r.icon || '🎁'}</td>
+                                        <td><strong style="color:#ffffff;">${r.name}</strong></td>
+                                        <td><span class="badge badge-success" style="font-weight:bold; font-size:0.85rem;">${r.costPoints} Puntos</span></td>
+                                        <td style="font-size:0.82rem; color:var(--text-secondary);">${r.description || 'Sin descripción'}</td>
+                                        <td>
+                                            <span class="badge ${isActive ? 'badge-success' : 'badge-danger'}">
+                                                ${isActive ? 'ACTIVO' : 'INACTIVO'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div style="display:flex; gap:6px;">
+                                                <button class="btn btn-outline btn-xs btn-edit-reward" data-id="${r.id}">✏️ Editar</button>
+                                                <button class="btn btn-danger btn-xs btn-delete-reward" data-id="${r.id}" title="Eliminar premio">🗑️</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
     return '';
 }
 
@@ -552,6 +641,107 @@ function openGameVersionModal(version = null, mainContainer) {
             } else {
                 await catalogsManager.addGameVersion({ name, releaseYear, latestPatch, status, supportedModes });
                 toast.success("Nueva versión de software registrada.");
+            }
+            modal.close();
+            renderCatalogsManagementView(mainContainer);
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
+}
+
+function openRewardModal(businessId, reward = null, mainContainer) {
+    const isEdit = !!reward;
+    const REWARD_ICONS = ['🎁', '💳', '🎟️', '🥤', '🦶', '⚡', '🎧', '🔑', '🎒', '👕', '🌟', '🏆', '🍿'];
+
+    const contentHtml = `
+        <form id="form-reward" class="cyber-form">
+            <div class="form-group">
+                <label><span class="neon-arrow">◆</span> Icono del Premio</label>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                    ${REWARD_ICONS.map(ic => `
+                        <button type="button" class="btn btn-outline btn-xs btn-rew-icon ${ic === (reward?.icon || '🎁') ? 'active glow-red' : ''}" data-icon="${ic}" style="font-size:1.2rem; padding:4px 8px;">
+                            ${ic}
+                        </button>
+                    `).join('')}
+                </div>
+                <input type="hidden" id="rew-icon" value="${reward ? reward.icon : '🎁'}">
+            </div>
+
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="rew-name"><span class="neon-arrow">◆</span> Nombre del Premio *</label>
+                    <input type="text" id="rew-name" class="cyber-input" value="${reward ? reward.name : ''}" placeholder="Ej. 1 Hora de Juego Gratis" required>
+                </div>
+                <div class="form-group">
+                    <label for="rew-points"><span class="neon-arrow">◆</span> Costo en Puntos *</label>
+                    <input type="number" id="rew-points" class="cyber-input" value="${reward ? reward.costPoints : '50'}" min="1" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="rew-desc"><span class="neon-arrow">◆</span> Descripción / Términos del Premio *</label>
+                <textarea id="rew-desc" class="cyber-textarea" rows="3" placeholder="Ej. Válido para cualquier día de la semana..." required>${reward ? reward.description : ''}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="rew-active"><span class="neon-arrow">◆</span> Estado en Catálogo</label>
+                <select id="rew-active" class="cyber-select">
+                    <option value="true" ${reward?.active !== false ? 'selected' : ''}>Activo (Disponible para canje)</option>
+                    <option value="false" ${reward?.active === false ? 'selected' : ''}>Inactivo (Ocultar temporalmente)</option>
+                </select>
+            </div>
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-rew">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-save-rew">
+            ${isEdit ? '💾 Guardar Cambios' : '➕ Registrar Premio'}
+        </button>
+    `;
+
+    const modalEl = modal.open({
+        title: isEdit ? `Editar Premio: ${reward.name}` : 'Registrar Nuevo Premio de Lealtad',
+        icon: '🎁',
+        contentHtml,
+        footerHtml,
+        maxWidth: '520px'
+    });
+
+    modalEl.querySelectorAll('.btn-rew-icon').forEach(btn => {
+        btn.addEventListener('click', () => {
+            modalEl.querySelectorAll('.btn-rew-icon').forEach(b => b.classList.remove('active', 'glow-red'));
+            btn.classList.add('active', 'glow-red');
+            modalEl.querySelector('#rew-icon').value = btn.dataset.icon;
+        });
+    });
+
+    modalEl.querySelector('#btn-cancel-rew').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-rew').onclick = async () => {
+        const name = modalEl.querySelector('#rew-name').value.trim();
+        const costPoints = parseInt(modalEl.querySelector('#rew-points').value, 10);
+        const description = modalEl.querySelector('#rew-desc').value.trim();
+        const icon = modalEl.querySelector('#rew-icon').value;
+        const active = modalEl.querySelector('#rew-active').value === 'true';
+
+        if (!name || !costPoints || !description) {
+            toast.error("Por favor completa todos los campos marcados con asterisco.");
+            return;
+        }
+
+        try {
+            if (isEdit) {
+                await loyaltyManager.updateReward(businessId, reward.id, {
+                    name, costPoints, description, icon, active
+                });
+                toast.success(`Premio "${name}" actualizado.`);
+            } else {
+                await loyaltyManager.addReward(businessId, {
+                    name, costPoints, description, icon, active
+                });
+                toast.success(`Premio "${name}" registrado en la sucursal.`);
             }
             modal.close();
             renderCatalogsManagementView(mainContainer);

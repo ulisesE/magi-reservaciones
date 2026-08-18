@@ -19,6 +19,9 @@ export function renderMonthView(container) {
     // Obtener días del mes con padding
     const monthDays = getMonthDays(currentYear, currentMonth);
 
+    // Actualizar suscripción de reservas en el store para el rango mensual
+    store.updateReservationsSubscription(monthDays[0].dateKey, monthDays[monthDays.length - 1].dateKey);
+
     // Obtener conteo de reservaciones por día en este mes
     const counts = store.getMonthReservationsCount(currentYear, currentMonth);
 

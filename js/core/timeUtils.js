@@ -1,5 +1,6 @@
 // js/core/timeUtils.js
 // Utilidades de fechas, horas y cálculo de slots para Pump It Up
+import { authManager } from './authManager.js';
 
 export const DAYS_OF_WEEK = [
     { id: 0, name: 'Domingo', short: 'Dom' },
@@ -300,6 +301,8 @@ export function calculateBookingCost(durationMinutes, numPlayers, machine, busin
     const playersCount = parseInt(numPlayers, 10) || 1;
     const duration = parseInt(durationMinutes, 10) || 30;
 
+    let price = 0;
+
     // 1. Intentar buscar una tarifa especial en el local
     if (business && Array.isArray(business.customRates)) {
         const specialRate = business.customRates.find(r => 
@@ -307,14 +310,25 @@ export function calculateBookingCost(durationMinutes, numPlayers, machine, busin
             parseInt(r.duration, 10) === duration
         );
         if (specialRate) {
-            return parseFloat(specialRate.price);
+            price = parseFloat(specialRate.price);
         }
     }
 
-    // 2. Fallback: Calcular de forma proporcional a la tarifa de la máquina
-    const rate1P = machine ? (parseFloat(machine.hourlyRate) || 80) : 80;
-    const rate2P = machine ? (parseFloat(machine.hourlyRate2P) || 130) : 130;
-    const activeRate = playersCount === 2 ? rate2P : rate1P;
+    if (price === 0) {
+        // 2. Fallback: Calcular de forma proporcional a la tarifa de la máquina
+        const rate1P = machine ? (parseFloat(machine.hourlyRate) || 80) : 80;
+        const rate2P = machine ? (parseFloat(machine.hourlyRate2P) || 130) : 130;
+        const activeRate = playersCount === 2 ? rate2P : rate1P;
+        price = Math.round(duration * (activeRate / 60));
+    }
 
-    return Math.round(duration * (activeRate / 60));
+    // 3. Aplicar descuento de lealtad si está activo en la sucursal
+    if (business && business.loyaltyEnabled) {
+        const discount = authManager && authManager.getCurrentUserDiscount ? authManager.getCurrentUserDiscount() : 0;
+        if (discount > 0) {
+            price = Math.round(price * (1 - discount));
+        }
+    }
+
+    return price;
 }

@@ -7,10 +7,22 @@ import { toast } from '../components/toast.js';
 import { openLoginModal } from '../components/header.js';
 import { openBookingModal, showReservationTicket } from './clientBookingModal.js';
 import { formatFriendlyDate, format12Hour, formatDuration } from '../core/timeUtils.js';
+import { 
+    db, 
+    isFirebaseAvailable, 
+    COLLECTIONS, 
+    collection, 
+    getDocs, 
+    doc, 
+    getDoc, 
+    query, 
+    where 
+} from '../firebaseConfig.js';
+import { loyaltyManager, TIERS } from '../core/loyaltyManager.js';
 
 const AVATAR_OPTIONS = ['🕺', '💃', '🕹️', '⚡', '🎧', '🔥', '🚀', '👑', '🎯', '🌟', '👾', '👟'];
 
-export function renderClientProfileView(container) {
+export async function renderClientProfileView(container) {
     const currentUser = authManager.getCurrentUser();
     const isClientUser = authManager.isClientUser();
     const business = store.currentBusiness || tenantManager.getActiveBusiness();
@@ -40,15 +52,41 @@ export function renderClientProfileView(container) {
         return;
     }
 
-    // Obtener las reservaciones exclusivas de este cliente
-    const allReservations = store.getReservations();
-    const myReservations = allReservations.filter(r => {
-        const matchesId = r.clientId && r.clientId === currentUser.id;
-        const matchesUser = r.clientUsername && r.clientUsername === currentUser.username;
-        const matchesName = r.clientName && r.clientName.toLowerCase() === currentUser.name.toLowerCase();
-        const matchesPhone = r.clientPhone && currentUser.phone && r.clientPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '');
-        return matchesId || matchesUser || matchesName || matchesPhone;
-    }).sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+    // Carga optimizada de reservaciones de este cliente directamente desde Firestore
+    let myReservations = [];
+    if (isFirebaseAvailable && db) {
+        try {
+            const q = query(
+                collection(db, COLLECTIONS.RESERVATIONS), 
+                where("clientId", "==", currentUser.id)
+            );
+            const snap = await getDocs(q);
+            snap.forEach(d => myReservations.push({ id: d.id, ...d.data() }));
+        } catch (e) {
+            console.warn("Error cargando reservas desde Firestore:", e);
+        }
+    }
+
+    // Fallback local
+    if (myReservations.length === 0) {
+        const allReservations = store.getReservations();
+        myReservations = allReservations.filter(r => {
+            const matchesId = r.clientId && r.clientId === currentUser.id;
+            const matchesUser = r.clientUsername && r.clientUsername === currentUser.username;
+            return matchesId || matchesUser;
+        });
+    }
+    myReservations.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+
+    // Carga de canjes del usuario
+    let myRedemptions = [];
+    if (business.loyaltyEnabled) {
+        try {
+            myRedemptions = await loyaltyManager.getRedemptions(currentUser.id);
+        } catch (e) {
+            console.warn("Error cargando canjes:", e);
+        }
+    }
 
     const totalBookings = myReservations.length;
     const confirmedBookings = myReservations.filter(r => r.status === 'CONFIRMED').length;
@@ -56,14 +94,21 @@ export function renderClientProfileView(container) {
         .filter(r => r.status === 'CONFIRMED')
         .reduce((sum, r) => sum + ((r.durationMinutes || 60) / 60), 0);
 
+    // Calcular estatus de lealtad
+    const currentTier = loyaltyManager.calculateTier(currentUser.loyaltyPoints || 0);
+    const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(currentUser.loyaltyPoints || 0);
+    const catalogRewards = business.loyaltyEnabled ? await loyaltyManager.getRewardsCatalog(business.id) : [];
+    const discountPct = loyaltyManager.getDiscountForTier(currentTier.name);
+    const discountText = discountPct > 0 ? `${discountPct * 100}%` : '';
+
     container.innerHTML = `
         <div class="client-profile-wrapper animate-fade-in" style="max-width:1000px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:20px;">
             
             <!-- Hero Card del Jugador -->
-            <div class="settings-card" style="padding:24px; border-left:4px solid var(--color-neon-lime); background:linear-gradient(135deg, var(--bg-dark-800) 0%, rgba(20,25,35,0.9) 100%);">
+            <div class="settings-card" style="padding:24px; border-left:4px solid ${currentTier.color}; background:linear-gradient(135deg, var(--bg-dark-800) 0%, rgba(20,25,35,0.9) 100%);">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
                     <div style="display:flex; align-items:center; gap:18px;">
-                        <div style="font-size:3rem; width:70px; height:70px; display:flex; align-items:center; justify-content:center; background:var(--bg-dark-700); border-radius:var(--radius-md); border:2px solid var(--border-color); box-shadow:0 0 16px rgba(104,242,5,0.2);">
+                        <div style="font-size:3rem; width:70px; height:70px; display:flex; align-items:center; justify-content:center; background:var(--bg-dark-700); border-radius:var(--radius-md); border:2px solid var(--border-color); box-shadow:0 0 16px ${currentTier.color}33;">
                             ${currentUser.avatar || '🕺'}
                         </div>
                         <div>
@@ -75,6 +120,9 @@ export function renderClientProfileView(container) {
                                 @${currentUser.username || 'gamertag'}
                             </div>
                             <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                                <span class="badge" style="background:${currentTier.color}22; color:${currentTier.color}; border:1px solid ${currentTier.color}55; font-size:0.75rem;">
+                                    ${currentTier.badge} Nivel ${currentTier.name}
+                                </span>
                                 <span class="badge badge-primary" style="font-size:0.75rem;">⭐ ${currentUser.skillLevel || 'Liga C'}</span>
                                 <span class="badge" style="background:rgba(255,255,255,0.08); font-size:0.75rem; color:var(--text-secondary);">🎮 ${currentUser.preferredMode || 'Single'}</span>
                             </div>
@@ -83,29 +131,36 @@ export function renderClientProfileView(container) {
 
                     <!-- Estadísticas Rápidas -->
                     <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                        ${business.loyaltyEnabled ? `
+                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                                <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Puntos Lealtad</span>
+                                <strong style="font-size:1.3rem; color:var(--color-neon-lime);">${currentUser.loyaltyPoints || 0} Pts</strong>
+                            </div>
+                        ` : ''}
                         <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
-                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Total Reservas</span>
-                            <strong style="font-size:1.3rem; color:var(--color-neon-lime);">${totalBookings}</strong>
+                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas</span>
+                            <strong style="font-size:1.3rem; color:var(--piu-cyan);">${currentUser.loyaltyVisits || 0}</strong>
                         </div>
                         <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
-                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Confirmadas</span>
-                            <strong style="font-size:1.3rem; color:#00ff88;">${confirmedBookings}</strong>
-                        </div>
-                        <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
-                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas de Juego</span>
-                            <strong style="font-size:1.3rem; color:var(--piu-cyan);">${totalHours}h</strong>
+                            <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas Jugadas</span>
+                            <strong style="font-size:1.3rem; color:#ffffff;">${totalHours}h</strong>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Navegación de Pestañas del Perfil -->
-            <div style="display:flex; gap:10px; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+            <div style="display:flex; gap:10px; border-bottom:1px solid var(--border-color); padding-bottom:8px; flex-wrap:wrap;">
                 <button class="btn btn-sm btn-profile-tab active" data-tab="tab-my-bookings" style="flex:1; max-width:240px;">
                     <span>🎟️ Mis Reservaciones (${myReservations.length})</span>
                 </button>
+                ${business.loyaltyEnabled ? `
+                    <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-loyalty-rewards" style="flex:1; max-width:240px; color:var(--color-neon-lime);">
+                        <span>🎁 Lealtad y Premios</span>
+                    </button>
+                ` : ''}
                 <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-edit-profile" style="flex:1; max-width:240px;">
-                    <span>⚙️ Administrar Mi Perfil</span>
+                    <span>⚙️ Administrar Perfil</span>
                 </button>
             </div>
 
@@ -138,7 +193,7 @@ export function renderClientProfileView(container) {
                             
                             let statusBadge = '<span class="badge badge-warning">En Revisión</span>';
                             if (r.status === 'CONFIRMED') statusBadge = '<span class="badge badge-success">Confirmada</span>';
-                            if (r.status === 'CANCELLED') statusBadge = '<span class="badge badge-danger">Cancelada por ti</span>';
+                            if (r.status === 'CANCELLED') statusBadge = '<span class="badge badge-danger">Cancelada</span>';
                             if (r.status === 'REJECTED') statusBadge = '<span class="badge badge-danger">Rechazada</span>';
 
                             const isCancellable = r.status === 'PENDING' || r.status === 'CONFIRMED';
@@ -177,7 +232,125 @@ export function renderClientProfileView(container) {
                 `}
             </div>
 
-            <!-- Contenido Pestaña 2: Administrar Mi Perfil -->
+            <!-- Contenido Pestaña 2: Lealtad y Premios -->
+            ${business.loyaltyEnabled ? `
+                <div id="tab-loyalty-rewards" class="profile-tab-section animate-fade-in hidden">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; flex-wrap:wrap;">
+                        <!-- Columna Izquierda: Estatus y Tiers -->
+                        <div class="settings-card" style="padding:20px; display:flex; flex-direction:column; gap:14px; text-align:left;">
+                            <h3 style="margin:0; color:#fff; font-size:1.15rem; font-family:var(--font-heading);">ESTATUS DE LEALTAD</h3>
+                            
+                            <div style="background:var(--bg-dark-700); padding:15px; border-radius:var(--radius-sm); border-left:4px solid ${currentTier.color};">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                    <span style="font-size:1.1rem; font-weight:bold; color:#fff;">
+                                        Nivel: <span class="badge" style="background:${currentTier.color}22; color:${currentTier.color}; border:1px solid ${currentTier.color}55; font-size:0.75rem; padding: 2px 8px; margin-left:6px;">
+                                            ${currentTier.badge} ${currentTier.name}
+                                        </span>
+                                    </span>
+                                    <span style="font-size:0.82rem; color:var(--text-muted);">${currentUser.loyaltyVisits || 0} Visitas</span>
+                                </div>
+                                <div style="font-size:1.7rem; font-weight:bold; color:var(--color-neon-lime);">${currentUser.loyaltyPoints || 0} <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:normal;">Puntos acumulados</span></div>
+                                ${discountText ? `<div style="font-size:0.82rem; color:var(--piu-cyan); font-weight:bold; margin-top:6px;">⚡ ¡Tienes ${discountText} de descuento directo en tus reservas!</div>` : ''}
+                            </div>
+
+                            <!-- Progreso -->
+                            ${nextTierName ? `
+                                <div>
+                                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-secondary); margin-bottom:6px;">
+                                        <span>Progreso a <strong>Nivel ${nextTierName}</strong></span>
+                                        <span>Faltan <strong>${pointsNeeded}</strong> Pts</span>
+                                    </div>
+                                    <div style="background:rgba(255,255,255,0.06); height:12px; border-radius:10px; overflow:hidden;">
+                                        <div style="width:${progressPercent}%; background:linear-gradient(90deg, ${currentTier.color} 0%, var(--color-neon-lime) 100%); height:100%; transition: width 0.4s ease;"></div>
+                                    </div>
+                                    <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:6px; text-align:right;">${progressPercent}% completado</small>
+                                </div>
+                            ` : `
+                                <div style="text-align:center; padding:10px; background:rgba(104,242,5,0.08); border-radius:4px; color:var(--color-neon-lime); font-weight:bold; font-size:0.88rem;">
+                                    🏆 ¡Máximo Nivel Alcanzado! (Platino)
+                                </div>
+                            `}
+
+                            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
+                                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles y Beneficios:</h4>
+                                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
+                                    <li>🟫 <strong>Bronce</strong> (0-99 pts): Sin descuento.</li>
+                                    <li>⬜ <strong>Plata</strong> (100-299 pts): <strong>5% de descuento</strong> automático en reservas.</li>
+                                    <li>🟨 <strong>Oro</strong> (300-599 pts): <strong>10% de descuento</strong> automático en reservas.</li>
+                                    <li>🟦 <strong>Platino</strong> (600+ pts): <strong>15% de descuento</strong> automático en reservas.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Columna Derecha: Canjes -->
+                        <div class="settings-card" style="padding:20px; display:flex; flex-direction:column; gap:14px; text-align:left;">
+                            <h3 style="margin:0; color:#fff; font-size:1.15rem; font-family:var(--font-heading);">🎁 CANJEAR RECOMPENSAS</h3>
+                            
+                            <div class="rewards-profile-list" style="display:flex; flex-direction:column; gap:10px; max-height:350px; overflow-y:auto;">
+                                ${catalogRewards.length === 0 ? `
+                                    <p style="color:var(--text-muted); font-size:0.9rem; text-align:center; padding:20px;">No hay premios disponibles en el catálogo en este momento.</p>
+                                ` : catalogRewards.map(r => {
+                                    const canRedeem = (currentUser.loyaltyPoints || 0) >= r.costPoints;
+                                    return `
+                                        <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                                            <div style="text-align:left;">
+                                                <span style="font-size:1.3rem; margin-right:6px;">${r.icon || '🎁'}</span>
+                                                <strong style="color:#fff; font-size:0.95rem;">${r.name}</strong>
+                                                <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${r.description || ''}</div>
+                                                <div style="margin-top:4px;"><span class="badge badge-success" style="font-weight:bold;">${r.costPoints} Puntos</span></div>
+                                            </div>
+                                            <div>
+                                                <button class="btn btn-primary btn-xs btn-redeem-reward glow-red" data-rew-id="${r.id}" ${canRedeem ? '' : 'disabled'} style="font-size:0.75rem;">
+                                                    Canjear
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cupones del Jugador -->
+                    <div class="settings-card" style="margin-top:20px; padding:20px; text-align:left;">
+                        <h3 style="margin:0 0 12px 0; color:#fff; font-size:1.15rem; font-family:var(--font-heading);">🎟️ MIS CUPONES Y RECOMPENSAS CANJEADAS</h3>
+                        
+                        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px;">
+                            ${myRedemptions.length === 0 ? `
+                                <div style="grid-column:1/-1; padding:24px; text-align:center; color:var(--text-muted); font-size:0.9rem;">
+                                    Aún no has canjeado ningún premio. ¡Suma puntos jugando y canjéalos en sala!
+                                </div>
+                            ` : myRedemptions.map(red => {
+                                const isPending = red.status === 'PENDING';
+                                return `
+                                    <div style="background:var(--bg-dark-700); padding:14px; border-radius:4px; border:1px solid ${isPending ? 'rgba(104,242,5,0.3)' : 'var(--border-color)'}; display:flex; flex-direction:column; gap:8px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                            <div>
+                                                <span style="font-size:1.2rem; margin-right:4px;">${red.rewardIcon || '🎁'}</span>
+                                                <strong style="color:#ffffff; font-size:0.95rem;">${red.rewardName}</strong>
+                                            </div>
+                                            <span class="badge ${isPending ? 'badge-warning' : 'badge-dark'}" style="font-size:0.7rem;">
+                                                ${isPending ? 'Listo en Sala' : 'Entregado'}
+                                            </span>
+                                        </div>
+                                        
+                                        <div style="background:var(--bg-dark-800); padding:8px; border-radius:4px; text-align:center; border:1px dashed var(--border-color); margin-top:4px;">
+                                            <small style="color:var(--text-muted); display:block; font-size:0.7rem; margin-bottom:2px; font-weight:700;">CÓDIGO DE CUPÓN</small>
+                                            <code style="color:var(--color-neon-lime); font-size:1.05rem; font-weight:bold; letter-spacing:1px;">${red.code}</code>
+                                        </div>
+                                        
+                                        <div style="font-size:0.75rem; color:var(--text-muted); text-align:right;">
+                                            Canjeado: ${new Date(red.createdAt).toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Contenido Pestaña 3: Administrar Mi Perfil -->
             <div id="tab-edit-profile" class="profile-tab-section animate-fade-in hidden">
                 <div class="settings-card" style="padding:24px; max-width:650px; margin:0 auto;">
                     <h3 style="font-size:1.2rem; margin:0 0 16px 0; color:#ffffff;">Editar Mis Datos de Jugador</h3>
@@ -343,6 +516,34 @@ export function renderClientProfileView(container) {
                     renderClientProfileView(container);
                 } catch (err) {
                     toast.error(err.message || "No se pudo cancelar la reservación.");
+                }
+            }
+        });
+    });
+
+    // Canjear recompensa
+    container.querySelectorAll('.btn-redeem-reward').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const rewId = btn.dataset.rewId;
+            const reward = catalogRewards.find(r => r.id === rewId);
+            if (!reward) return;
+
+            if (confirm(`¿Estás seguro de canjear "${reward.name}" por ${reward.costPoints} puntos?\nSe descontará de tu balance de inmediato.`)) {
+                try {
+                    await loyaltyManager.redeemReward(
+                        currentUser.id,
+                        currentUser.username,
+                        currentUser.name,
+                        business.id,
+                        reward
+                    );
+                    toast.success("¡Premio canjeado con éxito! Muestra tu código de cupón al encargado para reclamar tu premio.");
+                    
+                    // Recargar perfil
+                    await authManager.init();
+                    renderClientProfileView(container);
+                } catch (e) {
+                    toast.error(e.message);
                 }
             }
         });

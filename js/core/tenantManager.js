@@ -253,6 +253,7 @@ class TenantManager {
             this.unsubscribeBusinesses = onSnapshot(collection(db, COLLECTIONS.BUSINESSES), (snapshot) => {
                 this.businesses = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
                 this.saveLocally(this.businesses);
+                syncMetadataToServer(this.businesses);
                 this.notify();
             }, (error) => console.warn('Error de sincronización de locales:', error));
         }
@@ -296,6 +297,7 @@ class TenantManager {
             }
         }
 
+        syncMetadataToServer(this.businesses);
         return this.getActiveBusiness();
     }
 
@@ -466,7 +468,7 @@ class TenantManager {
         };
 
         this.saveLocally(this.businesses);
-
+        syncMetadataToServer(this.businesses);
         this.notify();
         return this.businesses[index];
     }
@@ -571,3 +573,21 @@ class TenantManager {
 }
 
 export const tenantManager = new TenantManager();
+
+async function syncMetadataToServer(businesses) {
+    try {
+        const payload = businesses.map(b => ({
+            id: b.id,
+            name: b.name,
+            tagline: b.tagline || b.city || '',
+            imageUrl: b.imageUrl || ''
+        }));
+        await fetch('/api/save-metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    } catch(e) {
+        // Ignorar silenciosamente si falla la llamada
+    }
+}

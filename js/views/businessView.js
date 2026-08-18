@@ -468,6 +468,36 @@ export function renderBusinessView(container) {
                         </div>
                     </div>
 
+                    <!-- SECCIÓN 7: PROGRAMA DE LEALTAD DE LA SUCURSAL -->
+                    <div class="settings-card">
+                        <div class="card-title-bar">
+                            <div class="title-with-icon">
+                                <span class="t-icon">🎁</span>
+                                <div>
+                                    <h3>7. Programa de Lealtad y Premios en Sucursal</h3>
+                                    <small>Configura la activación del programa de visitas/puntos y la tasa de acumulación de puntos para tus clientes</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-form-body">
+                            <div class="form-row grid-2">
+                                <div class="form-group">
+                                    <label for="biz-loyalty-enabled"><span class="neon-arrow">◆</span> Programa de Lealtad</label>
+                                    <select id="biz-loyalty-enabled" class="cyber-select">
+                                        <option value="true" ${business.loyaltyEnabled ? 'selected' : ''}>✅ ACTIVO - Clientes acumulan visitas y puntos</option>
+                                        <option value="false" ${!business.loyaltyEnabled ? 'selected' : ''}>❌ INACTIVO - Programa deshabilitado</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="biz-points-ratio"><span class="neon-arrow">◆</span> Tasa de Acumulación (Puntos)</label>
+                                    <input type="number" id="biz-points-ratio" class="cyber-input" value="${business.pointsRatio || 10}" min="1" placeholder="Ej. 10 ($10 gastados = 1 punto)">
+                                    <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:4px;">1 punto otorgado por cada X unidades de tu moneda consumidas.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- SECCIÓN 4: TABLA DE TARIFAS ESPECIALES POR DURACIÓN -->
                     <div class="settings-card" style="margin-top: 20px;">
                         <div class="card-title-bar">
@@ -888,7 +918,9 @@ export function renderBusinessView(container) {
             rules: container.querySelector('#biz-rules').value.trim(),
             wifiNetwork: container.querySelector('#biz-wifi-net').value.trim(),
             wifiPassword: container.querySelector('#biz-wifi-pass').value.trim(),
-            disableChangeLocal: container.querySelector('#biz-disable-change-local').checked
+            disableChangeLocal: container.querySelector('#biz-disable-change-local').checked,
+            loyaltyEnabled: container.querySelector('#biz-loyalty-enabled').value === 'true',
+            pointsRatio: parseInt(container.querySelector('#biz-points-ratio').value, 10) || 10
         };
 
         if (!updated.name || !updated.city) {

@@ -14,338 +14,312 @@ const pageSize = 15;
 
 export function renderRequestsView(container) {
     const business = store.currentBusiness;
-    const allReservations = store.getReservations().sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
     const machines = store.getMachines();
     
-    const pendingCount = allReservations.filter(r => r.status === 'PENDING').length;
-    const confirmedCount = allReservations.filter(r => r.status === 'CONFIRMED').length;
-    const rejectedCount = allReservations.filter(r => r.status === 'REJECTED').length;
-
+    // 1. Mostrar loader de inmediato
     container.innerHTML = `
-        <div class="requests-view-wrapper animate-fade-in">
-            <!-- Header de Bandeja -->
-            <div class="view-header-bar">
-                <div class="header-left">
-                    <h2 class="friendly-date-title">📥 Bandeja de Solicitudes y Reservaciones</h2>
-                    <p class="subtitle-text">Gestiona, aprueba, rechaza o reprograma las solicitudes de tus clientes.</p>
-                </div>
-            </div>
-
-            <!-- Filtros de Estado -->
-            <div class="requests-filter-bar">
-                <button class="filter-tab ${activeFilter === 'PENDING' ? 'active' : ''}" data-filter="PENDING">
-                    <span>⏳ Pendientes</span>
-                    <span class="filter-pill pill-warning">${pendingCount}</span>
-                </button>
-                <button class="filter-tab ${activeFilter === 'CONFIRMED' ? 'active' : ''}" data-filter="CONFIRMED">
-                    <span>✅ Confirmadas</span>
-                    <span class="filter-pill pill-success">${confirmedCount}</span>
-                </button>
-                <button class="filter-tab ${activeFilter === 'REJECTED' ? 'active' : ''}" data-filter="REJECTED">
-                    <span>❌ Rechazadas</span>
-                    <span class="filter-pill pill-danger">${rejectedCount}</span>
-                </button>
-                <button class="filter-tab ${activeFilter === 'ALL' ? 'active' : ''}" data-filter="ALL">
-                    <span>📋 Todas (${allReservations.length})</span>
-                </button>
-            </div>
-
-            <!-- Barra de Búsqueda y Control de Filtros -->
-            <div class="requests-search-bar" style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; background:var(--bg-dark-800); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
-                <div class="form-group" style="margin:0; flex:2; min-width:200px;">
-                    <input type="text" id="search-req" class="cyber-input" placeholder="🔍 Buscar por nombre, GamerTag o teléfono..." value="${searchQuery}" style="padding:8px 12px;">
-                </div>
-                <div class="form-group" style="margin:0; flex:1; min-width:150px;">
-                    <select id="filter-mach" class="cyber-select" style="padding:8px 12px;">
-                        <option value="">Todas las Máquinas</option>
-                        ${machines.map(m => `<option value="${m.id}" ${m.id === selectedMachine ? 'selected' : ''}>${m.name.split(' (')[0]}</option>`).join('')}
-                    </select>
-                </div>
-                <div style="color:var(--text-muted); font-size:0.85rem; display:flex; gap:6px; align-items:center;">
-                    <span>Mostrando:</span>
-                    <strong id="visible-count" style="color:var(--color-neon-lime);">0</strong>
-                    <span>de</span>
-                    <strong id="total-count" style="color:#ffffff;">0</strong>
-                </div>
-            </div>
-
-            <!-- Listado en Formato Tabla para Alto Volumen -->
-            <div class="table-responsive animate-fade-in" style="overflow-x:auto; background:var(--bg-dark-800); border-radius:var(--radius-sm); border:1px solid var(--border-color); box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-                <table class="catalogs-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:0.85rem;">
-                    <thead>
-                        <tr style="border-bottom:2px solid var(--border-color); background:rgba(0,0,0,0.4); color:var(--text-muted);">
-                            <th style="padding:12px; font-weight:600;">Folio / Estado</th>
-                            <th style="padding:12px; font-weight:600;">Jugador / Cliente</th>
-                            <th style="padding:12px; font-weight:600;">Máquina / Modo</th>
-                            <th style="padding:12px; font-weight:600;">Fecha / Horario</th>
-                            <th style="padding:12px; font-weight:600;">Total</th>
-                            <th style="padding:12px; font-weight:600; text-align:right;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="requests-table-body">
-                        <!-- Carga dinámica por JS -->
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Controles de Paginación -->
-            <div class="requests-pagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding:12px 0;">
-                <div style="font-size:0.85rem; color:var(--text-muted);">
-                    Página <strong id="current-page-num" style="color:#ffffff;">1</strong> de <strong id="total-pages-num">1</strong>
-                </div>
-                <div style="display:flex; gap:8px;">
-                    <button type="button" class="btn btn-outline btn-sm" id="btn-prev-page" style="padding:6px 16px; font-size:0.8rem;">◀ Anterior</button>
-                    <button type="button" class="btn btn-outline btn-sm" id="btn-next-page" style="padding:6px 16px; font-size:0.8rem;">Siguiente ▶</button>
-                </div>
-            </div>
+        <div class="requests-view-wrapper animate-fade-in" style="padding: 48px 24px; text-align: center; background:var(--bg-dark-800); border-radius:var(--radius-md); border:1px solid var(--border-color); max-width:600px; margin:40px auto;">
+            <div class="empty-icon pulse-glow" style="font-size:3rem; margin-bottom:16px;">📥</div>
+            <h3>Cargando solicitudes de reservas...</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:8px;">Consultando base de datos Firestore de forma optimizada...</p>
         </div>
     `;
 
-    // Filtros de pestaña
-    container.querySelectorAll('.filter-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            activeFilter = tab.dataset.filter;
-            currentPage = 1;
-            renderRequestsView(container);
-        });
-    });
+    // 2. Cargar asíncronamente
+    store.loadReservationsForTray().then(allReservations => {
+        const pendingCount = allReservations.filter(r => r.status === 'PENDING').length;
+        const confirmedCount = allReservations.filter(r => r.status === 'CONFIRMED').length;
+        const rejectedCount = allReservations.filter(r => r.status === 'REJECTED').length;
 
-    const applyFiltersAndRender = () => {
-        // 1. Filtrar por estado (pestaña activa)
-        let filtered = allReservations;
-        if (activeFilter === 'PENDING') filtered = allReservations.filter(r => r.status === 'PENDING');
-        else if (activeFilter === 'CONFIRMED') filtered = allReservations.filter(r => r.status === 'CONFIRMED');
-        else if (activeFilter === 'REJECTED') filtered = allReservations.filter(r => r.status === 'REJECTED');
+        container.innerHTML = `
+            <div class="requests-view-wrapper animate-fade-in">
+                <!-- Header de Bandeja -->
+                <div class="view-header-bar">
+                    <div class="header-left">
+                        <h2 class="friendly-date-title">📥 Bandeja de Solicitudes y Reservaciones</h2>
+                        <p class="subtitle-text">Gestiona, aprueba, rechaza o reprograma las solicitudes de tus clientes.</p>
+                    </div>
+                </div>
 
-        // 2. Filtrar por búsqueda de texto
-        if (searchQuery) {
-            filtered = filtered.filter(r => 
-                (r.clientName && r.clientName.toLowerCase().includes(searchQuery)) ||
-                (r.clientUsername && r.clientUsername.toLowerCase().includes(searchQuery)) ||
-                (r.clientPhone && r.clientPhone.includes(searchQuery)) ||
-                (r.id && r.id.toLowerCase().includes(searchQuery))
-            );
-        }
+                <!-- Filtros de Estado -->
+                <div class="requests-filter-bar">
+                    <button class="filter-tab ${activeFilter === 'PENDING' ? 'active' : ''}" data-filter="PENDING">
+                        <span>⏳ Pendientes</span>
+                        <span class="filter-pill pill-warning">${pendingCount}</span>
+                    </button>
+                    <button class="filter-tab ${activeFilter === 'CONFIRMED' ? 'active' : ''}" data-filter="CONFIRMED">
+                        <span>✅ Confirmadas</span>
+                        <span class="filter-pill pill-success">${confirmedCount}</span>
+                    </button>
+                    <button class="filter-tab ${activeFilter === 'REJECTED' ? 'active' : ''}" data-filter="REJECTED">
+                        <span>❌ Rechazadas</span>
+                        <span class="filter-pill pill-danger">${rejectedCount}</span>
+                    </button>
+                    <button class="filter-tab ${activeFilter === 'ALL' ? 'active' : ''}" data-filter="ALL">
+                        <span>📋 Todas (${allReservations.length})</span>
+                    </button>
+                </div>
 
-        // 3. Filtrar por máquina
-        if (selectedMachine) {
-            filtered = filtered.filter(r => r.machineId === selectedMachine);
-        }
+                <!-- Barra de Búsqueda y Control de Filtros -->
+                <div class="requests-search-bar" style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; background:var(--bg-dark-800); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+                    <div class="form-group" style="margin:0; flex:2; min-width:200px;">
+                        <input type="text" id="search-req" class="cyber-input" placeholder="🔍 Buscar por nombre, GamerTag o teléfono..." value="${searchQuery}" style="padding:8px 12px;">
+                    </div>
+                    <div class="form-group" style="margin:0; flex:1; min-width:150px;">
+                        <select id="filter-mach" class="cyber-select" style="padding:8px 12px;">
+                            <option value="">Todas las Máquinas</option>
+                            ${machines.map(m => `<option value="${m.id}" ${m.id === selectedMachine ? 'selected' : ''}>${m.name.split(' (')[0]}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div style="color:var(--text-muted); font-size:0.85rem; display:flex; gap:6px; align-items:center;">
+                        <span>Mostrando:</span>
+                        <strong id="visible-count" style="color:var(--color-neon-lime);">0</strong>
+                        <span>de</span>
+                        <strong id="total-count" style="color:#ffffff;">0</strong>
+                    </div>
+                </div>
 
-        // 4. Calcular paginación
-        const totalCount = filtered.length;
-        const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-        if (currentPage > totalPages) currentPage = totalPages;
+                <!-- Listado en Formato Tabla para Alto Volumen -->
+                <div class="table-responsive animate-fade-in" style="overflow-x:auto; background:var(--bg-dark-800); border-radius:var(--radius-sm); border:1px solid var(--border-color); box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+                    <table class="catalogs-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:0.85rem;">
+                        <thead>
+                            <tr style="border-bottom:2px solid var(--border-color); background:rgba(0,0,0,0.4); color:var(--text-muted);">
+                                <th style="padding:12px; font-weight:600;">Folio / Estado</th>
+                                <th style="padding:12px; font-weight:600;">Jugador / Cliente</th>
+                                <th style="padding:12px; font-weight:600;">Máquina / Modo</th>
+                                <th style="padding:12px; font-weight:600;">Fecha / Horario</th>
+                                <th style="padding:12px; font-weight:600;">Total</th>
+                                <th style="padding:12px; font-weight:600; text-align:right;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requests-table-body">
+                            <!-- Carga dinámica por JS -->
+                        </tbody>
+                    </table>
+                </div>
 
-        const startIdx = (currentPage - 1) * pageSize;
-        const pageReservations = filtered.slice(startIdx, startIdx + pageSize);
+                <!-- Controles de Paginación -->
+                <div class="requests-pagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding:12px 0;">
+                    <div style="font-size:0.85rem; color:var(--text-muted);">
+                        Página <strong id="current-page-num" style="color:#ffffff;">1</strong> de <strong id="total-pages-num">1</strong>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" class="btn btn-outline btn-sm" id="btn-prev-page" style="padding:6px 16px; font-size:0.8rem;">◀ Anterior</button>
+                        <button type="button" class="btn btn-outline btn-sm" id="btn-next-page" style="padding:6px 16px; font-size:0.8rem;">Siguiente ▶</button>
+                    </div>
+                </div>
+            </div>
+        `;
 
-        // 5. Renderizar contadores
-        const visibleCountEl = container.querySelector('#visible-count');
-        const totalCountEl = container.querySelector('#total-count');
-        const curPageEl = container.querySelector('#current-page-num');
-        const totPagesEl = container.querySelector('#total-pages-num');
-
-        if (visibleCountEl) visibleCountEl.textContent = pageReservations.length;
-        if (totalCountEl) totalCountEl.textContent = totalCount;
-        if (curPageEl) curPageEl.textContent = currentPage;
-        if (totPagesEl) totPagesEl.textContent = totalPages;
-
-        // 6. Activar/Desactivar botones de paginación
-        const prevBtn = container.querySelector('#btn-prev-page');
-        const nextBtn = container.querySelector('#btn-next-page');
-        if (prevBtn) prevBtn.disabled = currentPage === 1;
-        if (nextBtn) nextBtn.disabled = currentPage === totalPages;
-
-        // 7. Renderizar filas
-        const tbody = container.querySelector('#requests-table-body');
-        if (!tbody) return;
-
-        if (pageReservations.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 24px;">
-                        No se encontraron reservaciones con los criterios seleccionados.
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        tbody.innerHTML = pageReservations.map(r => {
-            const machine = store.getMachineById(r.machineId);
-            const isPending = r.status === 'PENDING';
-            const isConfirmed = r.status === 'CONFIRMED';
-            
-            let badgeClass = 'badge-warning';
-            let badgeText = 'Pendiente';
-            if (isConfirmed) {
-                badgeClass = 'badge-success';
-                badgeText = 'Confirmada';
-            } else if (r.status === 'REJECTED') {
-                badgeClass = 'badge-danger';
-                badgeText = 'Rechazada';
-            } else if (r.status === 'CANCELLED') {
-                badgeClass = 'badge-secondary';
-                badgeText = 'Cancelada';
-            }
-
-            const cleanPhone = (r.clientPhone || '').replace(/\D/g, '');
-            const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
-
-            return `
-                <tr style="border-bottom:1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
-                    <td style="padding:12px; white-space:nowrap;">
-                        <div style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-muted);">#${r.id.slice(-6).toUpperCase()}</div>
-                        <span class="badge ${badgeClass}" style="font-size:0.7rem; padding:2px 6px;">${badgeText}</span>
-                    </td>
-                    <td style="padding:12px;">
-                        <div style="font-weight:700; color:#ffffff;">${r.clientName}</div>
-                        <div style="font-size:0.75rem; color:var(--piu-cyan);">
-                            ${r.clientUsername ? `@${r.clientUsername}` : 'Invitado'}
-                            ${cleanPhone ? `• <a href="${waLink}" target="_blank" style="color:var(--color-neon-lime); text-decoration:none;">💬 WA</a>` : ''}
-                        </div>
-                    </td>
-                    <td style="padding:12px; color:#ffffff;">
-                        <strong>${machine ? machine.name.split(' (')[0] : 'PIU Machine'}</strong>
-                        <div style="font-size:0.75rem; color:var(--text-muted);">${r.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</div>
-                    </td>
-                    <td style="padding:12px; white-space:nowrap;">
-                        <div>📅 ${formatFriendlyDate(r.date)}</div>
-                        <div style="font-size:0.8rem; color:var(--piu-cyan);">⏰ ${format12Hour(r.startTime)} - ${format12Hour(r.endTime)}</div>
-                        <div style="font-size:0.75rem; color:var(--text-muted);">⏳ ${formatDuration(r.durationMinutes)}</div>
-                    </td>
-                    <td style="padding:12px;">
-                        <strong class="highlight-gold" style="font-size:0.95rem;">${business.currencySymbol}${r.totalCost}</strong>
-                    </td>
-                    <td style="padding:12px; text-align:right; white-space:nowrap;">
-                        <div style="display:flex; justify-content:flex-end; gap:6px;">
-                            <button type="button" class="btn btn-outline btn-xs btn-ticket-res" data-id="${r.id}" style="padding:4px 8px;">
-                                🎟️ Pase
-                            </button>
-                            ${isPending ? `
-                                <button type="button" class="btn btn-primary btn-xs btn-approve-res glow-green" data-id="${r.id}" style="background:var(--color-neon-lime); color:#000000; border-color:var(--color-neon-lime); padding:4px 8px;">
-                                    Aprobar
-                                </button>
-                                <button type="button" class="btn btn-warning btn-xs btn-modify-res" data-id="${r.id}" style="padding:4px 8px;">
-                                    ✏️ Modif.
-                                </button>
-                                <button type="button" class="btn btn-danger btn-xs btn-reject-res" data-id="${r.id}" style="padding:4px 8px;">
-                                    ✖
-                                </button>
-                            ` : ''}
-                            ${isConfirmed ? `
-                                <button type="button" class="btn btn-warning btn-xs btn-modify-res" data-id="${r.id}" style="padding:4px 8px;">
-                                    ✏️ Reasignar
-                                </button>
-                            ` : ''}
-                            ${!isPending ? `
-                                <button type="button" class="btn btn-danger btn-xs btn-del-res" data-id="${r.id}" style="padding:4px 8px;">
-                                    🗑️
-                                </button>
-                            ` : ''}
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        // Wire click handlers for dynamic buttons
-        tbody.querySelectorAll('.btn-ticket-res').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = btn.dataset.id;
-                const res = store.reservations.find(r => r.id === id);
-                if (res) showReservationTicket(res);
+        // Filtros de pestaña
+        container.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                activeFilter = tab.dataset.filter;
+                currentPage = 1;
+                renderRequestsView(container);
             });
         });
 
-        tbody.querySelectorAll('.btn-approve-res').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const id = btn.dataset.id;
-                const res = store.reservations.find(r => r.id === id);
-                if (!res) return;
-                if (confirm(`¿Aprobar reservación de ${res.clientName}?`)) {
+        const applyFiltersAndRender = () => {
+            let filtered = allReservations;
+            if (activeFilter === 'PENDING') filtered = allReservations.filter(r => r.status === 'PENDING');
+            else if (activeFilter === 'CONFIRMED') filtered = allReservations.filter(r => r.status === 'CONFIRMED');
+            else if (activeFilter === 'REJECTED') filtered = allReservations.filter(r => r.status === 'REJECTED');
+
+            if (searchQuery) {
+                filtered = filtered.filter(r => 
+                    (r.clientName && r.clientName.toLowerCase().includes(searchQuery)) ||
+                    (r.clientUsername && r.clientUsername.toLowerCase().includes(searchQuery)) ||
+                    (r.clientPhone && r.clientPhone.includes(searchQuery)) ||
+                    (r.id && r.id.toLowerCase().includes(searchQuery))
+                );
+            }
+
+            if (selectedMachine) {
+                filtered = filtered.filter(r => r.machineId === selectedMachine);
+            }
+
+            const totalCount = filtered.length;
+            const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+            if (currentPage > totalPages) currentPage = totalPages;
+
+            const startIdx = (currentPage - 1) * pageSize;
+            const pageReservations = filtered.slice(startIdx, startIdx + pageSize);
+
+            const visibleCountEl = container.querySelector('#visible-count');
+            const totalCountEl = container.querySelector('#total-count');
+            const curPageEl = container.querySelector('#current-page-num');
+            const totPagesEl = container.querySelector('#total-pages-num');
+
+            if (visibleCountEl) visibleCountEl.textContent = pageReservations.length;
+            if (totalCountEl) totalCountEl.textContent = totalCount;
+            if (curPageEl) curPageEl.textContent = currentPage;
+            if (totPagesEl) totPagesEl.textContent = totalPages;
+
+            const prevBtn = container.querySelector('#btn-prev-page');
+            const nextBtn = container.querySelector('#btn-next-page');
+            if (prevBtn) prevBtn.disabled = currentPage === 1;
+            if (nextBtn) nextBtn.disabled = currentPage === totalPages;
+
+            const tbody = container.querySelector('#requests-table-body');
+            if (!tbody) return;
+
+            if (pageReservations.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 24px;">
+                            No se encontraron reservaciones con los criterios seleccionados.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = pageReservations.map(r => {
+                const machine = store.getMachineById(r.machineId);
+                const isPending = r.status === 'PENDING';
+                const isConfirmed = r.status === 'CONFIRMED';
+                
+                let badgeClass = 'badge-warning';
+                let badgeText = 'Pendiente';
+                if (isConfirmed) {
+                    badgeClass = 'badge-success';
+                    badgeText = 'Confirmada';
+                } else if (r.status === 'REJECTED') {
+                    badgeClass = 'badge-danger';
+                    badgeText = 'Rechazada';
+                } else if (r.status === 'CANCELLED') {
+                    badgeClass = 'badge-secondary';
+                    badgeText = 'Cancelada';
+                }
+
+                return `
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                        <td style="padding:12px; white-space:nowrap;">
+                            <div style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-muted);">#${r.id.slice(-6).toUpperCase()}</div>
+                            <span class="badge ${badgeClass}" style="font-size:0.7rem; padding:2px 6px;">${badgeText}</span>
+                        </td>
+                        <td style="padding:12px;">
+                            <strong style="color:#ffffff;">${r.clientName}</strong>
+                            ${r.clientUsername ? `<div style="font-size:0.78rem; color:var(--piu-cyan);">@${r.clientUsername}</div>` : ''}
+                        </td>
+                        <td style="padding:12px;">
+                            <div>${machine ? machine.name.split(' (')[0] : 'Máquina PIU'}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">${r.playersMode === 2 ? '👥 Double / 2P' : '👤 Single / 1P'}</div>
+                        </td>
+                        <td style="padding:12px; white-space:nowrap;">
+                            <div>${formatFriendlyDate(r.date)}</div>
+                            <div style="font-size:0.8rem; color:var(--piu-cyan); font-family:var(--font-mono); font-weight:700;">${format12Hour(r.startTime)} - ${format12Hour(r.endTime)}</div>
+                        </td>
+                        <td style="padding:12px; font-weight:700; font-family:var(--font-mono); color:var(--color-chartreuse);">${business.currencySymbol}${r.totalCost}</td>
+                        <td style="padding:12px; text-align:right; white-space:nowrap;">
+                            <div style="display:flex; gap:6px; justify-content:flex-end;">
+                                <button class="btn btn-outline btn-xs btn-view-ticket" data-id="${r.id}" title="Ver Comprobante">🎟️ Ticket</button>
+                                ${isPending ? `
+                                    <button class="btn btn-success btn-xs btn-approve-res" data-id="${r.id}">✔️ Aprobar</button>
+                                    <button class="btn btn-danger btn-xs btn-reject-res" data-id="${r.id}">❌ Rechazar</button>
+                                ` : ''}
+                                <button class="btn btn-outline btn-xs btn-edit-res" data-id="${r.id}" title="Reprogramar/Modificar">✏️</button>
+                                <button class="btn btn-danger btn-xs btn-del-res" data-id="${r.id}" title="Eliminar de historial">🗑️</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Eventos de tabla
+            tbody.querySelectorAll('.btn-view-ticket').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.id;
+                    const res = allReservations.find(r => r.id === id);
+                    if (res) showReservationTicket(res);
+                });
+            });
+
+            tbody.querySelectorAll('.btn-approve-res').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.dataset.id;
                     try {
                         await store.approveReservation(id);
-                        toast.success(`Reservación aprobada.`);
+                        toast.success("Reservación aprobada.");
                         renderRequestsView(container);
-                    } catch (e) {
-                        toast.error(e.message);
+                    } catch (err) {
+                        toast.error(err.message);
                     }
-                }
+                });
             });
-        });
 
-        tbody.querySelectorAll('.btn-reject-res').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = btn.dataset.id;
-                const res = store.reservations.find(r => r.id === id);
-                if (res) openRejectModal(res);
+            tbody.querySelectorAll('.btn-reject-res').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.id;
+                    const res = allReservations.find(r => r.id === id);
+                    if (res) openRejectModal(res);
+                });
             });
-        });
 
-        tbody.querySelectorAll('.btn-modify-res').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = btn.dataset.id;
-                const res = store.reservations.find(r => r.id === id);
-                if (res) openModifyModal(res);
+            tbody.querySelectorAll('.btn-edit-res').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.id;
+                    const res = allReservations.find(r => r.id === id);
+                    if (res) openModifyModal(res, container);
+                });
             });
-        });
 
-        tbody.querySelectorAll('.btn-del-res').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const id = btn.dataset.id;
-                if (confirm("¿Estás seguro de eliminar el registro de esta reservación?")) {
-                    await store.deleteReservation(id);
-                    toast.info("Registro eliminado.");
-                    renderRequestsView(container);
-                }
+            tbody.querySelectorAll('.btn-del-res').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.dataset.id;
+                    if (confirm("¿Estás seguro de eliminar el registro de esta reservación?")) {
+                        await store.deleteReservation(id);
+                        toast.info("Registro eliminado.");
+                        renderRequestsView(container);
+                    }
+                });
             });
-        });
-    };
+        };
 
-    // Listeners para búsqueda y filtros
-    const searchInput = container.querySelector('#search-req');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            searchQuery = e.target.value.toLowerCase().trim();
-            currentPage = 1;
-            applyFiltersAndRender();
-        });
-    }
-
-    const machSelect = container.querySelector('#filter-mach');
-    if (machSelect) {
-        machSelect.addEventListener('change', (e) => {
-            selectedMachine = e.target.value;
-            currentPage = 1;
-            applyFiltersAndRender();
-        });
-    }
-
-    // Controles de paginación
-    const prevBtn = container.querySelector('#btn-prev-page');
-    const nextBtn = container.querySelector('#btn-next-page');
-
-    if (prevBtn) {
-        prevBtn.addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
+        // Listeners para búsqueda y filtros
+        const searchInput = container.querySelector('#search-req');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value.toLowerCase().trim();
+                currentPage = 1;
                 applyFiltersAndRender();
-            }
-        });
-    }
+            });
+        }
 
-    if (nextBtn) {
-        nextBtn.addEventListener('click', () => {
-            currentPage++;
-            applyFiltersAndRender();
-        });
-    }
+        const machSelect = container.querySelector('#filter-mach');
+        if (machSelect) {
+            machSelect.addEventListener('change', (e) => {
+                selectedMachine = e.target.value;
+                currentPage = 1;
+                applyFiltersAndRender();
+            });
+        }
 
-    // Carga inicial
-    applyFiltersAndRender();
-};
+        // Controles de paginación
+        const prevBtn = container.querySelector('#btn-prev-page');
+        const nextBtn = container.querySelector('#btn-next-page');
+
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    applyFiltersAndRender();
+                }
+            });
+        }
+
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                currentPage++;
+                applyFiltersAndRender();
+            });
+        }
+
+        // Carga inicial
+        applyFiltersAndRender();
+    });
+}
 
 /**
  * Modal para Rechazar una Solicitud con motivo
@@ -382,123 +356,91 @@ function openRejectModal(reservation) {
         icon: '❌',
         contentHtml,
         footerHtml,
-        maxWidth: '500px'
-    });
-
-    const selectPre = modalEl.querySelector('#reject-predefined');
-    const txtReason = modalEl.querySelector('#reject-reason-custom');
-
-    selectPre.addEventListener('change', () => {
-        if (selectPre.value !== 'Otro') {
-            txtReason.value = selectPre.value;
-        } else {
-            txtReason.value = '';
-            txtReason.focus();
-        }
+        maxWidth: '460px'
     });
 
     modalEl.querySelector('#btn-cancel-rej').onclick = () => modal.close();
 
+    modalEl.querySelector('#reject-predefined').addEventListener('change', (e) => {
+        const val = e.target.value;
+        const textarea = modalEl.querySelector('#reject-reason-custom');
+        if (val !== 'Otro') {
+            textarea.value = val;
+        } else {
+            textarea.value = '';
+            textarea.focus();
+        }
+    });
+
     modalEl.querySelector('#btn-confirm-rej').onclick = async () => {
-        const reason = txtReason.value.trim() || 'Horario no disponible.';
+        const reason = modalEl.querySelector('#reject-reason-custom').value.trim();
+        if (!reason) {
+            toast.error("Por favor indica una razón para rechazar la solicitud.");
+            return;
+        }
+
         try {
             await store.rejectReservation(reservation.id, reason);
             modal.close();
-            toast.warning(`Solicitud rechazada.`);
-        } catch (e) {
-            toast.error(e.message);
+            toast.warning(`Solicitud rechazada. Se envió la notificación.`);
+            // Refrescar vista llamando al contenedor activo
+            const activeViewContainer = document.getElementById('main-content');
+            if (activeViewContainer) renderRequestsView(activeViewContainer);
+        } catch (err) {
+            toast.error(err.message || "Error al rechazar solicitud");
         }
     };
 }
 
 /**
- * Modal para Modificar máquina, fecha u horario de una reservación
+ * Modal para Editar/Reasignar una Reservación
  */
-export function openModifyModal(reservation) {
+export function openModifyModal(reservation, mainContainer = null) {
     const business = store.currentBusiness;
-    const machines = store.getActiveMachines();
     const slotDuration = business.slotDuration || 60;
-    
-    // Obtener horarios específicos para la fecha de la reservación
-    const { openingTime, closingTime, closed } = getBusinessHoursForDate(business, reservation.date);
-    const slots = closed ? [] : generateTimeSlots(
-        openingTime,
-        closingTime,
-        slotDuration
-    );
-
-    const machinesOptions = machines.map(m => `
-        <option value="${m.id}" ${m.id === reservation.machineId ? 'selected' : ''}>
-            ${m.name} (${m.model})
-        </option>
-    `).join('');
-
-    const selectedSlot = slots.find(s => s.start === reservation.startTime) || slots[0];
-    
-    const openMinutes = timeToMinutes(openingTime);
-    const closeMinutes = timeToMinutes(closingTime);
-    const isOvernight = closeMinutes < openMinutes;
-
-    const getSlotLabel = (slotStart) => {
-        const slotStartMins = timeToMinutes(slotStart);
-        if (isOvernight && slotStartMins < openMinutes) {
-            return `${format12Hour(slotStart)} (Siguiente día)`;
-        }
-        return format12Hour(slotStart);
-    };
-
-    const timesOptions = slots.map(s => `
-        <option value="${s.start}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
-            ${getSlotLabel(s.start)}
-        </option>
-    `).join('');
-    const initialDurations = selectedSlot ? getAvailableDurations(selectedSlot.start, closingTime || '22:00', slotDuration) : [];
-    const selectedDuration = initialDurations.includes(reservation.durationMinutes) ? reservation.durationMinutes : (initialDurations[0] || slotDuration);
+    const machines = store.getActiveMachines();
 
     const contentHtml = `
         <form id="form-modify-res" class="cyber-form">
-            <p>Reasigna la máquina, fecha o bloque horario para <strong>${reservation.clientName}</strong>:</p>
-
             <div class="form-row grid-2">
                 <div class="form-group">
-                    <label for="mod-machine"><span class="neon-arrow">◆</span> Máquina PIU</label>
-                    <select id="mod-machine" class="cyber-select" required>
-                        ${machinesOptions}
+                    <label for="mod-machine"><span class="neon-arrow">◆</span> Máquina</label>
+                    <select id="mod-machine" class="cyber-select">
+                        ${machines.map(m => `<option value="${m.id}" ${m.id === reservation.machineId ? 'selected' : ''}>${m.name}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="mod-players-mode"><span class="neon-arrow">◆</span> Modo / Jugadores</label>
-                    <select id="mod-players-mode" class="cyber-select" required>
-                        <option value="1" ${reservation.playersMode === 1 || !reservation.playersMode ? 'selected' : ''}>👤 1 Jugador</option>
-                        <option value="2" ${reservation.playersMode === 2 ? 'selected' : ''}>👥 2 Jugadores</option>
+                    <label for="mod-players-mode"><span class="neon-arrow">◆</span> Modo de Juego</label>
+                    <select id="mod-players-mode" class="cyber-select">
+                        <option value="1" ${reservation.playersMode === 1 ? 'selected' : ''}>👤 Single / 1 Jugador</option>
+                        <option value="2" ${reservation.playersMode === 2 ? 'selected' : ''}>👥 Double / 2 Jugadores</option>
                     </select>
                 </div>
             </div>
 
-            <div class="form-row grid-2">
+            <div class="form-row grid-3">
                 <div class="form-group">
                     <label for="mod-date"><span class="neon-arrow">◆</span> Fecha</label>
                     <input type="date" id="mod-date" class="cyber-input" value="${reservation.date}" required>
                 </div>
                 <div class="form-group">
-                    <label for="mod-time"><span class="neon-arrow">◆</span> Hora de inicio</label>
-                    <select id="mod-time" class="cyber-select" required>
-                        ${timesOptions}
+                    <label for="mod-time"><span class="neon-arrow">◆</span> Hora de Inicio</label>
+                    <select id="mod-time" class="cyber-select">
+                        <!-- slots de tiempo se renderizan al detectar fecha -->
+                        <option value="${reservation.startTime}">${format12Hour(reservation.startTime)}</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="mod-duration"><span class="neon-arrow">◆</span> Duración</label>
+                    <select id="mod-duration" class="cyber-select">
+                        <option value="${reservation.durationMinutes}">${formatDuration(reservation.durationMinutes)}</option>
                     </select>
                 </div>
             </div>
 
-            <div class="form-row grid-2">
-                <div class="form-group">
-                    <label for="mod-duration"><span class="neon-arrow">◆</span> Duración</label>
-                    <select id="mod-duration" class="cyber-select" required>
-                        ${initialDurations.map(duration => `<option value="${duration}" ${duration === selectedDuration ? 'selected' : ''}>${formatDuration(duration)}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="mod-notes"><span class="neon-arrow">◆</span> Nota de Modificación</label>
-                    <input type="text" id="mod-notes" class="cyber-input" placeholder="Ej. Reasignada a cabina LX por petición del jugador">
-                </div>
+            <div class="form-group">
+                <label for="mod-notes"><span class="neon-arrow">◆</span> Notas Administrativas</label>
+                <input type="text" id="mod-notes" class="cyber-input" value="${reservation.adminNotes || ''}" placeholder="Ej. Reasignada a cabina LX por petición del jugador">
             </div>
 
             <div id="mod-error" class="form-error-msg hidden"></div>
@@ -534,7 +476,6 @@ export function openModifyModal(reservation) {
 
     modalEl.querySelector('#mod-time').addEventListener('change', updateModDurations);
 
-    // Listener para cambio de fecha en modificación
     modalEl.querySelector('#mod-date').addEventListener('change', (e) => {
         const newDate = e.target.value;
         if (!newDate) return;
@@ -610,6 +551,7 @@ export function openModifyModal(reservation) {
 
             modal.close();
             toast.success(`Reservación modificada y confirmada.`);
+            if (mainContainer) renderRequestsView(mainContainer);
         } catch (err) {
             errorDiv.textContent = err.message || 'Error al modificar reservación';
             errorDiv.classList.remove('hidden');
