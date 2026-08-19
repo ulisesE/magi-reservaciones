@@ -1,6 +1,7 @@
 // js/firebaseConfig.js
-// Firebase SDKs v10.11.1 (Modular via CDN)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
+// Firebase SDKs v12.17.1 (Modular via CDN)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-analytics.js";
 import { 
     getFirestore, 
     collection, 
@@ -19,27 +20,34 @@ import {
     orderBy,
     limit,
     startAfter
-} from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
 // Configuración de Firebase
 const firebaseConfig = {
-    apiKey: "AIzaSyDdG6B2oYfSSDxutp1D9NNa-kkKswHPw8g",
+    apiKey: "AIzaSyBT7YHE7n0QhX59zFO2Vh-rmNbWHlMJ70M",
     authDomain: "test-89a00.firebaseapp.com",
     projectId: "test-89a00",
     storageBucket: "test-89a00.firebasestorage.app",
     messagingSenderId: "739684870971",
-    appId: "1:739684870971:web:dc404978c2afae43f3251e",
-    measurementId: "G-627Z7J2MJ3"
+    appId: "1:739684870971:web:d952fd16787fd5fef3251e",
+    measurementId: "G-VFKW95L3SG"
 };
 
 // Inicializar instancia de Firebase
 let app = null;
 let db = null;
+let analytics = null;
 let isFirebaseAvailable = false;
 
 try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    try {
+        analytics = getAnalytics(app);
+        console.log("📈 Firebase Analytics inicializado");
+    } catch (analyticsError) {
+        console.warn("⚠️ No se pudo inicializar Firebase Analytics:", analyticsError);
+    }
     isFirebaseAvailable = true;
     console.log("⚡ Firebase conectado exitosamente al proyecto: test-89a00");
 } catch (error) {
@@ -81,6 +89,7 @@ export const COLLECTIONS = {
 export { 
     app, 
     db, 
+    analytics,
     isFirebaseAvailable,
     collection, 
     addDoc, 

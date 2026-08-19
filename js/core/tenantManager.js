@@ -575,6 +575,9 @@ class TenantManager {
 export const tenantManager = new TenantManager();
 
 async function syncMetadataToServer(businesses) {
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        return;
+    }
     try {
         const payload = businesses.map(b => ({
             id: b.id,

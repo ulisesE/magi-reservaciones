@@ -17,6 +17,7 @@ import { openBookingModal, showReservationTicket } from './clientBookingModal.js
 import { openModifyModal } from './requestsView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 export function renderDayView(container) {
     const business = store.currentBusiness;
@@ -159,7 +160,7 @@ export function renderDayView(container) {
                                                             <div class="slot-content occupied-slot" title="Click para ver detalles o gestionar">
                                                                 <div class="slot-occupant">
                                                                     <span class="status-indicator-dot"></span>
-                                                                    <strong class="occupant-name">${reservation.clientName}</strong>
+                                                                    <strong class="occupant-name">${escapeHTML(reservation.clientName)}</strong>
                                                                 </div>
                                                                 <div class="slot-meta">
                                                                     <span class="slot-hours">${reservation.startTime} - ${reservation.endTime}</span>
@@ -258,10 +259,10 @@ function openReservationDetailModal(reservation) {
             <div class="detail-header-card">
                 <div class="client-avatar">🕺</div>
                 <div>
-                    <h3 class="detail-client-name">${reservation.clientName}</h3>
+                    <h3 class="detail-client-name">${escapeHTML(reservation.clientName)}</h3>
                     ${canSeeSensitive ? `
-                        <p class="detail-phone">📞 ${reservation.clientPhone || 'Sin teléfono'}</p>
-                        ${reservation.clientEmail ? `<p class="detail-email" style="font-size:0.78rem; color:var(--text-muted); margin-top:2px;">✉️ ${reservation.clientEmail}</p>` : ''}
+                        <p class="detail-phone">📞 ${escapeHTML(reservation.clientPhone || 'Sin teléfono')}</p>
+                        ${reservation.clientEmail ? `<p class="detail-email" style="font-size:0.78rem; color:var(--text-muted); margin-top:2px;">✉️ ${escapeHTML(reservation.clientEmail)}</p>` : ''}
                     ` : `
                         <p class="detail-phone" style="color:var(--text-muted); font-size:0.82rem; font-style:italic;">📞 Teléfono: [Oculto por Privacidad]</p>
                     `}
@@ -276,7 +277,7 @@ function openReservationDetailModal(reservation) {
             <div class="detail-grid">
                 <div class="detail-item">
                     <span class="d-label">MÁQUINA:</span>
-                    <strong>${machine ? machine.name : 'PIU'} (${machine ? machine.model : ''})</strong>
+                    <strong>${machine ? escapeHTML(machine.name) : 'PIU'} (${machine ? escapeHTML(machine.model) : ''})</strong>
                 </div>
                 <div class="detail-item">
                     <span class="d-label">MODO DE JUEGO:</span>
@@ -299,14 +300,14 @@ function openReservationDetailModal(reservation) {
             ${reservation.notes ? `
                 <div class="detail-notes-box">
                     <span class="d-label">NOTAS DEL CLIENTE:</span>
-                    <p>${reservation.notes}</p>
+                    <p>${escapeHTML(reservation.notes)}</p>
                 </div>
             ` : ''}
 
             ${reservation.adminNotes ? `
                 <div class="detail-notes-box admin-note">
                     <span class="d-label">NOTAS DEL ENCARGADO:</span>
-                    <p>${reservation.adminNotes}</p>
+                    <p>${escapeHTML(reservation.adminNotes)}</p>
                 </div>
             ` : ''}
         </div>

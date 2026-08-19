@@ -8,6 +8,7 @@ import {
     format12Hour 
 } from '../core/timeUtils.js';
 import { openBookingModal } from './clientBookingModal.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 export function renderWeekView(container) {
     const business = store.currentBusiness;
@@ -116,7 +117,7 @@ export function renderWeekView(container) {
                                         return `
                                             <div class="preview-res-item ${r.status === 'PENDING' ? 'item-pending' : ''}">
                                                 <span class="res-time">${r.startTime}</span>
-                                                <span class="res-client" title="${r.clientName}">${r.clientName}</span>
+                                                <span class="res-client" title="${escapeHTML(r.clientName)}">${escapeHTML(r.clientName)}</span>
                                             </div>
                                         `;
                                     }).join('')}

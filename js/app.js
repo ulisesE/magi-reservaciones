@@ -91,6 +91,14 @@ class App {
             const isSuperAdmin = authManager.isSuperAdmin();
             const currentView = store.currentView;
 
+            // Actualizar título de la pestaña dinámicamente en el navegador
+            const activeBusiness = tenantManager.getActiveBusiness();
+            if (activeBusiness && isLocalSelected) {
+                document.title = `${activeBusiness.name} • Pump It Up Hub`;
+            } else {
+                document.title = "Pump It Up Hub • Sistema de Reservaciones de Maquinitas";
+            }
+
             if (!isLocalSelected && (!isSuperAdmin || currentView !== 'SUPERADMIN')) {
                 renderLandingView(this.mainContent);
                 return;

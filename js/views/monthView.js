@@ -7,6 +7,7 @@ import {
     DAYS_OF_WEEK, 
     formatDateKey 
 } from '../core/timeUtils.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 export function renderMonthView(container) {
     const selectedDate = store.selectedDate || formatDateKey(new Date());
@@ -97,7 +98,7 @@ export function renderMonthView(container) {
                                         <div class="mini-players-list">
                                             ${dayBookings.slice(0, 2).map(r => `
                                                 <div class="mini-player-item ${r.status === 'PENDING' ? 'mini-pending' : ''}">
-                                                    • ${r.clientName}
+                                                     • ${escapeHTML(r.clientName)}
                                                 </div>
                                             `).join('')}
                                             ${dayBookings.length > 2 ? `<div class="mini-more">+${dayBookings.length - 2} más</div>` : ''}

@@ -5,6 +5,7 @@ import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes, calculateBookingCost } from '../core/timeUtils.js';
 import { showReservationTicket } from './clientBookingModal.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 let activeFilter = 'PENDING'; // 'PENDING', 'CONFIRMED', 'REJECTED', 'ALL'
 let currentPage = 1;
@@ -200,8 +201,8 @@ export function renderRequestsView(container) {
                             <span class="badge ${badgeClass}" style="font-size:0.7rem; padding:2px 6px;">${badgeText}</span>
                         </td>
                         <td style="padding:12px;">
-                            <strong style="color:#ffffff;">${r.clientName}</strong>
-                            ${r.clientUsername ? `<div style="font-size:0.78rem; color:var(--piu-cyan);">@${r.clientUsername}</div>` : ''}
+                            <strong style="color:#ffffff;">${escapeHTML(r.clientName)}</strong>
+                            ${r.clientUsername ? `<div style="font-size:0.78rem; color:var(--piu-cyan);">@${escapeHTML(r.clientUsername)}</div>` : ''}
                         </td>
                         <td style="padding:12px;">
                             <div>${machine ? machine.name.split(' (')[0] : 'Máquina PIU'}</div>
@@ -327,7 +328,7 @@ export function renderRequestsView(container) {
 function openRejectModal(reservation) {
     const contentHtml = `
         <div class="cyber-form">
-            <p>Indica el motivo por el cual rechazas la solicitud de <strong>${reservation.clientName}</strong>:</p>
+            <p>Indica el motivo por el cual rechazas la solicitud de <strong>${escapeHTML(reservation.clientName)}</strong>:</p>
             
             <div class="form-group">
                 <label for="reject-predefined"><span class="neon-arrow">◆</span> Motivo común</label>
@@ -406,7 +407,7 @@ export function openModifyModal(reservation, mainContainer = null) {
                 <div class="form-group">
                     <label for="mod-machine"><span class="neon-arrow">◆</span> Máquina</label>
                     <select id="mod-machine" class="cyber-select">
-                        ${machines.map(m => `<option value="${m.id}" ${m.id === reservation.machineId ? 'selected' : ''}>${m.name}</option>`).join('')}
+                        ${machines.map(m => `<option value="${m.id}" ${m.id === reservation.machineId ? 'selected' : ''}>${escapeHTML(m.name)}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group">
@@ -440,7 +441,7 @@ export function openModifyModal(reservation, mainContainer = null) {
 
             <div class="form-group">
                 <label for="mod-notes"><span class="neon-arrow">◆</span> Notas Administrativas</label>
-                <input type="text" id="mod-notes" class="cyber-input" value="${reservation.adminNotes || ''}" placeholder="Ej. Reasignada a cabina LX por petición del jugador">
+                <input type="text" id="mod-notes" class="cyber-input" value="${escapeHTML(reservation.adminNotes || '')}" placeholder="Ej. Reasignada a cabina LX por petición del jugador">
             </div>
 
             <div id="mod-error" class="form-error-msg hidden"></div>

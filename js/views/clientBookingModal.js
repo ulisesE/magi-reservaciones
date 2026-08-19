@@ -8,6 +8,7 @@ import { authManager } from '../core/authManager.js';
 import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes, calculateBookingCost } from '../core/timeUtils.js';
 import { clientDirManager } from './clientsView.js';
 import { openLoginModal } from '../components/header.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 /**
  * Abre el modal para solicitar o agendar una reservación
@@ -151,12 +152,12 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             <div class="form-row grid-2">
                 <div class="form-group" style="position: relative;">
                     <label for="book-name"><span class="neon-arrow">◆</span> Nombre / GamerTag *</label>
-                    <input type="text" id="book-name" class="cyber-input" value="${clientNameVal}" placeholder="Ej. Alex Step / PIU_Pro99" required autocomplete="off">
+                    <input type="text" id="book-name" class="cyber-input" value="${escapeHTML(clientNameVal)}" placeholder="Ej. Alex Step / PIU_Pro99" required autocomplete="off">
                     <div id="book-name-suggestions" class="hidden" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; background: var(--bg-dark-800, #1a1f29); border: 1px solid var(--piu-cyan, #00e5ff); border-radius: var(--radius-sm); max-height: 180px; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.8);"></div>
                 </div>
                 <div class="form-group">
                     <label for="book-phone"><span class="neon-arrow">◆</span> Teléfono / WhatsApp (Opcional)</label>
-                    <input type="tel" id="book-phone" class="cyber-input" value="${clientPhoneVal}" placeholder="Ej. 5512345678">
+                    <input type="tel" id="book-phone" class="cyber-input" value="${escapeHTML(clientPhoneVal)}" placeholder="Ej. 5512345678">
                 </div>
             </div>
 
@@ -478,8 +479,8 @@ export function showReservationTicket(reservation) {
                 <div class="ticket-header">
                     <div class="ticket-venue-logo">${business.logoIcon || '🕹️'}</div>
                     <div class="ticket-venue-title">
-                        <h4>${business.name}</h4>
-                        <span>${business.city}</span>
+                        <h4>${escapeHTML(business.name)}</h4>
+                        <span>${escapeHTML(business.city)}</span>
                     </div>
                 </div>
 
@@ -491,11 +492,11 @@ export function showReservationTicket(reservation) {
                 <div class="ticket-details-grid">
                     <div class="ticket-item">
                         <span class="t-label">JUGADOR / GAMERTAG</span>
-                        <strong class="t-value highlight">${reservation.clientName}</strong>
+                        <strong class="t-value highlight">${escapeHTML(reservation.clientName)}</strong>
                     </div>
                     <div class="ticket-item">
                         <span class="t-label">MÁQUINA</span>
-                        <strong class="t-value">${machine ? machine.name : 'PIU Machine'}</strong>
+                        <strong class="t-value">${machine ? escapeHTML(machine.name) : 'PIU Machine'}</strong>
                     </div>
                     <div class="ticket-item">
                         <span class="t-label">MODO DE JUEGO</span>

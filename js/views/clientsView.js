@@ -20,6 +20,7 @@ import {
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { loyaltyManager } from '../core/loyaltyManager.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 let currentClientsSearchQuery = '';
 let currentClientsPage = 1;
@@ -262,10 +263,10 @@ export async function renderClientsView(container, queryVal = '') {
                                         ${c.avatar || '🕺'}
                                     </div>
                                     <div>
-                                        <h3 style="font-size:1.15rem; margin:0; color:#ffffff;">${c.name}</h3>
+                                        <h3 style="font-size:1.15rem; margin:0; color:#ffffff;">${escapeHTML(c.name)}</h3>
                                         <div style="display:flex; gap:6px; align-items:center; margin-top:2px;">
-                                            <span class="badge badge-primary" style="font-size:0.7rem;">${c.skillLevel || 'Liga C'}</span>
-                                            ${c.username ? `<code style="font-size:0.68rem; color:var(--text-muted);">@${c.username}</code>` : ''}
+                                            <span class="badge badge-primary" style="font-size:0.7rem;">${escapeHTML(c.skillLevel || 'Liga C')}</span>
+                                            ${c.username ? `<code style="font-size:0.68rem; color:var(--text-muted);">@${escapeHTML(c.username)}</code>` : ''}
                                         </div>
                                     </div>
                                 </div>
@@ -277,7 +278,7 @@ export async function renderClientsView(container, queryVal = '') {
                             <div style="background:var(--bg-dark-700); padding:10px 12px; border-radius:var(--radius-sm); font-size:0.85rem; display:flex; flex-direction:column; gap:6px;">
                                 <div>
                                     <span style="color:var(--text-muted); font-weight:700;">📞 Teléfono:</span>
-                                    <span style="color:#ffffff;">${c.phone || 'No registrado'}</span>
+                                    <span style="color:#ffffff;">${escapeHTML(c.phone || 'No registrado')}</span>
                                     ${cleanPhone ? `
                                         <a href="${waLink}" target="_blank" rel="noopener noreferrer" style="margin-left:6px; color:#25D366; font-weight:700;">
                                             💬 WhatsApp
@@ -286,11 +287,11 @@ export async function renderClientsView(container, queryVal = '') {
                                 </div>
                                 <div>
                                     <span style="color:var(--text-muted); font-weight:700;">✉️ Correo:</span>
-                                    <span style="color:#ffffff;">${c.email || 'No registrado'}</span>
+                                    <span style="color:#ffffff;">${escapeHTML(c.email || 'No registrado')}</span>
                                 </div>
                                 <div>
                                     <span style="color:var(--text-muted); font-weight:700;">🎮 Modo Preferido:</span>
-                                    <span style="color:var(--piu-cyan);">${c.preferredMode || 'Single / Double'}</span>
+                                    <span style="color:var(--piu-cyan);">${escapeHTML(c.preferredMode || 'Single / Double')}</span>
                                 </div>
                                 ${business && business.loyaltyEnabled ? `
                                      <div style="border-top:1px dashed rgba(255,255,255,0.1); padding-top:6px; margin-top:2px;">
@@ -630,18 +631,18 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
             <div class="form-row grid-2">
                 <div class="form-group">
                     <label for="cli-name"><span class="neon-arrow">◆</span> Nombre / GamerTag *</label>
-                    <input type="text" id="cli-name" class="cyber-input" value="${client ? client.name : ''}" placeholder="Ej. Alex \"StepMaster\"" required>
+                    <input type="text" id="cli-name" class="cyber-input" value="${client ? escapeHTML(client.name) : ''}" placeholder="Ej. Alex \"StepMaster\"" required>
                 </div>
                 <div class="form-group">
                     <label for="cli-phone"><span class="neon-arrow">◆</span> Teléfono / WhatsApp *</label>
-                    <input type="tel" id="cli-phone" class="cyber-input" value="${client ? client.phone : ''}" placeholder="5512345678" required>
+                    <input type="tel" id="cli-phone" class="cyber-input" value="${client ? escapeHTML(client.phone) : ''}" placeholder="5512345678" required>
                 </div>
             </div>
 
             <div class="form-row grid-2">
                 <div class="form-group">
                     <label for="cli-email"><span class="neon-arrow">◆</span> Correo Electrónico</label>
-                    <input type="email" id="cli-email" class="cyber-input" value="${client ? (client.email || '') : ''}" placeholder="jugador@email.com">
+                    <input type="email" id="cli-email" class="cyber-input" value="${client ? escapeHTML(client.email) : ''}" placeholder="jugador@email.com">
                 </div>
                 <div class="form-group">
                     <label for="cli-level"><span class="neon-arrow">◆</span> Nivel / Liga (Ligas Potosinas)</label>
@@ -659,12 +660,12 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
 
             <div class="form-group">
                 <label for="cli-mode"><span class="neon-arrow">◆</span> Modo Preferido</label>
-                <input type="text" id="cli-mode" class="cyber-input" value="${client ? (client.preferredMode || 'Single / Double') : 'Single / Double'}" placeholder="Ej. Single Speed, Doubles, Freestyle, Co-Op">
+                <input type="text" id="cli-mode" class="cyber-input" value="${client ? escapeHTML(client.preferredMode || 'Single / Double') : 'Single / Double'}" placeholder="Ej. Single Speed, Doubles, Freestyle, Co-Op">
             </div>
 
             <div class="form-group">
                 <label for="cli-notes"><span class="neon-arrow">◆</span> Notas de Calibración / Preferencias</label>
-                <textarea id="cli-notes" class="cyber-textarea" rows="2" placeholder="Ej. Usa barra en canciones S20+, prefiere pantalla 120Hz...">${client ? (client.notes || '') : ''}</textarea>
+                <textarea id="cli-notes" class="cyber-textarea" rows="2" placeholder="Ej. Usa barra en canciones S20+, prefiere pantalla 120Hz...">${client ? escapeHTML(client.notes || '') : ''}</textarea>
             </div>
         </form>
     `;
@@ -677,7 +678,7 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
     `;
 
     const modalEl = modal.open({
-        title: isEdit ? `Editar Perfil de Jugador: ${client.name}` : 'Registrar Nuevo Jugador',
+        title: isEdit ? `Editar Perfil de Jugador: ${escapeHTML(client.name)}` : 'Registrar Nuevo Jugador',
         icon: '🕺',
         contentHtml,
         footerHtml,
@@ -726,7 +727,7 @@ function openAdjustPointsModal(client, mainContainer) {
 
     const contentHtml = `
         <form id="form-adjust-loyalty" class="cyber-form">
-            <p style="font-size:0.9rem; color:var(--text-secondary);">Ajustando puntos para <strong>${client.name}</strong> (@${client.username || 'gamertag'})</p>
+            <p style="font-size:0.9rem; color:var(--text-secondary);">Ajustando puntos para <strong>${escapeHTML(client.name)}</strong> (@${escapeHTML(client.username || 'gamertag')})</p>
             <div style="background:var(--bg-dark-700); padding:10px; border-radius:4px; margin-bottom:12px; font-size:0.85rem;">
                 Puntos actuales: <strong style="color:var(--color-neon-lime);">${bizLoyalty.points || 0} Pts</strong><br>
                 Visitas actuales: <strong style="color:var(--piu-cyan);">${bizLoyalty.visits || 0}</strong>
@@ -792,7 +793,7 @@ async function openClientRedemptionsModal(client, businessId, mainContainer) {
 
     const contentHtml = `
         <div class="client-redemptions-dialog" style="max-height:400px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
-            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:10px;">Premios canjeados por <strong>${client.name}</strong> en este local:</p>
+            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:10px;">Premios canjeados por <strong>${escapeHTML(client.name)}</strong> en este local:</p>
             
             ${bizRedemptions.length === 0 ? `
                 <div class="empty-state" style="padding:20px; text-align:center;">
@@ -804,9 +805,9 @@ async function openClientRedemptionsModal(client, businessId, mainContainer) {
                     <div style="background:var(--bg-dark-700); padding:12px; border-radius:4px; border:1px solid ${isPending ? 'var(--color-neon-lime)' : 'var(--border-color)'}; display:flex; justify-content:space-between; align-items:center; gap:10px;">
                         <div style="text-align:left;">
                             <span style="font-size:1.3rem; margin-right:6px;">${r.rewardIcon || '🎁'}</span>
-                            <strong style="color:#fff;">${r.rewardName}</strong>
+                            <strong style="color:#fff;">${escapeHTML(r.rewardName)}</strong>
                             <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:2px;">
-                                Código: <code style="color:var(--piu-cyan); font-weight:bold; font-size:0.85rem;">${r.code}</code>
+                                Código: <code style="color:var(--piu-cyan); font-weight:bold; font-size:0.85rem;">${escapeHTML(r.code)}</code>
                             </div>
                             <div style="font-size:0.75rem; color:var(--text-muted);">
                                 Solicitado: ${new Date(r.createdAt).toLocaleDateString()}
@@ -842,7 +843,7 @@ async function openClientRedemptionsModal(client, businessId, mainContainer) {
     `;
 
     const modalEl = modal.open({
-        title: `Premios de ${client.name}`,
+        title: `Premios de ${escapeHTML(client.name)}`,
         icon: '🎁',
         contentHtml,
         footerHtml,
