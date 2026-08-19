@@ -1,8 +1,9 @@
 // js/core/authManager.js
 // Gestor de Autenticación, Roles y Control de Acceso Multi-Nivel
 // Niveles: SUPERADMIN, MANAGER (Encargado de Local), CLIENT (Cliente del Local)
-import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc, query, where, getDoc } from '../firebaseConfig.js';
+import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc, query, where, getDoc, limit } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
+import { loyaltyManager } from './loyaltyManager.js';
 
 const AUTH_STORAGE_KEY = 'piu_auth_current_user_v1';
 
@@ -497,19 +498,23 @@ class AuthManager {
         const loyaltyMap = this.currentUser.loyalty || {};
         const bizLoyalty = loyaltyMap[business.id] || { points: 0, visits: 0, tier: 'Bronce' };
 
-        const activeMode = business.loyaltyMode || 'POINTS';
-        const val = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
-
-        if (activeMode === 'VISITS') {
-            if (val >= 60) return 0.15; // Platino
-            if (val >= 30) return 0.10; // Oro
-            if (val >= 10) return 0.05; // Plata
-        } else {
-            if (val >= 600) return 0.15; // Platino
-            if (val >= 300) return 0.10; // Oro
-            if (val >= 100) return 0.05; // Plata
+        const discountType = business.loyaltyDiscountType || 'PERMANENT';
+        if (discountType === 'NONE') {
+            return 0;
         }
-        return 0; // Bronce
+
+        if (discountType === 'ONCE') {
+            const currentTierUpper = (bizLoyalty.tier || 'Bronce').toUpperCase();
+            if (currentTierUpper === 'BRONCE') return 0;
+
+            const claimed = bizLoyalty.claimedTiers || [];
+            if (claimed.includes(currentTierUpper)) {
+                return 0; // Ya se utilizó el descuento de este nivel
+            }
+        }
+
+        // Llama a la lógica unificada que ya contempla los niveles/descuentos configurados del local
+        return loyaltyManager.getDiscountForTier(bizLoyalty.tier, business);
     }
 
     subscribe(callback) {

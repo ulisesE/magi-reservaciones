@@ -105,8 +105,37 @@ export async function renderClientProfileView(container) {
     const currentTier = loyaltyManager.calculateTier(valueForTier, activeMode);
     const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(valueForTier, activeMode);
     const catalogRewards = business.loyaltyEnabled ? await loyaltyManager.getRewardsCatalog(business.id) : [];
-    const discountPct = loyaltyManager.getDiscountForTier(currentTier.name);
+    let discountPct = loyaltyManager.getDiscountForTier(currentTier.name, business);
+    const discountType = business.loyaltyDiscountType || 'PERMANENT';
+    if (discountType === 'NONE') {
+        discountPct = 0;
+    } else if (discountType === 'ONCE') {
+        const currentTierUpper = (currentTier.name || '').toUpperCase();
+        const claimed = bizLoyalty.claimedTiers || [];
+        if (claimed.includes(currentTierUpper)) {
+            discountPct = 0;
+        }
+    }
     const discountText = discountPct > 0 ? `${discountPct * 100}%` : '';
+
+    let loyaltyNoticeHtml = '';
+    if (business.loyaltyEnabled) {
+        if (discountType === 'NONE') {
+            loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">🎖️ Los niveles son distintivos (sin descuentos).</div>`;
+        } else if (discountType === 'ONCE') {
+            const currentTierUpper = (currentTier.name || '').toUpperCase();
+            const claimed = bizLoyalty.claimedTiers || [];
+            if (currentTierUpper === 'BRONCE') {
+                loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">💡 Alcanza el nivel Plata para obtener tu primer descuento de un solo uso.</div>`;
+            } else if (claimed.includes(currentTierUpper)) {
+                loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--text-muted); margin-top:6px;">🎟️ Descuento del nivel ${currentTier.name} ya reclamado.</div>`;
+            } else if (discountPct > 0) {
+                loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--color-neon-lime); font-weight:bold; margin-top:6px;">⚡ ¡Tienes ${discountText} de descuento de un solo uso en tu próxima reserva!</div>`;
+            }
+        } else if (discountPct > 0) {
+            loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--piu-cyan); font-weight:bold; margin-top:6px;">⚡ ¡Tienes ${discountText} de descuento directo permanente en tus reservas!</div>`;
+        }
+    }
 
     container.innerHTML = `
         <div class="client-profile-wrapper animate-fade-in" style="max-width:1000px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:20px;">
@@ -276,7 +305,7 @@ export async function renderClientProfileView(container) {
                                         : `${bizLoyalty.points || 0} <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:normal;">Puntos acumulados</span>`
                                     }
                                 </div>
-                                ${discountText ? `<div style="font-size:0.82rem; color:var(--piu-cyan); font-weight:bold; margin-top:6px;">⚡ ¡Tienes ${discountText} de descuento directo en tus reservas!</div>` : ''}
+                                ${loyaltyNoticeHtml}
                             </div>
 
                             <!-- Progreso -->
@@ -323,7 +352,9 @@ export async function renderClientProfileView(container) {
                                 ${catalogRewards.length === 0 ? `
                                     <p style="color:var(--text-muted); font-size:0.9rem; text-align:center; padding:20px;">No hay premios disponibles en el catálogo en este momento.</p>
                                 ` : catalogRewards.map(r => {
-                                    const canRedeem = (bizLoyalty.points || 0) >= r.costPoints;
+                                    const canRedeem = activeMode === 'VISITS' 
+                                        ? (bizLoyalty.visits || 0) >= r.costPoints 
+                                        : (bizLoyalty.points || 0) >= r.costPoints;
                                     return `
                                         <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; gap:10px;">
                                             <div style="text-align:left;">

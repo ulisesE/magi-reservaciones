@@ -502,6 +502,17 @@ export function renderBusinessView(container) {
                                     <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:4px;">1 punto otorgado por cada X unidades de tu moneda consumidas.</small>
                                 </div>
                             </div>
+                            <div class="form-row grid-3" style="margin-top: 14px;">
+                                <div class="form-group">
+                                    <label for="biz-loyalty-discount-type"><span class="neon-arrow">◆</span> Tipo de Descuento de Tiers</label>
+                                    <select id="biz-loyalty-discount-type" class="cyber-select">
+                                        <option value="PERMANENT" ${business.loyaltyDiscountType === 'PERMANENT' || !business.loyaltyDiscountType ? 'selected' : ''}>🌟 Permanente (Siempre activo)</option>
+                                        <option value="ONCE" ${business.loyaltyDiscountType === 'ONCE' ? 'selected' : ''}>🎟️ Una Sola Vez (Al alcanzar el rango)</option>
+                                        <option value="NONE" ${business.loyaltyDiscountType === 'NONE' ? 'selected' : ''}>🎖️ Solo Distintivo (Sin descuento)</option>
+                                    </select>
+                                    <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:4px;">Define cómo se aplican los descuentos de rango en reservaciones.</small>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -941,7 +952,8 @@ export function renderBusinessView(container) {
             disableChangeLocal: container.querySelector('#biz-disable-change-local').checked,
             loyaltyEnabled: container.querySelector('#biz-loyalty-enabled').value === 'true',
             loyaltyMode: container.querySelector('#biz-loyalty-mode').value,
-            pointsRatio: parseInt(container.querySelector('#biz-points-ratio').value, 10) || 10
+            pointsRatio: parseInt(container.querySelector('#biz-points-ratio').value, 10) || 10,
+            loyaltyDiscountType: container.querySelector('#biz-loyalty-discount-type').value
         };
 
         if (!updated.name || !updated.city) {

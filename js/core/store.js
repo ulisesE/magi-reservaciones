@@ -8,6 +8,7 @@ import {
     getDocs, 
     setDoc, 
     doc, 
+    getDoc,
     updateDoc, 
     deleteDoc, 
     onSnapshot, 
@@ -566,6 +567,22 @@ class Store {
                     console.warn("Error crediting points on direct creation:", e);
                 }
             }
+
+            if (this.currentBusiness.loyaltyDiscountType === 'ONCE') {
+                try {
+                    const playerObj = await authManager.getClientUsers().find(u => u.id === newReservation.clientId) || 
+                                     (isFirebaseAvailable && db ? (await getDoc(doc(db, COLLECTIONS.PLAYERS, newReservation.clientId))).data() : null);
+                    if (playerObj) {
+                        const bizLoyalty = (playerObj.loyalty && playerObj.loyalty[this.currentBusiness.id]) || { tier: 'Bronce' };
+                        const currentTierName = (bizLoyalty.tier || 'Bronce').toUpperCase();
+                        if (currentTierName !== 'BRONCE') {
+                            await loyaltyManager.claimOneTimeTierDiscount(this.currentBusiness.id, newReservation.clientId, currentTierName);
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Error claiming one-time tier discount on creation:", err);
+                }
+            }
         }
 
         if (isFirebaseAvailable && db) {
@@ -666,6 +683,22 @@ class Store {
                 await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, pts, 1);
             } catch (e) {
                 console.warn("Error crediting points on approval:", e);
+            }
+
+            if (this.currentBusiness.loyaltyDiscountType === 'ONCE') {
+                try {
+                    const playerObj = await authManager.getClientUsers().find(u => u.id === res.clientId) || 
+                                     (isFirebaseAvailable && db ? (await getDoc(doc(db, COLLECTIONS.PLAYERS, res.clientId))).data() : null);
+                    if (playerObj) {
+                        const bizLoyalty = (playerObj.loyalty && playerObj.loyalty[this.currentBusiness.id]) || { tier: 'Bronce' };
+                        const currentTierName = (bizLoyalty.tier || 'Bronce').toUpperCase();
+                        if (currentTierName !== 'BRONCE') {
+                            await loyaltyManager.claimOneTimeTierDiscount(this.currentBusiness.id, res.clientId, currentTierName);
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Error claiming one-time tier discount on approval:", err);
+                }
             }
         }
 

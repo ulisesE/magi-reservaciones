@@ -355,6 +355,7 @@ class LoyaltyManager {
                     const nextTier = this.calculateTier(valueForTier, bizMode).name;
 
                     loyaltyMap[businessId] = {
+                        ...bizLoyalty,
                         points: nextPoints,
                         visits: nextVisits,
                         tier: nextTier
@@ -398,6 +399,7 @@ class LoyaltyManager {
             const nextTier = this.calculateTier(valueForTier, bizMode).name;
 
             loyaltyMap[businessId] = {
+                ...bizLoyalty,
                 points: nextPoints,
                 visits: nextVisits,
                 tier: nextTier
@@ -480,6 +482,7 @@ class LoyaltyManager {
                             const nextTier = this.calculateTier(valueForTier, bizMode).name;
 
                             loyaltyMap[businessId] = {
+                                ...bizLoyalty,
                                 points: nextPoints,
                                 visits: nextVisits,
                                 tier: nextTier
@@ -538,6 +541,7 @@ class LoyaltyManager {
                 const nextTier = this.calculateTier(valueForTier, bizMode).name;
 
                 loyaltyMap[businessId] = {
+                    ...bizLoyalty,
                     points: nextPoints,
                     visits: nextVisits,
                     tier: nextTier
@@ -601,6 +605,7 @@ class LoyaltyManager {
                     const newTier = this.calculateTier(valueForTier, bizMode).name;
 
                     loyaltyMap[actualBusinessId] = {
+                        ...bizLoyalty,
                         points: newPts,
                         visits: newVts,
                         tier: newTier
@@ -636,6 +641,7 @@ class LoyaltyManager {
             const newTier = this.calculateTier(valueForTier, bizMode).name;
 
             loyaltyMap[actualBusinessId] = {
+                ...bizLoyalty,
                 points: newPts,
                 visits: newVts,
                 tier: newTier
@@ -646,6 +652,57 @@ class LoyaltyManager {
         }
 
         return true;
+    }
+
+    async claimOneTimeTierDiscount(businessId, playerId, tierName) {
+        if (!businessId || !playerId || !tierName) return;
+        const tierUpper = tierName.toUpperCase();
+        if (tierUpper === 'BRONCE') return;
+
+        if (isFirebaseAvailable && db) {
+            try {
+                const playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
+                await runTransaction(db, async (transaction) => {
+                    const playerDoc = await transaction.get(playerRef);
+                    if (playerDoc.exists()) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[businessId] || { points: 0, visits: 0, tier: 'Bronce' };
+
+                        const claimed = bizLoyalty.claimedTiers || [];
+                        if (!claimed.includes(tierUpper)) {
+                            const newClaimed = [...claimed, tierUpper];
+                            loyaltyMap[businessId] = {
+                                ...bizLoyalty,
+                                claimedTiers: newClaimed
+                            };
+                            transaction.update(playerRef, { loyalty: loyaltyMap });
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("Error claiming one-time tier discount in Firebase:", err);
+            }
+        } else {
+            // Local fallback
+            const players = JSON.parse(localStorage.getItem('piu_registered_players_cache') || '[]');
+            const idx = players.findIndex(p => p.id === playerId);
+            if (idx !== -1) {
+                const loyaltyMap = players[idx].loyalty || {};
+                const bizLoyalty = loyaltyMap[businessId] || { points: 0, visits: 0, tier: 'Bronce' };
+
+                const claimed = bizLoyalty.claimedTiers || [];
+                if (!claimed.includes(tierUpper)) {
+                    const newClaimed = [...claimed, tierUpper];
+                    loyaltyMap[businessId] = {
+                        ...bizLoyalty,
+                        claimedTiers: newClaimed
+                    };
+                    players[idx].loyalty = loyaltyMap;
+                    localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
+                }
+            }
+        }
     }
 }
 
