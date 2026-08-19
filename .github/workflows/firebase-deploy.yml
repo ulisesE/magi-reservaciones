@@ -12,10 +12,14 @@ jobs:
       - name: Checkout de Código
         uses: actions/checkout@v4
 
-      - name: Desplegar en Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Instalar dependencias de funciones
+        run: |
+          cd functions
+          npm install
+
+      - name: Desplegar en Firebase (Funciones, Hosting e Índices)
+        uses: w9jds/firebase-action@master
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MAGI_SUITE }}
-          projectId: test-89a00
-          channelId: live # Despliegue en vivo en magi-suite.web.app
+          args: deploy --project test-89a00
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MAGI_SUITE }}

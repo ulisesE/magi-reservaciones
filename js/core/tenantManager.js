@@ -275,9 +275,17 @@ class TenantManager {
             this.isLocalSelected = true;
             localStorage.setItem(SESSION_LOCKED_KEY, managerBizId);
         } else {
-            // Comprobar si la URL trae un parámetro de local explícito (?local=id o ?business=id)
+            // Comprobar si la URL trae un parámetro de local explícito o si la ruta es /local/biz_ID
             const urlParams = new URLSearchParams(window.location.search);
-            const urlBizId = urlParams.get('local') || urlParams.get('business') || urlParams.get('sucursal');
+            let urlBizId = urlParams.get('local') || urlParams.get('business') || urlParams.get('sucursal');
+            
+            if (!urlBizId) {
+                const pathParts = window.location.pathname.split('/');
+                const localIdx = pathParts.indexOf('local');
+                if (localIdx !== -1 && pathParts[localIdx + 1]) {
+                    urlBizId = pathParts[localIdx + 1];
+                }
+            }
 
             if (urlBizId && this.businesses.some(b => b.id === urlBizId)) {
                 this.activeBusinessId = urlBizId;

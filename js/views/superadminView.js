@@ -416,7 +416,7 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                         <tbody>
                             ${businesses.map(b => {
                                 const assignedManager = managers.find(m => m.businessId === b.id);
-                                const clientUrl = `${window.location.origin}${window.location.pathname}?local=${b.id}`;
+                                const clientUrl = `${window.location.origin}/local/${b.id}`;
 
                                 return `
                                     <tr>
