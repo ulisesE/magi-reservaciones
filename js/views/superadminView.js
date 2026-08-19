@@ -7,6 +7,15 @@ import { catalogsManager } from '../core/catalogsManager.js';
 import { clientDirManager, openClientFormModal } from './clientsView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { 
+    db, 
+    isFirebaseAvailable, 
+    COLLECTIONS, 
+    collection, 
+    getDocs, 
+    setDoc, 
+    doc 
+} from '../firebaseConfig.js';
 
 let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'PLAYERS', 'CABINETS', 'VERSIONS', 'MACHINES', 'STAFF'
 
@@ -31,6 +40,13 @@ export async function renderSuperadminView(container) {
                     <p class="subtitle-text">Administración completa de todos los locales, jugadores globales, modelos de gabinete, versiones de software y personal.</p>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="btn btn-outline" id="btn-export-backup" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);" title="Descargar copia de seguridad en JSON">
+                        <span>💾 Bajar Respaldo</span>
+                    </button>
+                    <button class="btn btn-outline" id="btn-import-backup" style="border-color:var(--piu-cyan); color:var(--piu-cyan);" title="Cargar copia de seguridad de un archivo JSON">
+                        <span>📤 Cargar Configuración</span>
+                    </button>
+                    <input type="file" id="input-import-file" accept=".json" style="display:none;">
                     <button class="btn btn-outline" id="btn-create-manager">
                         <span>👤 Nuevo Encargado</span>
                     </button>
@@ -112,6 +128,111 @@ export async function renderSuperadminView(container) {
         } catch (err) {
             toast.error("Error al actualizar la configuración global.");
         }
+    });
+
+    // Exportar Copia de Seguridad
+    container.querySelector('#btn-export-backup')?.addEventListener('click', async () => {
+        if (!isFirebaseAvailable || !db) {
+            toast.error("Firebase no está disponible para realizar la copia de seguridad.");
+            return;
+        }
+        try {
+            toast.info("Generando copia de seguridad de Firestore...");
+            const collectionsToBackup = {
+                businesses: COLLECTIONS.BUSINESSES,
+                machines: COLLECTIONS.MACHINES,
+                staff: COLLECTIONS.STAFF_USERS,
+                operating_rules: COLLECTIONS.OPERATING_RULES,
+                game_versions: COLLECTIONS.GAME_VERSIONS,
+                cabinet_models: COLLECTIONS.CABINET_MODELS,
+                players: COLLECTIONS.PLAYERS,
+                reservations: COLLECTIONS.RESERVATIONS
+            };
+            const backupData = {};
+            for (const [key, collName] of Object.entries(collectionsToBackup)) {
+                const snap = await getDocs(collection(db, collName));
+                backupData[key] = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+            }
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            const dateStr = new Date().toISOString().slice(0, 10);
+            downloadAnchor.setAttribute("download", `magi_reservaciones_backup_${dateStr}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            toast.success("Copia de seguridad descargada correctamente.");
+        } catch (err) {
+            toast.error("Error al generar la copia de seguridad: " + err.message);
+        }
+    });
+
+    // Importar / Cargar Configuración
+    const fileInput = container.querySelector('#input-import-file');
+    container.querySelector('#btn-import-backup')?.addEventListener('click', () => {
+        fileInput?.click();
+    });
+
+    fileInput?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const data = JSON.parse(evt.target.result);
+                
+                // Validación básica de estructura
+                if (!data.businesses && !data.machines && !data.staff) {
+                    throw new Error("El archivo seleccionado no parece ser una copia de seguridad válida de Magi-reservaciones.");
+                }
+
+                if (!confirm("⚠️ ¿Estás seguro de cargar esta configuración?\nSe importarán locales, máquinas, configuraciones y usuarios a Firestore. Los documentos existentes con el mismo ID se sobrescribirán.")) {
+                    fileInput.value = ''; // reset
+                    return;
+                }
+
+                toast.info("Iniciando restauración de datos...");
+                
+                const collectionsMapping = {
+                    businesses: COLLECTIONS.BUSINESSES,
+                    machines: COLLECTIONS.MACHINES,
+                    staff: COLLECTIONS.STAFF_USERS,
+                    operating_rules: COLLECTIONS.OPERATING_RULES,
+                    game_versions: COLLECTIONS.GAME_VERSIONS,
+                    cabinet_models: COLLECTIONS.CABINET_MODELS,
+                    players: COLLECTIONS.PLAYERS,
+                    reservations: COLLECTIONS.RESERVATIONS
+                };
+
+                let importedCount = 0;
+                for (const [key, collName] of Object.entries(collectionsMapping)) {
+                    const docsList = data[key];
+                    if (Array.isArray(docsList)) {
+                        for (const d of docsList) {
+                            const docId = d.id;
+                            if (docId) {
+                                const docData = { ...d };
+                                delete docData.id;
+                                await setDoc(doc(db, collName, docId), docData);
+                                importedCount++;
+                            }
+                        }
+                    }
+                }
+                
+                toast.success(`¡Carga completada con éxito! Se restauraron ${importedCount} documentos.`);
+                
+                // Recargar toda la vista
+                renderSuperadminView(container);
+            } catch (err) {
+                toast.error("Error al cargar la copia de seguridad: " + err.message);
+            } finally {
+                fileInput.value = ''; // reset
+            }
+        };
+        reader.readAsText(file);
     });
 
     // Crear nuevo encargado
