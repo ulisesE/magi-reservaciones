@@ -3,6 +3,7 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
+    "site": "magi-suite",
     "public": ".",
     "ignore": [
       "firebase.json",

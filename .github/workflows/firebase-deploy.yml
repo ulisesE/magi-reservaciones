@@ -17,5 +17,5 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MAGI_SUITE }}
-          projectId: magi-suite
+          projectId: test-89a00
           channelId: live # Despliegue en vivo en magi-suite.web.app
