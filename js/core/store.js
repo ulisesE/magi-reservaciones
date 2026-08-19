@@ -378,23 +378,20 @@ class Store {
                 where("date", "==", startDateStr)
             );
         } else {
-            // Rango de fechas: usamos solo filtro de fecha para evitar requerir índices compuestos en Firestore
+            // Rango de fechas: filtramos por local e intervalo de fechas en Firestore
             q = query(
                 collection(db, COLLECTIONS.RESERVATIONS), 
+                where("businessId", "==", bizId),
                 where("date", ">=", startDateStr),
                 where("date", "<=", endDateStr)
             );
         }
 
         this.unsubscribeReservations = onSnapshot(q, (snapshot) => {
-            let realtimeRes = [];
+            const realtimeRes = [];
             snapshot.forEach(docSnap => {
                 realtimeRes.push({ id: docSnap.id, ...docSnap.data() });
             });
-            if (startDateStr !== endDateStr) {
-                // Filtrar localmente por local
-                realtimeRes = realtimeRes.filter(r => r.businessId === bizId);
-            }
             this.reservations = realtimeRes;
             this.saveLocalReservations(bizId, realtimeRes);
             this.notify();

@@ -12,7 +12,7 @@ let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'PLAYERS', 'CABINETS', 'VERS
 
 export async function renderSuperadminView(container) {
     const businesses = tenantManager.getAllBusinesses();
-    const staffUsers = authManager.getStaffUsers();
+    const staffUsers = await authManager.loadStaffUsers();
     const managers = staffUsers.filter(u => u.role === 'MANAGER');
     const cabinetModels = catalogsManager.getCabinetModels();
     const gameVersions = catalogsManager.getGameVersions();
