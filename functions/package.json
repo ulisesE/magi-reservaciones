@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "MagiSuite Cloud Functions",
   "engines": {
-    "node": "18"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
