@@ -20,6 +20,6 @@ jobs:
       - name: Desplegar en Firebase (Funciones, Hosting e Índices)
         uses: w9jds/firebase-action@master
         with:
-          args: deploy --project test-89a00
+          args: deploy --project test-89a00 --force 
         env:
           GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MAGI_SUITE }}
