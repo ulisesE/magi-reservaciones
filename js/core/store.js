@@ -620,16 +620,46 @@ class Store {
         return newReservation;
     }
 
+    async getOrFetchReservation(reservationId) {
+        // 1. Buscar en memoria local
+        let res = this.reservations.find(r => r.id === reservationId);
+        if (res) return res;
+
+        // 2. Buscar en Firestore si está disponible
+        if (isFirebaseAvailable && db) {
+            try {
+                const snap = await getDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId));
+                if (snap.exists()) {
+                    return { id: snap.id, ...snap.data() };
+                }
+            } catch (e) {
+                console.warn("Error buscando reservación en Firestore:", e);
+            }
+        }
+
+        // 3. Fallback a LocalStorage
+        if (this.currentBusiness?.id) {
+            try {
+                const localRes = localStorage.getItem(`piu_reservations_${this.currentBusiness.id}`);
+                if (localRes) {
+                    const parsed = JSON.parse(localRes);
+                    const found = parsed.find(r => r.id === reservationId);
+                    if (found) return found;
+                }
+            } catch (e) {}
+        }
+
+        return null;
+    }
+
     async cancelReservationByClient(reservationId) {
-        const res = this.reservations.find(r => r.id === reservationId);
+        const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
         const wasConfirmed = res.status === 'CONFIRMED';
         res.status = 'CANCELLED';
         res.adminNotes = 'Cancelada por el jugador.';
         res.updatedAt = new Date().toISOString();
-
-        this.saveLocalReservations(this.currentBusiness.id, this.reservations);
 
         if (isFirebaseAvailable && db) {
             try {
@@ -638,7 +668,18 @@ class Store {
                     adminNotes: res.adminNotes,
                     updatedAt: res.updatedAt
                 });
-            } catch (e) {}
+            } catch (e) {
+                console.error("Error cancelando reservación en Firestore:", e);
+                throw e;
+            }
+        }
+
+        const inMemory = this.reservations.find(r => r.id === reservationId);
+        if (inMemory) {
+            Object.assign(inMemory, res);
+        }
+        if (this.currentBusiness?.id) {
+            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
 
         if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
@@ -656,24 +697,52 @@ class Store {
     }
 
     async approveReservation(reservationId, adminNotes = '') {
-        const res = this.reservations.find(r => r.id === reservationId);
+        const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
-        const availability = this.checkAvailability(res.machineId, res.date, res.startTime, res.endTime, res.id);
-        if (!availability.available) throw new Error(`No se puede aprobar: ${availability.reason}`);
+        // Validar conflicto de disponibilidad consultando Firestore o local
+        if (isFirebaseAvailable && db) {
+            const reservationQuery = query(
+                collection(db, COLLECTIONS.RESERVATIONS),
+                where('businessId', '==', this.currentBusiness?.id || res.businessId),
+                where('date', '==', res.date)
+            );
+            const snapshot = await getDocs(reservationQuery);
+            const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+            const conflict = findReservationConflict(remoteReservations, res.machineId, res.date, res.startTime, res.endTime, res.id);
+            if (conflict) {
+                throw new Error(`No se puede aprobar: Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
+            }
+        } else {
+            const availability = this.checkAvailability(res.machineId, res.date, res.startTime, res.endTime, res.id);
+            if (!availability.available) throw new Error(`No se puede aprobar: ${availability.reason}`);
+        }
 
         res.status = 'CONFIRMED';
         res.adminNotes = adminNotes || 'Aprobada por el encargado.';
         res.updatedAt = new Date().toISOString();
 
-        this.saveLocalReservations(this.currentBusiness.id, this.reservations);
-
         if (isFirebaseAvailable && db) {
             try {
                 await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), {
-                    status: 'CONFIRMED', adminNotes: res.adminNotes, updatedAt: res.updatedAt
+                    status: 'CONFIRMED', 
+                    adminNotes: res.adminNotes, 
+                    updatedAt: res.updatedAt
                 });
-            } catch (e) {}
+            } catch (e) {
+                console.error("Error aprobando reservación en Firestore:", e);
+                throw e;
+            }
+        }
+
+        const inMemory = this.reservations.find(r => r.id === reservationId);
+        if (inMemory) {
+            Object.assign(inMemory, res);
+        } else if (res.date === this.selectedDate) {
+            this.reservations.push(res);
+        }
+        if (this.currentBusiness?.id) {
+            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
 
         if (res.clientId && this.currentBusiness?.loyaltyEnabled) {
@@ -707,7 +776,7 @@ class Store {
     }
 
     async rejectReservation(reservationId, reason = '') {
-        const res = this.reservations.find(r => r.id === reservationId);
+        const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
         const wasConfirmed = res.status === 'CONFIRMED';
@@ -715,14 +784,25 @@ class Store {
         res.rejectionReason = reason || 'Horario no disponible / Cancelada por encargado.';
         res.updatedAt = new Date().toISOString();
 
-        this.saveLocalReservations(this.currentBusiness.id, this.reservations);
-
         if (isFirebaseAvailable && db) {
             try {
                 await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), {
-                    status: 'REJECTED', rejectionReason: res.rejectionReason, updatedAt: res.updatedAt
+                    status: 'REJECTED', 
+                    rejectionReason: res.rejectionReason, 
+                    updatedAt: res.updatedAt
                 });
-            } catch (e) {}
+            } catch (e) {
+                console.error("Error rechazando reservación en Firestore:", e);
+                throw e;
+            }
+        }
+
+        const inMemory = this.reservations.find(r => r.id === reservationId);
+        if (inMemory) {
+            Object.assign(inMemory, res);
+        }
+        if (this.currentBusiness?.id) {
+            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
 
         if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
@@ -740,7 +820,7 @@ class Store {
     }
 
     async modifyReservation(reservationId, updatedFields) {
-        const res = this.reservations.find(r => r.id === reservationId);
+        const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
         const targetMachine = updatedFields.machineId || res.machineId;
@@ -748,7 +828,19 @@ class Store {
         const targetStart = updatedFields.startTime || res.startTime;
         const targetEnd = updatedFields.endTime || res.endTime;
 
-        if (!isFirebaseAvailable || !db) {
+        if (isFirebaseAvailable && db) {
+            const reservationQuery = query(
+                collection(db, COLLECTIONS.RESERVATIONS),
+                where('businessId', '==', this.currentBusiness?.id || res.businessId),
+                where('date', '==', targetDate)
+            );
+            const snapshot = await getDocs(reservationQuery);
+            const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+            const conflict = findReservationConflict(remoteReservations, targetMachine, targetDate, targetStart, targetEnd, reservationId);
+            if (conflict) {
+                throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
+            }
+        } else {
             const availability = this.checkAvailability(targetMachine, targetDate, targetStart, targetEnd, reservationId);
             if (!availability.available) throw new Error(availability.reason);
         }
@@ -767,23 +859,23 @@ class Store {
         };
 
         if (isFirebaseAvailable && db) {
-            const reservationQuery = query(
-                collection(db, COLLECTIONS.RESERVATIONS),
-                where('businessId', '==', this.currentBusiness.id),
-                where('date', '==', targetDate)
-            );
-            const snapshot = await getDocs(reservationQuery);
-            const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-            const conflict = findReservationConflict(remoteReservations, targetMachine, targetDate, targetStart, targetEnd, reservationId);
-            if (conflict) {
-                throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
+            try {
+                await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), persistedFields);
+            } catch (e) {
+                console.error("Error modificando reservación en Firestore:", e);
+                throw e;
             }
-            await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), persistedFields);
         }
 
         Object.assign(res, persistedFields);
 
-        this.saveLocalReservations(this.currentBusiness.id, this.reservations);
+        const inMemory = this.reservations.find(r => r.id === reservationId);
+        if (inMemory) {
+            Object.assign(inMemory, persistedFields);
+        }
+        if (this.currentBusiness?.id) {
+            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
+        }
 
         if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
             const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
@@ -805,17 +897,23 @@ class Store {
     }
 
     async deleteReservation(reservationId) {
-        const res = this.reservations.find(r => r.id === reservationId);
+        const res = await this.getOrFetchReservation(reservationId);
         const wasConfirmed = res && res.status === 'CONFIRMED';
 
         this.reservations = this.reservations.filter(r => r.id !== reservationId);
-        this.saveLocalReservations(this.currentBusiness.id, this.reservations);
-
-        if (isFirebaseAvailable && db) {
-            try { await deleteDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId)); } catch (e) {}
+        if (this.currentBusiness?.id) {
+            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
 
-        if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
+        if (isFirebaseAvailable && db) {
+            try { 
+                await deleteDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId)); 
+            } catch (e) {
+                console.error("Error eliminando reservación en Firestore:", e);
+            }
+        }
+
+        if (wasConfirmed && res?.clientId && this.currentBusiness?.loyaltyEnabled) {
             const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
             const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
             try {

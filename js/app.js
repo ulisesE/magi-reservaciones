@@ -4,6 +4,7 @@ import { tenantManager } from './core/tenantManager.js';
 import { authManager } from './core/authManager.js';
 import { catalogsManager } from './core/catalogsManager.js';
 import { store } from './core/store.js';
+import { themeManager } from './core/themeManager.js';
 import { renderHeader } from './components/header.js';
 import { renderLandingView } from './views/landingView.js';
 import { renderBusinessHomeView } from './views/businessHomeView.js';
@@ -40,6 +41,9 @@ class App {
 
         // 4. Inicializar Store y datos de la sucursal activa
         await store.init();
+
+        // 4.5. Inicializar Gestor de Temas
+        themeManager.init();
 
         // Los enlaces compartidos de una sucursal abren su página pública.
         const hasBusinessInUrl = new URLSearchParams(window.location.search).has('local')
