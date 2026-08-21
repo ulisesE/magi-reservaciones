@@ -7,20 +7,13 @@ import { COLLECTIONS } from '../firebaseConfig.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { DAYS_OF_WEEK } from '../core/timeUtils.js';
+import { THEMES } from '../core/themeManager.js';
 
 // URL de ejemplo sugerida por el usuario
 const FB_EXAMPLE_URL = 'https://scontent-qro1-2.xx.fbcdn.net/v/t39.30808-6/724053305_1025229003358348_5523282942833772562_n.jpg?stp=dst-jpg_tt6&cstp=mx500x500&ctp=s500x500&_nc_cat=107&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=LS1w0JkJS_MQ7kNvwHzxI4I&_nc_oc=Adr79gKV4Ryuma3nOMkafJ9MkywnUbjl7y_Rf9gDNR51ciURCvb0XNyj7ZYvzL6AvlE&_nc_zt=23&_nc_ht=scontent-qro1-2.xx&_nc_gid=6FLHME4iNh4boah72s7Jyw&_nc_ss=702a8&oh=00_AQHr29y8OUsGs4pG3sKdxE6APo5P5xnv_HMJZfpkpiBLeg&oe=6A82B2A6';
 const STOCK_ARCADE_URL = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80';
 
 const EMOJI_PRESETS = ['🕹️', '🎮', '⚡', '🔥', '🕺', '💃', '👑', '🎯', '🚀', '💎', '🏆', '👾', '🌟', '🎪', '🏢', '🎧'];
-const THEME_COLORS = [
-    { name: 'Magenta PIU', hex: '#ff2a5f' },
-    { name: 'Cian Neón', hex: '#00e5ff' },
-    { name: 'Verde Neón', hex: '#68f205' },
-    { name: 'Amarillo Cyber', hex: '#ffe600' },
-    { name: 'Púrpura Synthwave', hex: '#bd00ff' },
-    { name: 'Naranja Láser', hex: '#ff7b00' }
-];
 
 export function renderBusinessView(container) {
     const business = store.currentBusiness || tenantManager.getActiveBusiness();
@@ -31,7 +24,7 @@ export function renderBusinessView(container) {
     let localCustomRates = [...(business.customRates || [])];
 
     const currentImgUrl = business.imageUrl || STOCK_ARCADE_URL;
-    const currentThemeColor = business.themeColor || '#ff2a5f';
+    const currentThemeId = business.themeId || 'phoenix';
     const currentEmoji = business.logoIcon || '🕹️';
 
     container.innerHTML = `
@@ -153,13 +146,15 @@ export function renderBusinessView(container) {
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="biz-theme-color"><span class="neon-arrow">◆</span> Color Neón de la Sucursal</label>
-                                    <div style="display:flex; gap:10px; align-items:center;">
-                                        <input type="color" id="biz-theme-color" value="${currentThemeColor}" class="cyber-color-input">
-                                        <div class="theme-color-presets-wrap" style="display:flex; gap:6px; flex-wrap:wrap;">
-                                            ${THEME_COLORS.map(c => `
-                                                <button type="button" class="btn-color-preset" data-color="${c.hex}" title="${c.name}" style="background-color:${c.hex};"></button>
+                                    <label for="biz-theme-id"><span class="neon-arrow">◆</span> Tema Visual de la Sucursal</label>
+                                    <div style="display:flex; flex-direction:column; gap:8px;">
+                                        <select id="biz-theme-id" class="cyber-select">
+                                            ${Object.values(THEMES).map(t => `
+                                                <option value="${t.id}" ${t.id === currentThemeId ? 'selected' : ''}>${t.name}</option>
                                             `).join('')}
+                                        </select>
+                                        <div id="theme-preview-bars" style="display:flex; height:12px; border-radius:4px; overflow:hidden; border: 1px solid var(--border-color);">
+                                            <!-- Se actualiza por JS -->
                                         </div>
                                     </div>
                                 </div>
@@ -819,18 +814,30 @@ export function renderBusinessView(container) {
         });
     });
 
-    // Preset Colores
-    container.querySelectorAll('.btn-color-preset').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const col = btn.dataset.color;
-            if (colorInput) colorInput.value = col;
-            if (previewIcon) previewIcon.style.borderColor = col;
-        });
-    });
+    const themeSelect = container.querySelector('#biz-theme-id');
+    const themePreviewBars = container.querySelector('#theme-preview-bars');
 
-    colorInput?.addEventListener('input', (e) => {
-        if (previewIcon) previewIcon.style.borderColor = e.target.value;
-    });
+    const updateThemePreview = (tId) => {
+        const theme = THEMES[tId] || THEMES['phoenix'];
+        if (previewIcon) previewIcon.style.borderColor = theme.primary;
+        if (themePreviewBars) {
+            themePreviewBars.innerHTML = `
+                <div style="flex:1; background:${theme.bgDark}" title="Fondo Oscuro"></div>
+                <div style="flex:1; background:${theme.bgMedium}" title="Fondo Medio"></div>
+                <div style="flex:1; background:${theme.bgLight}" title="Fondo Claro"></div>
+                <div style="flex:1; background:${theme.primary}" title="Acento Primario"></div>
+                <div style="flex:1; background:${theme.secondary}" title="Acento Secundario"></div>
+                <div style="flex:1; background:${theme.accent}" title="Acento Terciario"></div>
+            `;
+        }
+    };
+
+    if (themeSelect) {
+        themeSelect.addEventListener('change', (e) => {
+            updateThemePreview(e.target.value);
+        });
+        updateThemePreview(themeSelect.value); // Render inicial
+    }
 
     // Probar WhatsApp
     container.querySelector('#btn-test-wa')?.addEventListener('click', () => {
@@ -924,7 +931,7 @@ export function renderBusinessView(container) {
             tagline: container.querySelector('#biz-tagline').value.trim(),
             imageUrl: container.querySelector('#biz-image-url').value.trim() || STOCK_ARCADE_URL,
             logoIcon: container.querySelector('#biz-logo-icon').value.trim() || '🕹️',
-            themeColor: container.querySelector('#biz-theme-color').value,
+            themeId: container.querySelector('#biz-theme-id').value,
             city: container.querySelector('#biz-city').value.trim(),
             address: container.querySelector('#biz-address').value.trim(),
             phone: container.querySelector('#biz-phone').value.trim(),

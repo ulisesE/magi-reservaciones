@@ -119,7 +119,10 @@ El **Superadministrador** posee control absoluto sobre toda la plataforma y tien
 
 ## 2. ⚙️ Manual del Encargado de Local (Manager)
 
-El **Encargado** o administrador de local es el responsable de mantener operativas las máquinas, gestionar las solicitudes de los clientes y ajustar las reglas operativas de su sucursal.
+El **Encargado** o administrador de local (locatario) es el responsable de mantener operativas las máquinas, gestionar las solicitudes de los clientes y ajustar las reglas operativas de su sucursal.
+
+> [!NOTE]
+> **Sobre la Creación de Sucursales:** Un Encargado gestiona de manera exclusiva la sucursal que le ha sido asignada. Por razones de seguridad y consistencia en la red, la creación, eliminación o registro de nuevas sucursales es una capacidad global reservada **únicamente para el Superadministrador**. Si un locatario abre una nueva sucursal, debe solicitar su alta al Superadmin, quien le creará el espacio y (de ser necesario) le asignará una nueva cuenta de acceso.
 
 ### 🔑 Acceso y Login
 * **Credenciales Demo:** `encargado_centro` (PIN `1234`) o `encargado_galaxy` (PIN `5678`).
