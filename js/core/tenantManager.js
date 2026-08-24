@@ -387,7 +387,7 @@ class TenantManager {
         return null;
     }
 
-    async createBusiness(businessData) {
+    async createBusiness(businessData, autoSelect = true) {
         const newId = 'biz_' + Date.now();
         const newBusiness = {
             id: newId,
@@ -443,7 +443,11 @@ class TenantManager {
             }
         }
 
-        await this.selectLocal(newId);
+        if (autoSelect) {
+            await this.selectLocal(newId);
+        } else {
+            this.notify();
+        }
         return newBusiness;
     }
 

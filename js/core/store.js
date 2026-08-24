@@ -227,12 +227,14 @@ class Store {
     constructor() {
         this.machines = [];
         this.reservations = [];
+        this.pendingReservations = [];
         this.currentBusiness = null;
         this.userRole = 'CLIENT'; // 'CLIENT', 'MANAGER', 'SUPERADMIN'
         this.selectedDate = formatDateKey(new Date());
         this.currentView = 'DAY'; // 'DAY', 'WEEK', 'MONTH', 'MACHINES', 'REQUESTS', 'BUSINESS', 'SUPERADMIN'
         this.listeners = [];
         this.unsubscribeReservations = null;
+        this.unsubscribePendingReservations = null;
         this.unsubscribeMachines = null;
     }
 
@@ -264,8 +266,10 @@ class Store {
         const bizId = this.currentBusiness.id;
 
         this.unsubscribeReservations?.();
+        this.unsubscribePendingReservations?.();
         this.unsubscribeMachines?.();
         this.unsubscribeReservations = null;
+        this.unsubscribePendingReservations = null;
         this.unsubscribeMachines = null;
 
         let loadedMachines = [];
@@ -304,6 +308,21 @@ class Store {
                     this.saveLocalReservations(bizId, realtimeRes);
                     this.notify();
                 }, (error) => console.warn('Error de sincronización de reservas:', error));
+
+                // Suscripción permanente en tiempo real para solicitudes PENDING de este local
+                const pendingQuery = query(
+                    collection(db, COLLECTIONS.RESERVATIONS),
+                    where("businessId", "==", bizId),
+                    where("status", "==", "PENDING")
+                );
+                this.unsubscribePendingReservations = onSnapshot(pendingQuery, (snapshot) => {
+                    const pendingList = [];
+                    snapshot.forEach(docSnap => {
+                        pendingList.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+                    this.pendingReservations = pendingList;
+                    this.notify();
+                }, (error) => console.warn('Error de sincronización de pendientes en tiempo real:', error));
             } catch (err) {
                 console.warn("Error Firebase:", err);
             }
@@ -403,6 +422,7 @@ class Store {
         if (!this.currentBusiness) return [];
         const bizId = this.currentBusiness.id;
         
+        let loaded = [];
         if (isFirebaseAvailable && db) {
             try {
                 // Cargar hasta 150 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
@@ -412,16 +432,27 @@ class Store {
                     limit(150)
                 );
                 const snap = await getDocs(q);
-                const loaded = [];
                 snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
-                loaded.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
-                return loaded;
             } catch (err) {
                 console.warn("Error cargando bandeja de reservas de Firestore, usando local:", err);
             }
         }
         
-        return [...this.reservations].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+        if (loaded.length === 0) {
+            loaded = [...this.reservations];
+        }
+
+        // Asegurar que las pendientes del listener en tiempo real estén incluidas
+        if (this.pendingReservations && this.pendingReservations.length > 0) {
+            this.pendingReservations.forEach(p => {
+                if (!loaded.some(item => item.id === p.id)) {
+                    loaded.push(p);
+                }
+            });
+        }
+
+        loaded.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+        return loaded;
     }
 
     async syncMachinesToFirebase(machines) {
@@ -471,12 +502,18 @@ class Store {
     }
 
     getPendingRequests() {
+        if (this.pendingReservations && this.pendingReservations.length > 0) {
+            return [...this.pendingReservations].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+        }
         return this.reservations.filter(r => r.status === 'PENDING')
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
     }
 
     getPendingRequestsCount() {
-        return this.getPendingRequests().length;
+        if (this.pendingReservations) {
+            return this.pendingReservations.length;
+        }
+        return this.reservations.filter(r => r.status === 'PENDING').length;
     }
 
     checkAvailability(machineId, date, startTime, endTime, excludeReservationId = null) {
