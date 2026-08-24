@@ -160,6 +160,10 @@ export function renderHeader(container) {
 
                     <!-- Pestañas exclusivas para Staff (Encargado y Superadmin) -->
                     ${isStaff ? `
+                        <button class="nav-tab ${currentView === 'ANALYTICS' ? 'active' : ''}" data-view="ANALYTICS" style="border-bottom-color:var(--color-neon-lime); color:var(--color-neon-lime);">
+                            <span class="tab-icon">📈</span>
+                            <span class="tab-text">Rendimiento</span>
+                        </button>
                         <button class="nav-tab ${currentView === 'REQUESTS' ? 'active' : ''}" data-view="REQUESTS">
                             <span class="tab-icon">📥</span>
                             <span class="tab-text">Solicitudes</span>

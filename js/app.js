@@ -18,6 +18,7 @@ import { renderCatalogsManagementView } from './views/catalogsManagementView.js'
 import { renderBusinessView } from './views/businessView.js';
 import { renderSuperadminView } from './views/superadminView.js';
 import { renderClientProfileView } from './views/clientProfileView.js';
+import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
 import { isFirebaseAvailable } from './firebaseConfig.js';
 
 class App {
@@ -135,6 +136,9 @@ class App {
                     break;
                 case 'BUSINESS':
                     renderBusinessView(this.mainContent);
+                    break;
+                case 'ANALYTICS':
+                    renderTenantAnalyticsView(this.mainContent);
                     break;
                 case 'MY_PROFILE':
                     renderClientProfileView(this.mainContent);
