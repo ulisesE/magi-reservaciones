@@ -4,7 +4,28 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## Funcionalidades recientes y optimizaciones
+## Funcionalidades recientes y optimizaciones (v1.4.0)
+
+### 📈 Panel de Rendimiento y Analítica de Negocio para Locatarios
+* **Dashboard Integral en Tiempo Real**: Nueva pestaña de **"Rendimiento"** para el staff y encargados con visión 360° del negocio.
+* **Tarjetas KPI Maestras**:
+  * 💰 **Ingresos Totales**: Facturación real en moneda configurada y proyección potencial (con pendientes).
+  * 🎟️ **Total Reservaciones**: Conteo de reservas confirmadas, pendientes y tasa de éxito (%).
+  * ⏳ **Horas de Juego**: Total de horas efectivas jugadas y promedio por reserva.
+  * ⚡ **Utilización de Máquinas**: Porcentaje de ocupación del local contra la capacidad disponible con barras de progreso Neón.
+  * 🏷️ **Ticket Promedio**: Gasto medio por reservación e ingreso generado por hora jugada.
+  * ❌ **Tasa de Cancelación**: Porcentaje y conteo de solicitudes canceladas o rechazadas.
+* **4 Gráficas Interactivas con Chart.js**:
+  1. **Evolución Temporal**: Curva combinada de ingresos y reservas confirmadas.
+  2. **Estados de Reserva**: Gráfica Doughnut con confirmadas, pendientes y canceladas.
+  3. **Rendimiento por Máquina**: Facturación y horas acumuladas por gabinete.
+  4. **Horas Pico**: Distribución horaria de demanda (10:00 a 23:00) para identificar horarios de máxima afluencia.
+* **Filtros Temporales Rápidos**: Hoy, Esta Semana, Este Mes, Últimos 30 Días, Todo el Histórico y Rango Personalizado.
+* **Auditoría y Exportación**: Ranking de los mejores clientes y botón para **descargar reportes en CSV**.
+
+### 🔗 Vinculación Inteligente de Reservas
+* **Asignación Automática de Jugador**: Cuando el encargado agenda para un cliente, el sistema detecta y vincula automáticamente la reservación a la cuenta del jugador (por ID, Gamertag, nombre o teléfono).
+* **Historial Unificado en "Mi Perfil"**: Los jugadores visualizan en tiempo real todas las reservas asignadas a su nombre, incluso aquellas creadas directamente por el encargado en mostrador.
 
 ### 🎁 Programa de Lealtad Flexible (Puntos vs Visitas)
 * **Modos de Acumulación**: Configurable por local desde la pestaña de administración:

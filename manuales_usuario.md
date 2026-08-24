@@ -22,11 +22,13 @@ Este documento está estructurado para detallar el flujo de trabajo, responsabil
 | **Reasignar/Transferir máquinas de local** | Si | Si | No | No |
 | **Configurar marca, horario y costos del local** | Si | Si | No | No |
 | **Configurar modo de lealtad (Consumo vs Visitas)** | Si | Si | No | No |
+| **Consultar Dashboard y Analítica de Rendimiento** | Si | Si | No | No |
 | **Aprobar, rechazar o reprogramar reservas** | Si | Si | No | No |
 | **Crear reservas directas en mostrador** | Si | Si | No | No |
 | **Registrar y editar clientes locales** | Si | Si (Paginado) | Si (Propio perfil) | No |
 | **Ver datos sensibles (teléfono/correo) de otros** | Si | Si | No (Privado) | No |
 | **Consultar historial personal y estadísticas** | No | No | Si (Pass QR) | No |
+| **Exportar reportes de negocio en CSV** | Si | Si | No | No |
 | **Ver disponibilidad en tiempo real (Día/Sem/Mes)**| Si | Si | Si | Si |
 | **Enviar solicitud de reservación en línea** | Si | Si | Si (Auto-llenado) | Si (Llenado manual) |
 
@@ -127,6 +129,29 @@ El **Encargado** o administrador de local (locatario) es el responsable de mante
 ### 🔑 Acceso y Login
 * **Credenciales Demo:** `encargado_centro` (PIN `1234`) o `encargado_galaxy` (PIN `5678`).
 * Al iniciar sesión, la interfaz del encargado se ajusta de inmediato al color de neón oficial de su local y restringe todas las pantallas para que solo afecten a su sucursal.
+
+### 📈 Dashboard de Rendimiento y Analítica de Negocio (Pestaña "Rendimiento")
+Módulo analítico en tiempo real diseñado para que el locatario y su personal evalúen la rentabilidad, demanda y ocupación de su sucursal con datos directos de Firestore:
+
+1. **Filtros Temporales Inteligentes**:
+   * **Presets rápidos**: *📅 Hoy*, *📊 Esta Semana*, *🗓️ Este Mes*, *⏳ Últimos 30 Días* y *🌐 Todo el Histórico*.
+   * **Rango Personalizado**: Permite definir una fecha de inicio y una fecha de fin para auditar periodos específicos o temporadas de torneos.
+2. **Indicadores Clave de Desempeño (Tarjetas KPI)**:
+   * **💰 Ingresos Totales**: Facturación generada por reservaciones confirmadas en la moneda configurada del local, junto a la proyección de ingresos potenciales considerando solicitudes pendientes.
+   * **🎟️ Reservaciones Confirmadas**: Total de reservaciones aprobadas vs total recibidas y la tasa de efectividad (%).
+   * **⏳ Horas de Juego**: Horas efectivas acumuladas en el periodo y duración promedio por reservación.
+   * **⚡ Utilización de Máquinas**: Porcentaje de ocupación del local contra la capacidad operativa máxima con barra de progreso Neón.
+   * **🏷️ Ticket Promedio**: Promedio facturado por reservación e ingreso promedio por cada hora jugada.
+   * **❌ Tasa de Cancelación**: Porcentaje y conteo de cancelaciones o solicitudes rechazadas.
+3. **Gráficas Interactivas con Chart.js**:
+   * **📈 Evolución de Ingresos y Reservas**: Gráfica combinada de barras (ingresos monetarios) y línea (volumen de reservaciones).
+   * **🍩 Estados de Reserva**: Distribución proporcional de reservas confirmadas, pendientes y canceladas.
+   * **🕹️ Rendimiento por Máquina**: Comparativa de ingresos y horas acumuladas entre cada gabinete arcade disponible.
+   * **⏰ Horas Pico de Afluencia**: Histograma de distribución horaria de juego (10:00 a 23:00) para detectar horarios de máxima y mínima demanda.
+4. **Auditoría y Exportación**:
+   * **👑 Top Clientes**: Ranking con podio (🥇, 🥈, 🥉) de los jugadores más fieles, detallando sus horas jugadas e inversión económica.
+   * **🕹️ Detalle de Ocupación**: Métricas individuales por máquina (horas, facturación y porcentaje de utilización).
+   * **📥 Exportación a CSV**: Descarga instantánea de todas las reservaciones del periodo en formato `.csv` compatible con Excel y Google Sheets.
 
 ### 📥 Control de Solicitudes (Menú "Bandeja")
 La bandeja está dividida por estados para facilitar la atención rápida:
