@@ -1132,7 +1132,7 @@ function openCreateBusinessModal(container) {
         }
 
         try {
-            await tenantManager.createBusiness({ name, city, logoIcon, imageUrl, whatsapp, openingTime, closingTime });
+            await tenantManager.createBusiness({ name, city, logoIcon, imageUrl, whatsapp, openingTime, closingTime }, false);
             modal.close();
             toast.success(`¡Local "${name}" creado exitosamente!`);
             renderSuperadminView(container);

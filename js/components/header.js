@@ -103,12 +103,14 @@ export function renderHeader(container) {
                         </button>
                     ` : `
                         <div class="user-session-pill" style="display:flex; align-items:center; gap:8px; background:var(--bg-dark-700); padding:4px 10px; border-radius:var(--radius-full); border:1px solid var(--border-color);">
-                            <span style="font-size:1rem;">${currentUser.avatar || '👤'}</span>
-                            <div style="display:flex; flex-direction:column; line-height:1.1;">
-                                <strong style="font-size:0.8rem; color:#fff;">${currentUser.name}</strong>
-                                <small style="font-size:0.68rem; color:${isClientUser ? 'var(--piu-cyan)' : (isSuperAdmin ? 'var(--color-neon-lime)' : 'var(--color-chartreuse)')}; font-weight:700;">
-                                    ${isClientUser ? '🎮 JUGADOR' : (isSuperAdmin ? 'SUPERADMIN' : 'ENCARGADO')}
-                                </small>
+                            <div class="user-session-clickable" id="btn-user-profile-header" style="display:flex; align-items:center; gap:8px; cursor:pointer;" title="Ver y editar mi perfil">
+                                <span style="font-size:1rem;">${currentUser.avatar || '👤'}</span>
+                                <div style="display:flex; flex-direction:column; line-height:1.1;">
+                                    <strong style="font-size:0.8rem; color:#fff;">${currentUser.name}</strong>
+                                    <small style="font-size:0.68rem; color:${isClientUser ? 'var(--piu-cyan)' : (isSuperAdmin ? 'var(--color-neon-lime)' : 'var(--color-chartreuse)')}; font-weight:700;">
+                                        ${isClientUser ? '🎮 JUGADOR' : (isSuperAdmin ? '👑 SUPERADMIN' : '🕹️ ENCARGADO')}
+                                    </small>
+                                </div>
                             </div>
                             <button id="btn-logout" class="btn-xs btn-danger btn" style="margin-left:4px;" title="Cerrar sesión">Salir</button>
                         </div>
@@ -148,16 +150,20 @@ export function renderHeader(container) {
                         <span class="tab-text">Máquinas</span>
                     </button>
                     
-                    <!-- Pestaña para Clientes / Jugadores -->
-                    ${isClientUser ? `
+                    <!-- Pestaña Mi Perfil para todos los usuarios autenticados -->
+                    ${currentUser ? `
                         <button class="nav-tab ${currentView === 'MY_PROFILE' ? 'active' : ''}" data-view="MY_PROFILE" style="border-bottom-color:var(--piu-cyan); color:var(--piu-cyan);">
                             <span class="tab-icon">👤</span>
-                            <span class="tab-text">Mi Perfil y Reservas</span>
+                            <span class="tab-text">${isClientUser ? 'Mi Perfil y Reservas' : 'Mi Perfil'}</span>
                         </button>
                     ` : ''}
 
                     <!-- Pestañas exclusivas para Staff (Encargado y Superadmin) -->
                     ${isStaff ? `
+                        <button class="nav-tab ${currentView === 'ANALYTICS' ? 'active' : ''}" data-view="ANALYTICS" style="border-bottom-color:var(--color-neon-lime); color:var(--color-neon-lime);">
+                            <span class="tab-icon">📈</span>
+                            <span class="tab-text">Rendimiento</span>
+                        </button>
                         <button class="nav-tab ${currentView === 'REQUESTS' ? 'active' : ''}" data-view="REQUESTS">
                             <span class="tab-icon">📥</span>
                             <span class="tab-text">Solicitudes</span>
@@ -199,6 +205,13 @@ export function renderHeader(container) {
     if (loginBtn) {
         loginBtn.addEventListener('click', () => {
             openLoginModal();
+        });
+    }
+
+    const profileBtn = container.querySelector('#btn-user-profile-header');
+    if (profileBtn) {
+        profileBtn.addEventListener('click', () => {
+            store.setCurrentView('MY_PROFILE');
         });
     }
 

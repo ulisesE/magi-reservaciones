@@ -26,17 +26,18 @@ const AVATAR_OPTIONS = ['🕺', '💃', '🕹️', '⚡', '🎧', '🔥', '🚀'
 export async function renderClientProfileView(container) {
     const currentUser = authManager.getCurrentUser();
     const isClientUser = authManager.isClientUser();
+    const isStaff = authManager.isStaff();
     const business = store.currentBusiness || tenantManager.getActiveBusiness();
 
-    // Si el usuario no ha iniciado sesión o no es cliente
-    if (!isClientUser) {
+    // Si el usuario no ha iniciado sesión
+    if (!currentUser) {
         container.innerHTML = `
             <div class="client-profile-wrapper animate-fade-in" style="max-width:800px; margin:0 auto; padding:24px 16px;">
                 <div class="empty-state settings-card" style="padding:48px 24px; text-align:center;">
-                    <div class="empty-icon pulse-glow" style="font-size:3.5rem; margin-bottom:16px;">🕺</div>
-                    <h2 style="font-size:1.6rem; color:#ffffff; margin-bottom:8px;">Mi Perfil de Jugador Pump It Up</h2>
+                    <div class="empty-icon pulse-glow" style="font-size:3.5rem; margin-bottom:16px;">👤</div>
+                    <h2 style="font-size:1.6rem; color:#ffffff; margin-bottom:8px;">Mi Perfil y Credenciales de Acceso</h2>
                     <p style="color:var(--text-secondary); max-width:480px; margin:0 auto 24px auto;">
-                        Crea tu perfil o inicia sesión para consultar tu historial de reservaciones, gestionar tus horarios y personalizar tu GamerTag.
+                        Inicia sesión para consultar tu perfil, modificar tus datos de acceso o gestionar tus reservaciones.
                     </p>
                     <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap;">
                         <button id="btn-login-prompt" class="btn btn-primary glow-red">
@@ -51,6 +52,11 @@ export async function renderClientProfileView(container) {
             openLoginModal();
         });
         return;
+    }
+
+    // Si el usuario es Encargado (MANAGER) o Superadministrador (SUPERADMIN)
+    if (isStaff) {
+        return renderStaffProfileView(container, currentUser);
     }
 
     // Carga optimizada de reservaciones de este cliente directamente desde Firestore
@@ -659,4 +665,266 @@ export async function renderClientProfileView(container) {
             }
         });
     });
+}
+
+/**
+ * Vista de Perfil y Configuración de Cuenta para Staff (Encargado y Superadmin)
+ */
+export function renderStaffProfileView(container, currentUser) {
+    const isSuperAdmin = currentUser.role === 'SUPERADMIN';
+    const isManager = currentUser.role === 'MANAGER';
+    const businesses = tenantManager.getAllBusinesses();
+    const assignedBiz = isManager ? businesses.find(b => b.id === currentUser.businessId) : null;
+    const currentAvatar = currentUser.avatar || (isSuperAdmin ? '👑' : '🕹️');
+    let selectedAvatar = currentAvatar;
+
+    const pendingCount = store.getPendingRequestsCount();
+    const machinesCount = store.getMachines().length;
+
+    container.innerHTML = `
+        <div class="client-profile-wrapper animate-fade-in" style="max-width:960px; margin:0 auto; padding:24px 16px;">
+            <!-- Header de Perfil Staff -->
+            <div class="view-header-bar" style="margin-bottom:24px;">
+                <div class="header-left">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:2rem;">${isSuperAdmin ? '👑' : '⚙️'}</span>
+                        <div>
+                            <h2 class="friendly-date-title">Mi Cuenta y Credenciales</h2>
+                            <p class="subtitle-text">Administra tus datos personales, avatar y contraseña/PIN de acceso al sistema.</p>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    ${isSuperAdmin ? `
+                        <button class="btn btn-outline" id="btn-goto-superadmin" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);">
+                            <span>👑 Ir al Panel Global</span>
+                        </button>
+                    ` : `
+                        <button class="btn btn-outline" id="btn-goto-biz-settings">
+                            <span>⚙️ Ajustes del Local</span>
+                        </button>
+                    `}
+                </div>
+            </div>
+
+            <!-- Banner Resumen de Sesión -->
+            <div class="profile-hero-card" style="background:linear-gradient(135deg, rgba(20,24,35,0.95), rgba(10,12,18,0.98)); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:24px; margin-bottom:24px; position:relative; overflow:hidden;">
+                <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+                    <div id="staff-avatar-display" style="font-size:3.5rem; width:80px; height:80px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border:2px solid ${isSuperAdmin ? 'var(--color-neon-lime)' : 'var(--piu-cyan)'}; border-radius:50%; box-shadow:0 0 16px rgba(0,0,0,0.5);">
+                        ${selectedAvatar}
+                    </div>
+                    <div style="flex:1; min-width:220px;">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <h2 style="font-size:1.6rem; color:#ffffff; margin:0;">${currentUser.name}</h2>
+                            <span class="badge ${isSuperAdmin ? 'badge-danger' : 'badge-warning'}" style="font-size:0.8rem; font-weight:700;">
+                                ${isSuperAdmin ? '👑 SUPERADMINISTRADOR' : '🕹️ ENCARGADO DE LOCAL'}
+                            </span>
+                        </div>
+                        <p style="color:var(--text-secondary); margin:4px 0 0 0; font-size:0.9rem;">
+                            Usuario / Login: <code>${currentUser.username}</code> • Correo: <code>${currentUser.email || 'Sin correo asignado'}</code>
+                        </p>
+                        ${assignedBiz ? `
+                            <p style="color:var(--color-neon-lime); margin:6px 0 0 0; font-size:0.85rem; font-weight:600;">
+                                📍 Local Asignado: <strong>${assignedBiz.name}</strong> (${assignedBiz.city})
+                            </p>
+                        ` : (isSuperAdmin ? `
+                            <p style="color:var(--piu-cyan); margin:6px 0 0 0; font-size:0.85rem; font-weight:600;">
+                                🌐 Permisos Globales: Control total de todos los locales
+                            </p>
+                        ` : '')}
+                    </div>
+
+                    <!-- Métricas Rápidas para el Encargado -->
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:10px 16px; text-align:center; min-width:100px;">
+                            <div style="font-size:1.4rem; font-weight:800; color:var(--piu-gold);">${pendingCount}</div>
+                            <small style="color:var(--text-muted); font-size:0.75rem;">Pendientes</small>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:10px 16px; text-align:center; min-width:100px;">
+                            <div style="font-size:1.4rem; font-weight:800; color:var(--color-neon-lime);">${machinesCount}</div>
+                            <small style="color:var(--text-muted); font-size:0.75rem;">Máquinas</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grid de Configuración de Perfil -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:24px;">
+                <!-- Formulario de Credenciales y Datos Personales -->
+                <div class="settings-card">
+                    <div class="card-title-bar">
+                        <div class="title-with-icon">
+                            <span class="t-icon">🔐</span>
+                            <div>
+                                <h3>Editar Mis Credenciales y Contraseña</h3>
+                                <small>Actualiza tu nombre, correo y clave de acceso al sistema</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="form-edit-staff-profile" class="cyber-form" style="padding:20px;">
+                        <!-- Selector de Avatar -->
+                        <div class="form-group" style="margin-bottom:16px;">
+                            <label><span class="neon-arrow">◆</span> Selecciona tu Avatar</label>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                                ${AVATAR_OPTIONS.map(av => `
+                                    <button type="button" class="btn-avatar-choice ${av === selectedAvatar ? 'active' : ''}" data-avatar="${av}" style="font-size:1.4rem; padding:6px 12px; background:${av === selectedAvatar ? 'var(--bg-dark-600)' : 'var(--bg-dark-800)'}; border:2px solid ${av === selectedAvatar ? 'var(--color-neon-lime)' : 'var(--border-color)'}; border-radius:var(--radius-sm); cursor:pointer; transition:all 0.2s;">
+                                        ${av}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Nombre Completo -->
+                        <div class="form-group" style="margin-bottom:16px;">
+                            <label for="staff-prof-name"><span class="neon-arrow">◆</span> Nombre Completo *</label>
+                            <input type="text" id="staff-prof-name" class="cyber-input" value="${currentUser.name}" required placeholder="Ej. Carlos Mendoza">
+                        </div>
+
+                        <!-- Nombre de Usuario / Login -->
+                        <div class="form-group" style="margin-bottom:16px;">
+                            <label for="staff-prof-user"><span class="neon-arrow">◆</span> Nombre de Usuario / Login *</label>
+                            <input type="text" id="staff-prof-user" class="cyber-input" value="${currentUser.username}" required placeholder="Ej. encargado_centro">
+                            <small style="color:var(--text-muted); font-size:0.75rem;">Utilizado para iniciar sesión en la plataforma.</small>
+                        </div>
+
+                        <!-- Correo Electrónico -->
+                        <div class="form-group" style="margin-bottom:16px;">
+                            <label for="staff-prof-email"><span class="neon-arrow">◆</span> Correo Electrónico</label>
+                            <input type="email" id="staff-prof-email" class="cyber-input" value="${currentUser.email || ''}" placeholder="correo@ejemplo.com">
+                        </div>
+
+                        <!-- PIN / Contraseña de Acceso -->
+                        <div class="form-group" style="margin-bottom:20px;">
+                            <label for="staff-prof-pin"><span class="neon-arrow">◆</span> PIN / Contraseña de Seguridad *</label>
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="staff-prof-pin" class="cyber-input" value="${currentUser.pin}" required style="font-family:monospace; font-weight:700; font-size:1.1rem; letter-spacing:2px; color:var(--piu-gold);">
+                            </div>
+                            <small style="color:var(--text-muted); font-size:0.75rem;">Mínimo 4 caracteres. Guarda este PIN para tus próximos inicios de sesión.</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary glow-red" style="width:100%;">
+                            <span>💾 Guardar Cambios de Mi Cuenta</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tarjeta de Acciones Rápidas y Operación -->
+                <div class="settings-card">
+                    <div class="card-title-bar">
+                        <div class="title-with-icon">
+                            <span class="t-icon">⚡</span>
+                            <div>
+                                <h3>Accesos Rápidos de Gestión</h3>
+                                <small>Herramientas de administración frecuentes</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="padding:20px; display:flex; flex-direction:column; gap:12px;">
+                        <button class="btn btn-outline" id="btn-quick-requests" style="justify-content:flex-start; text-align:left; padding:12px 16px;">
+                            <span style="font-size:1.3rem;">📥</span>
+                            <div style="display:flex; flex-direction:column; line-height:1.2; margin-left:8px;">
+                                <strong>Bandeja de Solicitudes (${pendingCount} pendientes)</strong>
+                                <small style="color:var(--text-muted);">Revisar, aprobar o reprogramar citas de clientes</small>
+                            </div>
+                        </button>
+
+                        <button class="btn btn-outline" id="btn-quick-calendar" style="justify-content:flex-start; text-align:left; padding:12px 16px;">
+                            <span style="font-size:1.3rem;">📅</span>
+                            <div style="display:flex; flex-direction:column; line-height:1.2; margin-left:8px;">
+                                <strong>Calendario de Reservas</strong>
+                                <small style="color:var(--text-muted);">Consultar horarios por día, semana y mes</small>
+                            </div>
+                        </button>
+
+                        <button class="btn btn-outline" id="btn-quick-machines" style="justify-content:flex-start; text-align:left; padding:12px 16px;">
+                            <span style="font-size:1.3rem;">🕹️</span>
+                            <div style="display:flex; flex-direction:column; line-height:1.2; margin-left:8px;">
+                                <strong>Catálogo de Máquinas</strong>
+                                <small style="color:var(--text-muted);">Ver estado de pads, versiones y tarifas por hora</small>
+                            </div>
+                        </button>
+
+                        ${isSuperAdmin ? `
+                            <button class="btn btn-outline" id="btn-quick-superadmin-panel" style="justify-content:flex-start; text-align:left; padding:12px 16px; border-color:var(--color-neon-lime); color:var(--color-neon-lime);">
+                                <span style="font-size:1.3rem;">👑</span>
+                                <div style="display:flex; flex-direction:column; line-height:1.2; margin-left:8px;">
+                                    <strong>Consola Global de Superadmin</strong>
+                                    <small style="color:var(--text-muted);">Administración total de sucursales y personal</small>
+                                </div>
+                            </button>
+                        ` : `
+                            <button class="btn btn-outline" id="btn-quick-biz-settings" style="justify-content:flex-start; text-align:left; padding:12px 16px;">
+                                <span style="font-size:1.3rem;">🏢</span>
+                                <div style="display:flex; flex-direction:column; line-height:1.2; margin-left:8px;">
+                                    <strong>Ajustes del Local (${assignedBiz?.name || 'Mi Local'})</strong>
+                                    <small style="color:var(--text-muted);">Configurar horarios, políticas, imagen y contacto</small>
+                                </div>
+                            </button>
+                        `}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Eventos del formulario de perfil de staff
+    const avatarBtns = container.querySelectorAll('.btn-avatar-choice');
+    avatarBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedAvatar = btn.dataset.avatar;
+            avatarBtns.forEach(b => {
+                b.style.borderColor = 'var(--border-color)';
+                b.style.background = 'var(--bg-dark-800)';
+            });
+            btn.style.borderColor = 'var(--color-neon-lime)';
+            btn.style.background = 'var(--bg-dark-600)';
+            const display = container.querySelector('#staff-avatar-display');
+            if (display) display.textContent = selectedAvatar;
+        });
+    });
+
+    const form = container.querySelector('#form-edit-staff-profile');
+    form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const name = container.querySelector('#staff-prof-name').value.trim();
+        const username = container.querySelector('#staff-prof-user').value.trim().toLowerCase().replace(/\s+/g, '_');
+        const pin = container.querySelector('#staff-prof-pin').value.trim();
+        const email = container.querySelector('#staff-prof-email').value.trim();
+
+        if (!name || !username || !pin) {
+            toast.error("Por favor completa todos los campos requeridos.");
+            return;
+        }
+
+        if (pin.length < 4) {
+            toast.error("El PIN / Contraseña debe contener al menos 4 caracteres.");
+            return;
+        }
+
+        try {
+            await authManager.updateStaffManager(currentUser.id, {
+                name,
+                username,
+                pin,
+                email,
+                avatar: selectedAvatar
+            });
+            toast.success("¡Tus datos y contraseña se han guardado exitosamente!");
+            renderStaffProfileView(container, authManager.getCurrentUser());
+        } catch (err) {
+            toast.error(err.message || "Error al actualizar credenciales.");
+        }
+    });
+
+    // Accesos directos de navegación
+    container.querySelector('#btn-goto-superadmin')?.addEventListener('click', () => store.setCurrentView('SUPERADMIN'));
+    container.querySelector('#btn-quick-superadmin-panel')?.addEventListener('click', () => store.setCurrentView('SUPERADMIN'));
+    container.querySelector('#btn-goto-biz-settings')?.addEventListener('click', () => store.setCurrentView('BUSINESS'));
+    container.querySelector('#btn-quick-biz-settings')?.addEventListener('click', () => store.setCurrentView('BUSINESS'));
+    container.querySelector('#btn-quick-requests')?.addEventListener('click', () => store.setCurrentView('REQUESTS'));
+    container.querySelector('#btn-quick-calendar')?.addEventListener('click', () => store.setCurrentView('DAY'));
+    container.querySelector('#btn-quick-machines')?.addEventListener('click', () => store.setCurrentView('MACHINES'));
 }

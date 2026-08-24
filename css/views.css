@@ -1604,3 +1604,288 @@
 .rewards-profile-list::-webkit-scrollbar-thumb:hover {
     background: var(--color-neon-lime);
 }
+
+/* ==========================================================================
+   PANEL DE RENDIMIENTO Y ANALÍTICA DEL NEGOCIO (TENANT ANALYTICS)
+   ========================================================================== */
+.analytics-view-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-bottom: 40px;
+}
+
+.analytics-filter-container {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.analytics-presets-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.analytics-preset-btn {
+    background: var(--bg-dark-700);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.analytics-preset-btn:hover {
+    border-color: var(--color-neon-lime);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.analytics-preset-btn.active {
+    background: rgba(104, 242, 5, 0.15);
+    border-color: var(--color-neon-lime);
+    color: var(--color-neon-lime);
+    box-shadow: 0 0 12px rgba(104, 242, 5, 0.25);
+    font-weight: 700;
+}
+
+.analytics-date-custom-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.analytics-date-input {
+    background: var(--bg-dark-800);
+    border: 1px solid var(--border-color);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.analytics-date-input:focus {
+    border-color: var(--color-neon-lime);
+    box-shadow: 0 0 8px rgba(104, 242, 5, 0.3);
+}
+
+/* KPI Cards Grid */
+.analytics-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.analytics-kpi-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.analytics-kpi-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(104, 242, 5, 0.5);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35);
+}
+
+.analytics-kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--card-accent-color, var(--color-neon-lime)), transparent);
+}
+
+.kpi-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.kpi-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.kpi-icon-pill {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.kpi-value {
+    font-family: var(--font-heading);
+    font-size: 2.1rem;
+    font-weight: 900;
+    line-height: 1.1;
+    color: #fff;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}
+
+.kpi-subtext {
+    font-size: 0.78rem;
+    color: var(--text-dimmed);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Charts Grid */
+.analytics-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 20px;
+}
+
+.chart-card-col-8 {
+    grid-column: span 8;
+}
+
+.chart-card-col-4 {
+    grid-column: span 4;
+}
+
+.chart-card-col-6 {
+    grid-column: span 6;
+}
+
+.chart-card-col-12 {
+    grid-column: span 12;
+}
+
+@media (max-width: 992px) {
+    .chart-card-col-8,
+    .chart-card-col-4,
+    .chart-card-col-6 {
+        grid-column: span 12;
+    }
+}
+
+.analytics-chart-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.analytics-chart-card .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.analytics-chart-card .chart-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.chart-canvas-container {
+    position: relative;
+    width: 100%;
+    min-height: 260px;
+    max-height: 320px;
+}
+
+/* Tables in Analytics */
+.analytics-table-card {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    overflow: hidden;
+}
+
+.cyber-analytics-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.88rem;
+}
+
+.cyber-analytics-table th {
+    background: rgba(1, 24, 22, 0.7);
+    color: var(--color-neon-lime);
+    font-family: var(--font-heading);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 14px;
+    border-bottom: 2px solid rgba(104, 242, 5, 0.25);
+    text-align: left;
+}
+
+.cyber-analytics-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+
+.cyber-analytics-table tr:hover td {
+    background: rgba(104, 242, 5, 0.04);
+}
+
+.machine-util-bar-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.machine-util-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #088C4F, #68F205);
+    border-radius: 999px;
+    transition: width 0.6s ease;
+}
+

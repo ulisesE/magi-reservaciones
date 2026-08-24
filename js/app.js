@@ -18,6 +18,7 @@ import { renderCatalogsManagementView } from './views/catalogsManagementView.js'
 import { renderBusinessView } from './views/businessView.js';
 import { renderSuperadminView } from './views/superadminView.js';
 import { renderClientProfileView } from './views/clientProfileView.js';
+import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
 import { isFirebaseAvailable } from './firebaseConfig.js';
 
 class App {
@@ -74,7 +75,7 @@ class App {
             if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted);">Servidor Remoto Conectado (piu_app_v1.3.0.1)</span>
+                    <span style="color:var(--text-muted);">Servidor Remoto Conectado (piu_app_v1.3.0.2)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
@@ -135,6 +136,9 @@ class App {
                     break;
                 case 'BUSINESS':
                     renderBusinessView(this.mainContent);
+                    break;
+                case 'ANALYTICS':
+                    renderTenantAnalyticsView(this.mainContent);
                     break;
                 case 'MY_PROFILE':
                     renderClientProfileView(this.mainContent);

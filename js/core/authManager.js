@@ -124,14 +124,24 @@ class AuthManager {
     }
 
     async loadStaffUsers() {
-        if (!this.isSuperAdmin()) return this.staffUsers;
         if (isFirebaseAvailable && db) {
             try {
                 const snap = await getDocs(collection(db, COLLECTIONS.STAFF_USERS));
                 const loaded = [];
                 snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
-                this.staffUsers = loaded;
-                localStorage.setItem('piu_staff_users_cache', JSON.stringify(loaded));
+                if (loaded.length > 0) {
+                    this.staffUsers = loaded;
+                    localStorage.setItem('piu_staff_users_cache', JSON.stringify(loaded));
+
+                    // Sincronizar usuario activo si es staff
+                    if (this.currentUser && (this.currentUser.role === 'SUPERADMIN' || this.currentUser.role === 'MANAGER')) {
+                        const activeInLoaded = loaded.find(u => u.id === this.currentUser.id);
+                        if (activeInLoaded) {
+                            this.currentUser = { ...this.currentUser, ...activeInLoaded };
+                            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
+                        }
+                    }
+                }
             } catch (err) {
                 console.warn("Error loading staff from Firebase:", err);
             }
@@ -456,6 +466,11 @@ class AuthManager {
 
         this.staffUsers[index] = { ...this.staffUsers[index], ...updatedFields };
         localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
+
+        if (this.currentUser && this.currentUser.id === userId) {
+            this.currentUser = { ...this.currentUser, ...updatedFields };
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
+        }
 
         if (isFirebaseAvailable && db) {
             try {
