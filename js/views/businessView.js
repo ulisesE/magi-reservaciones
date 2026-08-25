@@ -41,6 +41,9 @@ export function renderBusinessView(container) {
                     </div>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary" id="btn-go-to-clients-acct" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:bold; border:none;" title="Abrir directorio, cuentas y consumos de jugadores">
+                        <span>👥 Directorio y Cuentas</span>
+                    </button>
                     <a href="${clientDirectUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline" title="Abrir la vista que ven los clientes en una nueva pestaña">
                         <span>👁️ Ver Vista Cliente</span>
                     </a>
@@ -760,6 +763,11 @@ export function renderBusinessView(container) {
 
     imgInput?.addEventListener('change', (e) => {
         updatePreviewImage(e.target.value);
+    });
+
+    // Botón ir a Directorio y Cuentas de Jugadores
+    container.querySelector('#btn-go-to-clients-acct')?.addEventListener('click', () => {
+        store.setCurrentView('CLIENTS');
     });
 
     // Botón para pegar URL de Facebook proporcionada en el requerimiento

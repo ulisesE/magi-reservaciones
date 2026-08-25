@@ -20,6 +20,8 @@ import {
     where 
 } from '../firebaseConfig.js';
 import { loyaltyManager, TIERS } from '../core/loyaltyManager.js';
+import { accountManager } from '../core/accountManager.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 const AVATAR_OPTIONS = ['🕺', '💃', '🕹️', '⚡', '🎧', '🔥', '🚀', '👑', '🎯', '🌟', '👾', '👟'];
 
@@ -138,6 +140,11 @@ export async function renderClientProfileView(container) {
     const activeBusinessId = business ? business.id : '';
     const bizLoyalty = (currentUser.loyalty && activeBusinessId && currentUser.loyalty[activeBusinessId]) ? currentUser.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
 
+    // Cargar estado de cuenta y consumos del jugador (Fase 2)
+    const myAccount = await accountManager.getPlayerAccount(activeBusinessId, currentUser.id);
+    const myTransactions = myAccount.transactions || [];
+    const currencySymbol = business?.currencySymbol || '$';
+
     const valueForTier = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
     const currentTier = loyaltyManager.calculateTier(valueForTier, activeMode);
     const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(valueForTier, activeMode);
@@ -224,6 +231,12 @@ export async function renderClientProfileView(container) {
                                 </div>
                             ` : ''}
                             <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                                <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Mi Saldo / Cuenta</span>
+                                <strong style="font-size:1.3rem; color:${myAccount.netDebt > 0 ? '#FF5252' : (myAccount.creditBalance > 0 ? 'var(--color-neon-lime)' : '#ffffff')};">
+                                    ${myAccount.netDebt > 0 ? `-${currencySymbol}${myAccount.netDebt.toFixed(2)}` : (myAccount.creditBalance > 0 ? `+${currencySymbol}${myAccount.creditBalance.toFixed(2)}` : `${currencySymbol}0.00`)}
+                                </strong>
+                            </div>
+                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
                                 <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas</span>
                                 <strong style="font-size:1.3rem; color:var(--piu-cyan);">${bizLoyalty.visits || 0}</strong>
                             </div>
@@ -238,15 +251,18 @@ export async function renderClientProfileView(container) {
 
             <!-- Navegación de Pestañas del Perfil -->
             <div style="display:flex; gap:10px; border-bottom:1px solid var(--border-color); padding-bottom:8px; flex-wrap:wrap;">
-                <button class="btn btn-sm btn-profile-tab active" data-tab="tab-my-bookings" style="flex:1; max-width:240px;">
+                <button class="btn btn-sm btn-profile-tab active" data-tab="tab-my-bookings" style="flex:1; max-width:220px;">
                     <span>🎟️ Mis Reservaciones (${myReservations.length})</span>
                 </button>
+                <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-my-account" style="flex:1; max-width:240px; color:var(--piu-cyan);">
+                    <span>💳 Mi Cuenta y Consumos</span>
+                </button>
                 ${business.loyaltyEnabled ? `
-                    <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-loyalty-rewards" style="flex:1; max-width:240px; color:var(--color-neon-lime);">
+                    <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-loyalty-rewards" style="flex:1; max-width:220px; color:var(--color-neon-lime);">
                         <span>🎁 Lealtad y Premios</span>
                     </button>
                 ` : ''}
-                <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-edit-profile" style="flex:1; max-width:240px;">
+                <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-edit-profile" style="flex:1; max-width:200px;">
                     <span>⚙️ Administrar Perfil</span>
                 </button>
             </div>
@@ -317,6 +333,120 @@ export async function renderClientProfileView(container) {
                         }).join('')}
                     </div>
                 `}
+            </div>
+
+            <!-- Contenido Pestaña: Mi Cuenta y Consumos (Fase 2) -->
+            <div id="tab-my-account" class="profile-tab-section animate-fade-in hidden">
+                <div style="display:flex; flex-direction:column; gap:20px;">
+                    <!-- Balance Hero Card -->
+                    <div class="account-balance-hero ${myAccount.netDebt > 0 ? 'has-debt' : (myAccount.creditBalance > 0 ? 'has-credit' : '')}">
+                        <div>
+                            <span style="font-size:0.8rem; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.7); font-weight:800; display:block;">
+                                ${myAccount.netDebt > 0 ? '⚠️ SALDO PENDIENTE DE PAGO EN SALA' : (myAccount.creditBalance > 0 ? '🟢 SALDO A FAVOR DISPONIBLE' : '✅ CUENTA AL CORRIENTE')}
+                            </span>
+                            <div class="balance-amount-display ${myAccount.netDebt > 0 ? 'debt' : (myAccount.creditBalance > 0 ? 'credit' : 'clean')}">
+                                ${myAccount.netDebt > 0 ? `- ${currencySymbol}${myAccount.netDebt.toFixed(2)}` : (myAccount.creditBalance > 0 ? `+ ${currencySymbol}${myAccount.creditBalance.toFixed(2)}` : `${currencySymbol}0.00`)}
+                            </div>
+                            <small style="font-size:0.75rem; color:rgba(255,255,255,0.6);">
+                                Estado de cuenta en: <strong>${escapeHTML(business?.name || 'la Sucursal')}</strong>
+                            </small>
+                        </div>
+
+                        <div style="display:flex; gap:16px; flex-wrap:wrap; text-align:right;">
+                            <div style="background:rgba(0,0,0,0.3); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.08);">
+                                <span style="font-size:0.72rem; color:var(--text-muted); display:block;">Total Consumido</span>
+                                <strong style="font-size:1.15rem; color:#ffffff;">${currencySymbol}${myAccount.totalConsumed.toFixed(2)}</strong>
+                            </div>
+                            <div style="background:rgba(0,0,0,0.3); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.08);">
+                                <span style="font-size:0.72rem; color:var(--text-muted); display:block;">Total Pagado / Abonado</span>
+                                <strong style="font-size:1.15rem; color:var(--color-neon-lime);">${currencySymbol}${myAccount.totalAbonos.toFixed(2)}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Desglose por Categorías -->
+                    <div class="settings-card" style="padding:18px;">
+                        <h4 style="margin:0 0 14px 0; color:#fff; font-size:1rem; display:flex; align-items:center; gap:6px;">
+                            <span>📊 Resumen de Consumo por Categoría</span>
+                        </h4>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
+                            ${Object.values(myAccount.breakdownByType || {}).map(b => `
+                                <div style="background:var(--bg-dark-700); padding:10px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.05); text-align:center;">
+                                    <div style="font-size:1.4rem; margin-bottom:2px;">${b.icon}</div>
+                                    <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">${escapeHTML(b.label)}</div>
+                                    <strong style="font-size:0.95rem; color:var(--color-chartreuse); display:block; margin-top:2px;">${currencySymbol}${b.total.toFixed(2)}</strong>
+                                    <small style="font-size:0.68rem; color:var(--text-secondary);">${b.count} item(s)</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Historial Cronológico de Movimientos -->
+                    <div class="settings-card" style="padding:18px;">
+                        <h4 style="margin:0 0 14px 0; color:#fff; font-size:1.05rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                            <span>📜 Historial Cronológico de Consumos y Movimientos</span>
+                            <span class="badge badge-dark" style="font-size:0.75rem;">${myTransactions.length} registros</span>
+                        </h4>
+
+                        <div class="account-movements-container" style="padding:4px; max-height:400px; overflow-y:auto;">
+                            ${myTransactions.length === 0 ? `
+                                <div style="text-align:center; padding:32px 10px; color:var(--text-muted);">
+                                    <div style="font-size:2.2rem; margin-bottom:8px;">🛍️</div>
+                                    <p style="margin:0; font-size:0.9rem;">No tienes consumos ni abonos registrados aún en esta sucursal.</p>
+                                    <small style="color:var(--text-secondary); display:block; margin-top:4px;">Los consumos registrados en caja (bebidas, snacks, fichas, inscripciones) aparecerán aquí.</small>
+                                </div>
+                            ` : myTransactions.map(t => {
+                                const isAbono = t.type === 'ABONO' || t.type === 'PAGO';
+                                const isPending = t.paymentStatus === 'PENDING';
+                                const isCancelled = t.status === 'CANCELLED';
+                                const typeMeta = accountManager.getTypeById(t.itemType);
+                                const dateFormatted = new Date(t.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+
+                                let statusClass = 'is-paid';
+                                if (isCancelled) statusClass = 'is-cancelled';
+                                else if (isAbono) statusClass = 'is-abono';
+                                else if (isPending) statusClass = 'is-pending';
+
+                                return `
+                                    <div class="movement-item-card ${statusClass}">
+                                        <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                                            <div style="font-size:1.6rem; min-width:32px; text-align:center;">
+                                                ${isAbono ? '💵' : typeMeta.icon}
+                                            </div>
+                                            <div>
+                                                <div style="font-weight:bold; color:#fff; font-size:0.92rem; display:flex; align-items:center; gap:6px;">
+                                                    <span>${escapeHTML(t.concept || 'Consumo')}</span>
+                                                    ${!isAbono ? `<span class="badge badge-dark" style="font-size:0.68rem;">x${t.quantity || 1}</span>` : ''}
+                                                </div>
+                                                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+                                                    <span>${dateFormatted}</span>
+                                                    ${t.notes ? ` • <em style="color:var(--piu-cyan);">"${escapeHTML(t.notes)}"</em>` : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                                            <strong style="font-size:1.05rem; font-family:var(--font-heading); color:${isCancelled ? 'var(--text-muted)' : (isAbono ? 'var(--color-neon-lime)' : (isPending ? '#FF5252' : '#fff'))};">
+                                                ${isAbono ? `+${currencySymbol}${Number(t.totalAmount).toFixed(2)}` : `${currencySymbol}${Number(t.totalAmount).toFixed(2)}`}
+                                            </strong>
+                                            <div>
+                                                ${isCancelled ? `
+                                                    <span class="badge badge-danger" style="font-size:0.65rem;">CANCELADO</span>
+                                                ` : (isAbono ? `
+                                                    <span class="badge badge-success" style="font-size:0.65rem;">ABONADO</span>
+                                                ` : (isPending ? `
+                                                    <span class="badge badge-danger" style="font-size:0.65rem;">PENDIENTE DE PAGO</span>
+                                                ` : `
+                                                    <span class="badge badge-dark" style="font-size:0.65rem; color:var(--color-chartreuse); border-color:var(--color-chartreuse);">PAGADO</span>
+                                                `))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Contenido Pestaña 2: Lealtad y Premios -->
@@ -487,8 +617,9 @@ export async function renderClientProfileView(container) {
                                 <input type="email" id="edit-email" class="cyber-input" value="${currentUser.email || ''}" placeholder="jugador@correo.com">
                             </div>
                             <div class="form-group">
-                                <label for="edit-pin"><span class="neon-arrow">◆</span> Cambiar PIN de Acceso</label>
-                                <input type="password" id="edit-pin" class="cyber-input" value="${currentUser.pin}" maxlength="6" placeholder="Mínimo 4 dígitos" required>
+                                <label for="edit-pin"><span class="neon-arrow">◆</span> Cambiar PIN de Acceso (Opcional)</label>
+                                <input type="password" id="edit-pin" class="cyber-input" value="" maxlength="6" placeholder="Dejar vacío para conservar el actual">
+                                <small style="color:var(--text-muted); font-size:0.75rem;">Ingresa 4 a 6 dígitos solo si deseas cambiar tu clave de acceso.</small>
                             </div>
                         </div>
 
@@ -615,20 +746,25 @@ export async function renderClientProfileView(container) {
         const notes = container.querySelector('#edit-notes').value.trim();
         const avatar = container.querySelector('#edit-avatar').value;
 
-        if (!name || !phone || !pin) {
-            toast.error("Por favor completa los campos obligatorios.");
+        if (!name || !phone) {
+            toast.error("Por favor completa tu nombre y teléfono.");
             return;
         }
 
-        if (pin.length < 4) {
-            toast.error("El PIN debe tener al menos 4 caracteres.");
-            return;
+        const updatePayload = {
+            name, phone, email, skillLevel, preferredMode, notes, avatar
+        };
+
+        if (pin) {
+            if (pin.length < 4) {
+                toast.error("El nuevo PIN debe tener al menos 4 caracteres.");
+                return;
+            }
+            updatePayload.pin = pin;
         }
 
         try {
-            await authManager.updateClientProfile(currentUser.id, {
-                name, phone, email, pin, skillLevel, preferredMode, notes, avatar
-            });
+            await authManager.updateClientProfile(currentUser.id, updatePayload);
             toast.success("¡Tu perfil ha sido actualizado exitosamente!");
             renderClientProfileView(container);
         } catch (err) {
@@ -827,11 +963,11 @@ export function renderStaffProfileView(container, currentUser) {
 
                         <!-- PIN / Contraseña de Acceso -->
                         <div class="form-group" style="margin-bottom:20px;">
-                            <label for="staff-prof-pin"><span class="neon-arrow">◆</span> PIN / Contraseña de Seguridad *</label>
+                            <label for="staff-prof-pin"><span class="neon-arrow">◆</span> Cambiar PIN / Contraseña (Opcional)</label>
                             <div style="display:flex; gap:8px;">
-                                <input type="text" id="staff-prof-pin" class="cyber-input" value="${currentUser.pin}" required style="font-family:monospace; font-weight:700; font-size:1.1rem; letter-spacing:2px; color:var(--piu-gold);">
+                                <input type="password" id="staff-prof-pin" class="cyber-input" value="" placeholder="Dejar vacío para conservar el actual" maxlength="10" style="font-family:monospace; font-weight:700; font-size:1.1rem; letter-spacing:2px; color:var(--piu-gold);">
                             </div>
-                            <small style="color:var(--text-muted); font-size:0.75rem;">Mínimo 4 caracteres. Guarda este PIN para tus próximos inicios de sesión.</small>
+                            <small style="color:var(--text-muted); font-size:0.75rem;">Mínimo 4 caracteres solo si deseas actualizar tu contraseña.</small>
                         </div>
 
                         <button type="submit" class="btn btn-primary glow-red" style="width:100%;">
@@ -925,25 +1061,29 @@ export function renderStaffProfileView(container, currentUser) {
         const pin = container.querySelector('#staff-prof-pin').value.trim();
         const email = container.querySelector('#staff-prof-email').value.trim();
 
-        if (!name || !username || !pin) {
-            toast.error("Por favor completa todos los campos requeridos.");
+        if (!name || !username) {
+            toast.error("Por favor completa tu nombre y nombre de usuario.");
             return;
         }
 
-        if (pin.length < 4) {
-            toast.error("El PIN / Contraseña debe contener al menos 4 caracteres.");
-            return;
+        const updateStaffPayload = {
+            name,
+            username,
+            email,
+            avatar: selectedAvatar
+        };
+
+        if (pin) {
+            if (pin.length < 4) {
+                toast.error("El PIN / Contraseña debe contener al menos 4 caracteres.");
+                return;
+            }
+            updateStaffPayload.pin = pin;
         }
 
         try {
-            await authManager.updateStaffManager(currentUser.id, {
-                name,
-                username,
-                pin,
-                email,
-                avatar: selectedAvatar
-            });
-            toast.success("¡Tus datos y contraseña se han guardado exitosamente!");
+            await authManager.updateStaffManager(currentUser.id, updateStaffPayload);
+            toast.success("¡Tus datos y perfil se han guardado exitosamente!");
             renderStaffProfileView(container, authManager.getCurrentUser());
         } catch (err) {
             toast.error(err.message || "Error al actualizar credenciales.");

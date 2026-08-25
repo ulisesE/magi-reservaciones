@@ -1889,3 +1889,305 @@
     transition: width 0.6s ease;
 }
 
+/* ==========================================================================
+   FASE 2 — CUENTA Y CONSUMOS DEL JUGADOR
+   ========================================================================== */
+.consumption-types-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.consumption-type-chip {
+    background: var(--bg-dark-700);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 10px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.consumption-type-chip:hover {
+    border-color: var(--color-neon-lime);
+    background: rgba(104, 242, 5, 0.08);
+    transform: translateY(-2px);
+}
+
+.consumption-type-chip.active {
+    background: rgba(104, 242, 5, 0.15);
+    border-color: var(--color-neon-lime);
+    box-shadow: 0 0 12px rgba(104, 242, 5, 0.3);
+}
+
+.consumption-type-chip .chip-icon {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.consumption-type-chip .chip-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.consumption-type-chip .chip-price {
+    font-size: 0.68rem;
+    color: var(--color-chartreuse);
+    font-family: var(--font-mono);
+}
+
+/* Account Balances Card */
+.account-balance-hero {
+    background: linear-gradient(135deg, rgba(2, 56, 89, 0.8), rgba(1, 38, 35, 0.9));
+    border: 1px solid rgba(104, 242, 5, 0.3);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.account-balance-hero.has-debt {
+    border-color: rgba(255, 68, 68, 0.4);
+    background: linear-gradient(135deg, rgba(60, 10, 10, 0.8), rgba(1, 38, 35, 0.9));
+}
+
+.account-balance-hero.has-credit {
+    border-color: rgba(104, 242, 5, 0.5);
+    background: linear-gradient(135deg, rgba(8, 140, 79, 0.6), rgba(1, 38, 35, 0.9));
+}
+
+.balance-amount-display {
+    font-size: 2rem;
+    font-weight: 900;
+    font-family: var(--font-heading);
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+}
+
+.balance-amount-display.debt {
+    color: #FF5252;
+    text-shadow: 0 0 10px rgba(255, 82, 82, 0.4);
+}
+
+.balance-amount-display.credit {
+    color: var(--color-neon-lime);
+    text-shadow: 0 0 10px rgba(104, 242, 5, 0.4);
+}
+
+.balance-amount-display.clean {
+    color: #ffffff;
+}
+
+/* Account Movements Ledger */
+.account-movements-container {
+    background: var(--bg-glass-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.movement-item-card {
+    background: var(--bg-dark-700);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+
+.movement-item-card:hover {
+    border-color: rgba(104, 242, 5, 0.3);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.movement-item-card.is-abono {
+    border-left: 3px solid var(--color-neon-lime);
+}
+
+.movement-item-card.is-pending {
+    border-left: 3px solid #FF5252;
+}
+
+.movement-item-card.is-paid {
+    border-left: 3px solid var(--color-chartreuse);
+}
+
+.movement-item-card.is-cancelled {
+    opacity: 0.5;
+    text-decoration: line-through;
+    border-left: 3px solid var(--text-muted);
+}
+
+.type-badge-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+/* ==========================================================================
+   CONSOLIDATED VIP GAMER CARD (DIRECTORIO DE JUGADORES)
+   ========================================================================== */
+.gamer-pass-card {
+    background: linear-gradient(145deg, rgba(1, 24, 22, 0.95), rgba(1, 15, 14, 0.98));
+    border: 1px solid rgba(104, 242, 5, 0.18);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gamer-pass-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(104, 242, 5, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 15px rgba(104, 242, 5, 0.12);
+}
+
+.gamer-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.gamer-avatar-box {
+    width: 44px;
+    height: 44px;
+    background: var(--bg-dark-800);
+    border: 1.5px solid rgba(104, 242, 5, 0.3);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    box-shadow: 0 0 10px rgba(104, 242, 5, 0.15);
+    flex-shrink: 0;
+}
+
+.gamer-identity {
+    flex: 1;
+    min-width: 0;
+}
+
+.gamer-name-title {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gamer-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+    flex-wrap: wrap;
+}
+
+/* 3-Column Compact HUD */
+.gamer-hud-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    background: rgba(1, 10, 9, 0.65);
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gamer-hud-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    text-align: center;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gamer-hud-cell:last-child {
+    border-right: none;
+}
+
+.gamer-hud-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.gamer-hud-value {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #fff;
+    margin-top: 2px;
+}
+
+.gamer-hud-value.has-debt {
+    color: #FF5252;
+    text-shadow: 0 0 8px rgba(255, 82, 82, 0.4);
+}
+
+.gamer-hud-value.has-credit {
+    color: var(--color-neon-lime);
+    text-shadow: 0 0 8px rgba(104, 242, 5, 0.4);
+}
+
+/* Contact & Info Chips */
+.gamer-info-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 6px 8px;
+    border-radius: 4px;
+}
+
+.gamer-action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: auto;
+}
+
+.gamer-toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    padding-top: 8px;
+}
+
+
+

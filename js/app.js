@@ -19,6 +19,7 @@ import { renderBusinessView } from './views/businessView.js';
 import { renderSuperadminView } from './views/superadminView.js';
 import { renderClientProfileView } from './views/clientProfileView.js';
 import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
+import { openChangelogModal } from './components/changelogModal.js';
 import { isFirebaseAvailable } from './firebaseConfig.js';
 
 class App {
@@ -26,10 +27,17 @@ class App {
         this.headerContainer = document.getElementById('header-container');
         this.mainContent = document.getElementById('main-content');
         this.syncStatusEl = document.getElementById('cloud-sync-status');
+        
+        // Listener para abrir el Changelog al hacer clic en el indicador de versión
+        if (this.syncStatusEl) {
+            this.syncStatusEl.addEventListener('click', () => {
+                openChangelogModal();
+            });
+        }
     }
 
     async init() {
-        console.log("🎮 Inicializando Pump It Up Hub...");
+        console.log("🎮 Inicializando Pump It Up Hub v1.5.0...");
 
         // 1. Inicializar Gestor de Negocios
         await tenantManager.init();
@@ -75,12 +83,12 @@ class App {
             if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted);">Servidor Remoto Conectado (piu_app_v1.4.0)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.5.0 • Novedades 📜)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted);">Modo Local (Sin conexión)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.5.0 • Novedades 📜)</span>
                 `;
             }
         }

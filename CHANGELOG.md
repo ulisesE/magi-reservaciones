@@ -6,6 +6,39 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.5.0] - 2026-08-25
+
+### 🚀 Nuevas Características
+- **Fase 2 — Cuenta y Consumo del Jugador (`js/core/accountManager.js`)**:
+  - Registro de consumos directos en mostrador/caja sin requerir una reservación previa.
+  - Catálogo de 7 tipos rápidos con icono, concepto y precio base:
+    - 🕹️ **Juego** ($20 - Retas / Tiempo libre)
+    - 🥤 **Bebida** ($25 - Hidratación)
+    - 🍿 **Alimento** ($20 - Snacks)
+    - 🪙 **Ficha** ($10 - Tokens PIU)
+    - 🏆 **Inscripción** ($50 - Torneos)
+    - 🛍️ **Producto** ($150 - AM.PASS / Accesorios)
+    - 📦 **Otro** (Concepto y precio personalizado)
+  - Soporte para cobro inmediato (`🟢 Pagado`) o con cargo a cuenta (`⏳ Pendiente / A la cuenta`).
+  - Cálculo dinámico de balance: adeudo pendiente (`netDebt`), saldo a favor (`creditBalance`), total consumido y total abonado.
+  - Modal interactivo de **Estado de Cuenta** con tarjetas hero, filtros por estado (*Todos*, *Pendientes*, *Pagados*, *Abonos*), historial cronológico y opción de anulación de movimientos.
+  - Modal de **Abonos y Liquidaciones** para recargar saldo a favor o pagar deudas en recepción.
+  - Nueva pestaña en el perfil del cliente: **"💳 Mi Cuenta y Consumos"** con desglose por categorías y auditoría de compras.
+
+- **Blindaje Criptográfico y Seguridad (`js/core/securityUtils.js` y `firestore.rules`)**:
+  - Hasheo unidireccional de contraseñas y PINs con algoritmo SHA-256 y salt nativo (`crypto.subtle`).
+  - Auto-migración transparente de PINs legados a formato seguro hasheado al iniciar sesión.
+  - Sanitización de sesiones activas: eliminación de credenciales en texto plano de `LocalStorage` y de la memoria en tiempo de ejecución.
+  - Restablecimiento seguro de PIN temporal para jugadores directamente desde el formulario de edición del encargado.
+  - Reglas de seguridad de Firestore con inmutabilidad para registros de auditoría (`piu_audit_logs`).
+
+- **Rediseño del Menú del Header y Tarjetas de Jugador**:
+  - Reorganización de la barra de navegación en 2 clusters limpios (Público/Calendarios vs Operación Staff) reduciendo la dispersión de botones.
+  - Cabecera móvil en 2 renglones dedicados (Renglón 1: Marca/Local; Renglón 2: Usuario, botón Reservar y menú ☰) evitando elementos encimados.
+  - Tarjetas de Jugador rediseñadas como **VIP Gamer Pass** con HUD de 3 métricas (Saldo/Deuda, Lealtad, Reservas), 2 botones primarios (`➕ Consumo`, `💳 Cuenta`) y barra de herramientas inferior.
+
+---
+
 ## [1.4.0] - 2026-08-24
 
 ### 🚀 Nuevas Características
