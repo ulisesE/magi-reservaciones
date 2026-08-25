@@ -83,7 +83,9 @@ export const COLLECTIONS = {
     MACHINE_FEATURES: `${FIRESTORE_PREFIX}_machine_features`,
     AUDIT_LOGS: `${FIRESTORE_PREFIX}_audit_logs`,
     LOYALTY_REWARDS: `${FIRESTORE_PREFIX}_loyalty_rewards`,
-    REDEMPTIONS: `${FIRESTORE_PREFIX}_redemptions`
+    REDEMPTIONS: `${FIRESTORE_PREFIX}_redemptions`,
+    PLAYER_ACCOUNTS: `${FIRESTORE_PREFIX}_player_accounts`,
+    CONSUMPTIONS: `${FIRESTORE_PREFIX}_consumptions`
 };
 
 export { 

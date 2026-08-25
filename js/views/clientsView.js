@@ -20,7 +20,8 @@ import {
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { loyaltyManager } from '../core/loyaltyManager.js';
-import { escapeHTML } from '../core/securityUtils.js';
+import { accountManager, CONSUMPTION_TYPES } from '../core/accountManager.js';
+import { escapeHTML, hashPin } from '../core/securityUtils.js';
 
 let currentClientsSearchQuery = '';
 let currentClientsPage = 1;
@@ -128,11 +129,14 @@ class ClientDirectoryManager {
     }
 
     async addClient(clientData) {
+        const rawPin = clientData.pin?.trim() || '1234';
+        const pinHash = await hashPin(rawPin);
+
         const newClient = {
             id: 'usr_player_' + Date.now(),
             name: clientData.name.trim(),
             username: clientData.username?.trim() || 'player_' + Math.random().toString(36).substr(2, 5),
-            pin: clientData.pin?.trim() || '1234',
+            pinHash,
             phone: clientData.phone?.trim() || '',
             email: clientData.email?.trim() || '',
             skillLevel: clientData.skillLevel || 'Liga C',
@@ -237,8 +241,8 @@ export async function renderClientsView(container, queryVal = '') {
                 ${currentClientsSearchQuery ? `<button class="btn btn-outline" id="btn-clear-search">Limpiar</button>` : ''}
             </div>
 
-            <!-- Grid de Clientes -->
-            <div class="clients-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:18px;">
+            <!-- Grid de Clientes Consolidado -->
+            <div class="clients-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(330px, 1fr)); gap:16px;">
                 ${pageClients.length === 0 ? `
                     <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 48px;">
                         <div class="empty-icon" style="font-size:3rem; margin-bottom:12px;">👥</div>
@@ -255,87 +259,99 @@ export async function renderClientsView(container, queryVal = '') {
                     const valueForTier = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
                     const tier = loyaltyManager.calculateTier(valueForTier, activeMode);
 
+                    const acct = (c.accounts && activeBusinessId && c.accounts[activeBusinessId]) ? c.accounts[activeBusinessId] : null;
+                    const netDebt = acct ? (acct.netDebt || 0) : 0;
+                    const credit = acct ? (acct.creditBalance || 0) : 0;
+
                     return `
-                        <div class="client-card settings-card" style="padding:18px; display:flex; flex-direction:column; gap:12px;">
-                            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-                                <div style="display:flex; align-items:center; gap:12px;">
-                                    <div style="font-size:2rem; background:var(--bg-dark-700); width:46px; height:46px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-sm);">
-                                        ${c.avatar || '🕺'}
-                                    </div>
-                                    <div>
-                                        <h3 style="font-size:1.15rem; margin:0; color:#ffffff;">${escapeHTML(c.name)}</h3>
-                                        <div style="display:flex; gap:6px; align-items:center; margin-top:2px;">
-                                            <span class="badge badge-primary" style="font-size:0.7rem;">${escapeHTML(c.skillLevel || 'Liga C')}</span>
-                                            ${c.username ? `<code style="font-size:0.68rem; color:var(--text-muted);">@${escapeHTML(c.username)}</code>` : ''}
-                                        </div>
+                        <div class="gamer-pass-card">
+                            <!-- Header de Identidad -->
+                            <div class="gamer-card-header">
+                                <div class="gamer-avatar-box">
+                                    ${c.avatar || '🕺'}
+                                </div>
+                                <div class="gamer-identity">
+                                    <h3 class="gamer-name-title" title="${escapeHTML(c.name)}">${escapeHTML(c.name)}</h3>
+                                    <div class="gamer-meta-row">
+                                        <span class="badge badge-primary" style="font-size:0.68rem; padding:1px 6px;">${escapeHTML(c.skillLevel || 'Liga C')}</span>
+                                        ${c.username ? `<code style="font-size:0.7rem; color:var(--piu-cyan);">@${escapeHTML(c.username)}</code>` : ''}
                                     </div>
                                 </div>
-                                <div style="text-align:right;">
-                                    <span class="badge badge-success" title="Total de reservaciones en esta sala">${totalBookings} Reservas</span>
+                                ${cleanPhone ? `
+                                    <a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-outline" style="border-color:#25D366; color:#25D366; padding:4px 8px; font-size:0.75rem;" title="Enviar WhatsApp a ${escapeHTML(c.name)}">
+                                        💬 WA
+                                    </a>
+                                ` : ''}
+                            </div>
+
+                            <!-- HUD de Métricas Clave (3 Columnas) -->
+                            <div class="gamer-hud-grid">
+                                <div class="gamer-hud-cell">
+                                    <span class="gamer-hud-label">💳 Saldo</span>
+                                    <span class="gamer-hud-value ${netDebt > 0 ? 'has-debt' : (credit > 0 ? 'has-credit' : '')}">
+                                        ${netDebt > 0 ? `-$${netDebt.toFixed(2)}` : (credit > 0 ? `+$${credit.toFixed(2)}` : `$0.00`)}
+                                    </span>
+                                </div>
+                                <div class="gamer-hud-cell">
+                                    <span class="gamer-hud-label">🎁 Lealtad</span>
+                                    <span class="gamer-hud-value" style="color:var(--color-neon-lime);">
+                                        ${activeMode === 'VISITS' ? `${bizLoyalty.visits || 0} Visitas` : `${bizLoyalty.points || 0} Pts`}
+                                    </span>
+                                </div>
+                                <div class="gamer-hud-cell">
+                                    <span class="gamer-hud-label">🕹️ Reservas</span>
+                                    <span class="gamer-hud-value" style="color:var(--piu-cyan);">
+                                        ${totalBookings}
+                                    </span>
                                 </div>
                             </div>
 
-                            <div style="background:var(--bg-dark-700); padding:10px 12px; border-radius:var(--radius-sm); font-size:0.85rem; display:flex; flex-direction:column; gap:6px;">
-                                <div>
-                                    <span style="color:var(--text-muted); font-weight:700;">📞 Teléfono:</span>
-                                    <span style="color:#ffffff;">${escapeHTML(c.phone || 'No registrado')}</span>
-                                    ${cleanPhone ? `
-                                        <a href="${waLink}" target="_blank" rel="noopener noreferrer" style="margin-left:6px; color:#25D366; font-weight:700;">
-                                            💬 WhatsApp
-                                        </a>
-                                    ` : ''}
-                                </div>
-                                <div>
-                                    <span style="color:var(--text-muted); font-weight:700;">✉️ Correo:</span>
-                                    <span style="color:#ffffff;">${escapeHTML(c.email || 'No registrado')}</span>
-                                </div>
-                                <div>
-                                    <span style="color:var(--text-muted); font-weight:700;">🎮 Modo Preferido:</span>
-                                    <span style="color:var(--piu-cyan);">${escapeHTML(c.preferredMode || 'Single / Double')}</span>
-                                </div>
-                                ${business && business.loyaltyEnabled ? `
-                                     <div style="border-top:1px dashed rgba(255,255,255,0.1); padding-top:6px; margin-top:2px;">
-                                         <span style="color:var(--text-muted); font-weight:700;">🎁 Lealtad:</span>
-                                         <span class="badge ${tier.class}" style="font-size:0.72rem; padding: 2px 6px;">${tier.badge} ${tier.name}</span>
-                                         ${activeMode === 'VISITS' ? `
-                                             <strong style="color:var(--color-neon-lime); margin-left:6px;">${bizLoyalty.visits || 0} Visitas</strong>
-                                         ` : `
-                                             <strong style="color:var(--color-neon-lime); margin-left:6px;">${bizLoyalty.points || 0} Pts</strong>
-                                             <span style="color:var(--text-secondary); margin-left:6px;">(${bizLoyalty.visits || 0} visitas)</span>
-                                         `}
-                                     </div>
-                                 ` : ''}
+                            <!-- Tira de Información Rápida -->
+                            <div class="gamer-info-strip">
+                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Teléfono">
+                                    📞 ${escapeHTML(c.phone || 'Sin teléfono')}
+                                </span>
+                                <span style="color:var(--text-muted); font-size:0.72rem;">
+                                    🎮 ${escapeHTML(c.preferredMode || 'Single/Double')}
+                                </span>
                             </div>
 
                             ${c.notes ? `
-                                <div style="font-size:0.82rem; color:var(--text-muted); font-style:italic; background:rgba(0,229,255,0.05); padding:8px 10px; border-radius:4px; border-left:2px solid var(--piu-cyan);">
-                                    "${c.notes}"
+                                <div style="font-size:0.78rem; color:var(--text-muted); font-style:italic; background:rgba(0,229,255,0.04); padding:4px 8px; border-radius:4px; border-left:2px solid var(--piu-cyan); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHTML(c.notes)}">
+                                    "${escapeHTML(c.notes)}"
                                 </div>
                             ` : ''}
 
-                            <div style="display:flex; gap:8px; margin-top:auto; padding-top:8px; border-top:1px solid var(--border-color); flex-wrap:wrap;">
-                                <button class="btn btn-outline btn-xs btn-edit-client" data-id="${c.id}" style="flex:1; min-width:60px;">
+                            <!-- Fila Principal de Acciones (Consumo + Cuenta) -->
+                            <div class="gamer-action-row">
+                                <button class="btn btn-primary btn-xs btn-open-quick-consumption" data-id="${c.id}" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:800; border:none; padding:7px 10px; font-size:0.8rem;" title="Registrar consumo con tipos rápidos">
+                                    ➕ Consumo
+                                </button>
+                                <button class="btn btn-outline btn-xs btn-open-account" data-id="${c.id}" style="border-color:var(--piu-cyan); color:var(--piu-cyan); font-weight:700; padding:7px 10px; font-size:0.8rem;" title="Ver estado de cuenta, historial y abonos">
+                                    💳 Cuenta
+                                </button>
+                            </div>
+
+                            <!-- Barra de Herramientas de Gestión -->
+                            <div class="gamer-toolbar-row">
+                                <button class="btn btn-outline btn-xs btn-edit-client" data-id="${c.id}" title="Editar perfil y restablecer PIN" style="font-size:0.75rem; padding:3px 8px;">
                                     ✏️ Editar
                                 </button>
                                 ${business && business.loyaltyEnabled ? `
                                     ${activeMode === 'VISITS' ? `
-                                        <button class="btn btn-success btn-xs btn-quick-visit" data-id="${c.id}" style="flex:1.5; background:var(--color-neon-lime); color:#000; font-weight:bold; border:none; min-width:110px;" title="Registrar 1 visita al instante">
+                                        <button class="btn btn-success btn-xs btn-quick-visit" data-id="${c.id}" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid var(--color-neon-lime); font-size:0.75rem; padding:3px 8px;" title="Registrar 1 visita al instante">
                                             ➕ Visita
                                         </button>
-                                    ` : `
-                                        <button class="btn btn-success btn-xs btn-quick-spend" data-id="${c.id}" style="flex:1.5; background:var(--color-neon-lime); color:#000; font-weight:bold; border:none; min-width:110px;" title="Registrar compra y acumular puntos">
-                                            ➕ Consumo
-                                        </button>
-                                    `}
-                                    <button class="btn btn-secondary btn-xs btn-adjust-loyalty" data-id="${c.id}" style="flex:1; min-width:60px;">
-                                        ⭐ Ajustar
+                                    ` : ''}
+                                    <button class="btn btn-secondary btn-xs btn-adjust-loyalty" data-id="${c.id}" title="Ajustar puntos de lealtad" style="font-size:0.75rem; padding:3px 8px;">
+                                        ⭐ Puntos
                                     </button>
-                                    <button class="btn btn-outline btn-xs btn-view-redemptions" data-id="${c.id}" style="flex:1; min-width:60px;" title="Validar premios canjeados de este jugador">
+                                    <button class="btn btn-outline btn-xs btn-view-redemptions" data-id="${c.id}" title="Validar premios canjeados" style="font-size:0.75rem; padding:3px 8px;">
                                         🎁 Canjes
                                     </button>
                                 ` : ''}
                                 ${isSuperAdmin ? `
-                                    <button class="btn btn-danger btn-xs btn-delete-client" data-id="${c.id}" title="Eliminar jugador" style="flex:0.3; min-width:30px;">
+                                    <button class="btn btn-danger btn-xs btn-delete-client" data-id="${c.id}" title="Eliminar jugador del sistema" style="padding:3px 6px; font-size:0.75rem;">
                                         🗑️
                                     </button>
                                 ` : ''}
@@ -572,6 +588,31 @@ export async function renderClientsView(container, queryVal = '') {
         });
     });
 
+    // Eventos de Consumos y Cuenta de Jugador (Fase 2)
+    container.querySelectorAll('.btn-open-quick-consumption').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const client = allClients.find(c => c.id === id);
+            if (client && business) {
+                openQuickConsumptionModal(client, business, container, () => {
+                    renderClientsView(container, currentClientsSearchQuery);
+                });
+            }
+        });
+    });
+
+    container.querySelectorAll('.btn-open-account').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const client = allClients.find(c => c.id === id);
+            if (client && business) {
+                openPlayerAccountModal(client, business, container, () => {
+                    renderClientsView(container, currentClientsSearchQuery);
+                });
+            }
+        });
+    });
+
     // Registrar Visita Rápida (1 visita/punto al instante)
     container.querySelectorAll('.btn-quick-visit').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -583,37 +624,6 @@ export async function renderClientsView(container, queryVal = '') {
                 try {
                     await loyaltyManager.adjustPlayerPoints(business.id, client.id, 1, 1, 'Registro rápido de visita en recepción');
                     toast.success(`¡Visita registrada para ${client.name}!`);
-                    renderClientsView(container, currentClientsSearchQuery);
-                } catch (e) {
-                    toast.error(e.message);
-                }
-            }
-        });
-    });
-
-    // Registrar Consumo Rápido (Calcula puntos según ratio)
-    container.querySelectorAll('.btn-quick-spend').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            const client = allClients.find(c => c.id === id);
-            if (!client) return;
-
-            const spentStr = prompt(`Registrar consumo para ${client.name}.\nIngresa el monto gastado en el local ($):`);
-            if (spentStr === null) return; // Cancelado
-
-            const spent = parseFloat(spentStr);
-            if (isNaN(spent) || spent <= 0) {
-                toast.error("Por favor ingresa un monto válido mayor a 0.");
-                return;
-            }
-
-            const ratio = Number(business.pointsRatio) || 10;
-            const ptsEarned = Math.floor(spent / ratio);
-
-            if (confirm(`Registrando $${spent.toFixed(2)}. Esto equivale a +${ptsEarned} puntos de lealtad (Ratio: ${ratio}) y +1 visita. ¿Confirmar?`)) {
-                try {
-                    await loyaltyManager.adjustPlayerPoints(business.id, client.id, ptsEarned, 1, `Consumo registrado en local: $${spent}`);
-                    toast.success(`¡Consumo registrado! +${ptsEarned} puntos acreditados a ${client.name}.`);
                     renderClientsView(container, currentClientsSearchQuery);
                 } catch (e) {
                     toast.error(e.message);
@@ -667,6 +677,27 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
                 <label for="cli-notes"><span class="neon-arrow">◆</span> Notas de Calibración / Preferencias</label>
                 <textarea id="cli-notes" class="cyber-textarea" rows="2" placeholder="Ej. Usa barra en canciones S20+, prefiere pantalla 120Hz...">${client ? escapeHTML(client.notes || '') : ''}</textarea>
             </div>
+
+            <!-- Campo de PIN o Restablecimiento -->
+            <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); border:1px solid rgba(104,242,5,0.2); margin-top:8px;">
+                ${isEdit ? `
+                    <label for="cli-reset-pin" style="font-weight:700; color:#fff; display:block; margin-bottom:4px;">
+                        <span class="neon-arrow">◆</span> 🔑 Restablecer Nuevo PIN de Acceso (Opcional)
+                    </label>
+                    <input type="text" id="cli-reset-pin" class="cyber-input" placeholder="Dejar vacío para conservar el actual" maxlength="6" style="font-family:var(--font-mono); letter-spacing:2px; font-weight:bold; color:var(--color-neon-lime);">
+                    <small style="display:block; margin-top:4px; color:var(--text-muted); font-size:0.75rem; line-height:1.3;">
+                        💡 <em>Si el jugador olvidó su PIN, escribe aquí uno nuevo temporal (4 a 6 dígitos) y compárteselo para que pueda iniciar sesión.</em>
+                    </small>
+                ` : `
+                    <label for="cli-new-pin" style="font-weight:700; color:#fff; display:block; margin-bottom:4px;">
+                        <span class="neon-arrow">◆</span> 🔑 PIN Inicial de Seguridad *
+                    </label>
+                    <input type="text" id="cli-new-pin" class="cyber-input" value="1234" maxlength="6" style="font-family:var(--font-mono); letter-spacing:2px; font-weight:bold; color:var(--color-neon-lime);" required>
+                    <small style="display:block; margin-top:4px; color:var(--text-muted); font-size:0.75rem;">
+                        PIN con el que el jugador ingresará al sistema (por defecto 1234).
+                    </small>
+                `}
+            </div>
         </form>
     `;
 
@@ -702,13 +733,32 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
 
         try {
             if (isEdit) {
-                await clientDirManager.updateClient(client.id, {
+                const updatePayload = {
                     name, phone, email, skillLevel, preferredMode, notes
-                });
-                toast.success(`Datos de "${name}" actualizados.`);
+                };
+
+                const resetPin = modalEl.querySelector('#cli-reset-pin')?.value.trim();
+                if (resetPin) {
+                    if (resetPin.length < 4) {
+                        toast.error("El nuevo PIN debe tener al menos 4 caracteres o dígitos.");
+                        return;
+                    }
+                    const secureHash = await hashPin(resetPin);
+                    updatePayload.pinHash = secureHash;
+                    delete updatePayload.pin;
+                }
+
+                await clientDirManager.updateClient(client.id, updatePayload);
+                toast.success(`Datos de "${name}" actualizados${resetPin ? ' y nuevo PIN asignado correctamente' : ''}.`);
             } else {
+                const newPin = modalEl.querySelector('#cli-new-pin')?.value.trim() || '1234';
+                if (newPin.length < 4) {
+                    toast.error("El PIN debe tener al menos 4 caracteres o dígitos.");
+                    return;
+                }
+
                 await clientDirManager.addClient({
-                    name, phone, email, skillLevel, preferredMode, notes
+                    name, phone, email, pin: newPin, skillLevel, preferredMode, notes
                 });
                 toast.success(`Jugador "${name}" registrado en el catálogo global.`);
             }
@@ -897,4 +947,513 @@ async function openClientRedemptionsModal(client, businessId, mainContainer) {
             }
         };
     });
+}
+
+/**
+ * ============================================================================
+ * MODAL: REGISTRO DE CONSUMO RÁPIDO (FASE 2)
+ * Tipos rápidos: juego, bebida, alimento, ficha, inscripción, producto y otro
+ * ============================================================================
+ */
+export function openQuickConsumptionModal(client, business, mainContainer = null, onSavedCallback = null) {
+    const quickTypes = accountManager.getQuickTypes();
+    let selectedType = quickTypes[1]; // default Bebida
+
+    const contentHtml = `
+        <div style="padding:4px;">
+            <!-- Header Jugador -->
+            <div style="display:flex; align-items:center; gap:12px; background:var(--bg-dark-700); padding:12px 14px; border-radius:var(--radius-sm); margin-bottom:16px; border-left:3px solid var(--color-neon-lime);">
+                <div style="font-size:2rem; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.3); border-radius:4px;">
+                    ${client.avatar || '🕺'}
+                </div>
+                <div style="flex:1;">
+                    <div style="font-weight:bold; color:#fff; font-size:1.05rem;">${escapeHTML(client.name)}</div>
+                    <div style="display:flex; gap:8px; align-items:center; margin-top:2px;">
+                        <span class="badge badge-primary" style="font-size:0.68rem;">${escapeHTML(client.skillLevel || 'Liga C')}</span>
+                        ${client.username ? `<code style="color:var(--text-muted); font-size:0.75rem;">@${escapeHTML(client.username)}</code>` : ''}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selector de Tipos Rápidos -->
+            <div style="margin-bottom:14px;">
+                <label style="font-size:0.82rem; font-weight:700; color:var(--text-secondary); display:block; margin-bottom:8px;">
+                    <span class="neon-arrow">◆</span> Tipo de Consumo Rápido:
+                </label>
+                <div class="consumption-types-grid" id="quick-types-container">
+                    ${quickTypes.map(t => `
+                        <div class="consumption-type-chip ${t.id === selectedType.id ? 'active' : ''}" data-type-id="${t.id}" id="chip-type-${t.id}">
+                            <span class="chip-icon">${t.icon}</span>
+                            <span class="chip-label">${t.label}</span>
+                            <span class="chip-price">$${t.defaultPrice}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- Formulario de Detalle -->
+            <form id="form-quick-consumption" class="cyber-form">
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label for="csm-concept"><span class="neon-arrow">◆</span> Concepto / Descripción *</label>
+                    <input type="text" id="csm-concept" class="cyber-input" value="${escapeHTML(selectedType.defaultConcept)}" placeholder="Ej. Monster Energy / 1 hr Juego" required>
+                </div>
+
+                <div class="form-row grid-2" style="margin-bottom:12px;">
+                    <div class="form-group">
+                        <label for="csm-qty"><span class="neon-arrow">◆</span> Cantidad *</label>
+                        <input type="number" id="csm-qty" class="cyber-input" value="1" min="1" max="999" required style="font-weight:bold; font-size:1.1rem; text-align:center;">
+                    </div>
+                    <div class="form-group">
+                        <label for="csm-price"><span class="neon-arrow">◆</span> Precio Unitario ($) *</label>
+                        <input type="number" id="csm-price" class="cyber-input" value="${selectedType.defaultPrice}" min="0" step="0.5" required style="font-weight:bold; font-size:1.1rem; text-align:center; color:var(--color-chartreuse);">
+                    </div>
+                </div>
+
+                <!-- Banner Total Calculado -->
+                <div style="background:rgba(2, 56, 89, 0.4); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-sm); padding:10px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                    <span style="font-size:0.85rem; color:var(--text-muted); font-weight:700;">TOTAL A REGISTRAR:</span>
+                    <strong id="csm-total-display" style="font-size:1.4rem; color:var(--color-neon-lime); font-family:var(--font-heading);">$${selectedType.defaultPrice.toFixed(2)}</strong>
+                </div>
+
+                <div class="form-row grid-2" style="margin-bottom:12px;">
+                    <div class="form-group">
+                        <label for="csm-payment-status"><span class="neon-arrow">◆</span> Estado del Cobro *</label>
+                        <select id="csm-payment-status" class="cyber-select" style="font-weight:bold;">
+                            <option value="PAID" selected>🟢 Pagado al momento</option>
+                            <option value="PENDING">⏳ A la cuenta (Pendiente de pago)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="csm-method-group">
+                        <label for="csm-payment-method"><span class="neon-arrow">◆</span> Método de Pago</label>
+                        <select id="csm-payment-method" class="cyber-select">
+                            <option value="CASH" selected>💵 Efectivo</option>
+                            <option value="CARD">💳 Tarjeta / Terminal</option>
+                            <option value="TRANSFER">📱 Transferencia (SPEI)</option>
+                            <option value="ACCOUNT_CREDIT">🪙 Saldo a favor</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:8px;">
+                    <label for="csm-notes"><span class="neon-arrow">◆</span> Notas / Observaciones (opcional)</label>
+                    <input type="text" id="csm-notes" class="cyber-input" placeholder="Ej. Entregado en mostrador / Sabor ponche">
+                </div>
+            </form>
+        </div>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-csm">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-submit-csm" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:bold; border:none;">
+            <span>⚡ Registrar Consumo</span>
+        </button>
+    `;
+
+    const modalEl = modal.open({
+        title: `Registrar Consumo — ${escapeHTML(client.name)}`,
+        icon: '➕',
+        contentHtml,
+        footerHtml,
+        maxWidth: '520px'
+    });
+
+    const form = modalEl.querySelector('#form-quick-consumption');
+    const conceptInput = modalEl.querySelector('#csm-concept');
+    const qtyInput = modalEl.querySelector('#csm-qty');
+    const priceInput = modalEl.querySelector('#csm-price');
+    const totalDisplay = modalEl.querySelector('#csm-total-display');
+    const statusSelect = modalEl.querySelector('#csm-payment-status');
+    const methodGroup = modalEl.querySelector('#csm-method-group');
+    const methodSelect = modalEl.querySelector('#csm-payment-method');
+    const notesInput = modalEl.querySelector('#csm-notes');
+
+    const updateTotal = () => {
+        const q = Math.max(1, Number(qtyInput.value) || 1);
+        const p = Math.max(0, Number(priceInput.value) || 0);
+        const total = q * p;
+        totalDisplay.textContent = `$${total.toFixed(2)}`;
+    };
+
+    qtyInput.addEventListener('input', updateTotal);
+    priceInput.addEventListener('input', updateTotal);
+
+    statusSelect.addEventListener('change', () => {
+        if (statusSelect.value === 'PENDING') {
+            methodGroup.style.opacity = '0.5';
+            methodSelect.disabled = true;
+        } else {
+            methodGroup.style.opacity = '1';
+            methodSelect.disabled = false;
+        }
+    });
+
+    // Eventos para los chips de tipo
+    modalEl.querySelectorAll('.consumption-type-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            modalEl.querySelectorAll('.consumption-type-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            const typeId = chip.dataset.typeId;
+            selectedType = accountManager.getTypeById(typeId);
+            conceptInput.value = selectedType.defaultConcept;
+            priceInput.value = selectedType.defaultPrice;
+            updateTotal();
+        });
+    });
+
+    modalEl.querySelector('#btn-cancel-csm').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-submit-csm').onclick = async () => {
+        const concept = conceptInput.value.trim();
+        if (!concept) {
+            toast.error("Por favor ingresa un concepto para el consumo.");
+            conceptInput.focus();
+            return;
+        }
+
+        const quantity = Math.max(1, Number(qtyInput.value) || 1);
+        const unitPrice = Math.max(0, Number(priceInput.value) || 0);
+        const paymentStatus = statusSelect.value;
+        const paymentMethod = paymentStatus === 'PENDING' ? 'ON_ACCOUNT' : methodSelect.value;
+        const notes = notesInput.value.trim();
+
+        try {
+            const submitBtn = modalEl.querySelector('#btn-submit-csm');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<span>⏳ Registrando...</span>`;
+
+            await accountManager.recordConsumption({
+                businessId: business.id,
+                playerId: client.id,
+                playerUsername: client.username || '',
+                playerName: client.name || '',
+                playerPhone: client.phone || '',
+                itemType: selectedType.id,
+                concept,
+                quantity,
+                unitPrice,
+                notes,
+                paymentStatus,
+                paymentMethod
+            });
+
+            toast.success(`¡Consumo registrado exitosamente por $${(quantity * unitPrice).toFixed(2)}!`);
+            modal.close();
+
+            if (onSavedCallback) onSavedCallback();
+        } catch (err) {
+            toast.error(`Error: ${err.message}`);
+            const submitBtn = modalEl.querySelector('#btn-submit-csm');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<span>⚡ Registrar Consumo</span>`;
+            }
+        }
+    };
+}
+
+/**
+ * ============================================================================
+ * MODAL: ESTADO DE CUENTA E HISTORIAL CRONOLÓGICO DEL JUGADOR (FASE 2)
+ * ============================================================================
+ */
+export async function openPlayerAccountModal(client, business, mainContainer = null, onSavedCallback = null) {
+    const modalEl = modal.open({
+        title: `Cuenta de Jugador — ${escapeHTML(client.name)}`,
+        icon: '💳',
+        contentHtml: `
+            <div style="text-align:center; padding:30px;">
+                <div style="font-size:2rem; animation:spin 1s infinite linear;">⚡</div>
+                <p style="color:var(--text-muted); margin-top:10px;">Cargando estado de cuenta e historial...</p>
+            </div>
+        `,
+        footerHtml: `<button type="button" class="btn btn-secondary" id="btn-close-account">Cerrar</button>`,
+        maxWidth: '680px'
+    });
+
+    modalEl.querySelector('#btn-close-account').onclick = () => modal.close();
+
+    // Cargar datos de la cuenta
+    const account = await accountManager.getPlayerAccount(business.id, client.id);
+    const transactions = account.transactions || [];
+
+    const currencySymbol = business?.currencySymbol || '$';
+    const hasDebt = account.netDebt > 0;
+    const hasCredit = account.creditBalance > 0;
+
+    const contentHtml = `
+        <div style="display:flex; flex-direction:column; gap:16px;">
+            <!-- Tarjeta Hero de Balance -->
+            <div class="account-balance-hero ${hasDebt ? 'has-debt' : (hasCredit ? 'has-credit' : '')}">
+                <div>
+                    <span style="font-size:0.8rem; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.7); font-weight:800; display:block;">
+                        ${hasDebt ? '⚠️ SALDO PENDIENTE DE PAGO' : (hasCredit ? '🟢 SALDO A FAVOR DISPONIBLE' : '✅ SALDO AL CORRIENTE')}
+                    </span>
+                    <div class="balance-amount-display ${hasDebt ? 'debt' : (hasCredit ? 'credit' : 'clean')}">
+                        ${hasDebt ? `- ${currencySymbol}${account.netDebt.toFixed(2)}` : (hasCredit ? `+ ${currencySymbol}${account.creditBalance.toFixed(2)}` : `${currencySymbol}0.00`)}
+                    </div>
+                    <small style="font-size:0.75rem; color:rgba(255,255,255,0.6);">
+                        Local: <strong>${escapeHTML(business?.name || 'Esta Sucursal')}</strong>
+                    </small>
+                </div>
+
+                <!-- Métricas Rápidas -->
+                <div style="display:flex; gap:16px; flex-wrap:wrap; text-align:right;">
+                    <div>
+                        <span style="font-size:0.75rem; color:rgba(255,255,255,0.6); display:block;">Total Consumido</span>
+                        <strong style="font-size:1.1rem; color:#fff;">${currencySymbol}${account.totalConsumed.toFixed(2)}</strong>
+                    </div>
+                    <div>
+                        <span style="font-size:0.75rem; color:rgba(255,255,255,0.6); display:block;">Total Abonado</span>
+                        <strong style="font-size:1.1rem; color:var(--color-neon-lime);">${currencySymbol}${account.totalAbonos.toFixed(2)}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botonera de Acciones Inmediatas -->
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-acc-new-csm" style="flex:1; background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:bold; border:none;">
+                    <span>➕ Registrar Consumo</span>
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-acc-new-payment" style="flex:1;">
+                    <span>💵 Registrar Abono / Pago</span>
+                </button>
+            </div>
+
+            <!-- Filtros de Historial -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:8px; flex-wrap:wrap; gap:8px;">
+                <h4 style="margin:0; font-size:1rem; color:#fff; display:flex; align-items:center; gap:6px;">
+                    <span>📜 Historial de Movimientos</span>
+                    <span class="badge badge-dark" style="font-size:0.75rem;">${transactions.length}</span>
+                </h4>
+                <div style="display:flex; gap:4px;" id="acc-filter-chips">
+                    <button class="btn btn-xs btn-outline active btn-acc-filter" data-filter="ALL">Todos</button>
+                    <button class="btn btn-xs btn-outline btn-acc-filter" data-filter="PENDING" style="color:#FF5252;">Pendientes</button>
+                    <button class="btn btn-xs btn-outline btn-acc-filter" data-filter="PAID" style="color:var(--color-neon-lime);">Pagados</button>
+                    <button class="btn btn-xs btn-outline btn-acc-filter" data-filter="ABONO">Abonos</button>
+                </div>
+            </div>
+
+            <!-- Lista de Transacciones -->
+            <div class="account-movements-container" id="acc-transactions-list" style="max-height:340px; overflow-y:auto; padding:8px;">
+                ${transactions.length === 0 ? `
+                    <div style="text-align:center; padding:28px 10px; color:var(--text-muted);">
+                        <div style="font-size:2rem; margin-bottom:6px;">📦</div>
+                        <p style="margin:0; font-size:0.9rem;">No hay consumos ni movimientos registrados para este jugador.</p>
+                    </div>
+                ` : transactions.map(t => {
+                    const isAbono = t.type === 'ABONO' || t.type === 'PAGO';
+                    const isPending = t.paymentStatus === 'PENDING';
+                    const isCancelled = t.status === 'CANCELLED';
+                    const typeMeta = accountManager.getTypeById(t.itemType);
+                    const dateFormatted = new Date(t.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+
+                    let statusClass = 'is-paid';
+                    if (isCancelled) statusClass = 'is-cancelled';
+                    else if (isAbono) statusClass = 'is-abono';
+                    else if (isPending) statusClass = 'is-pending';
+
+                    return `
+                        <div class="movement-item-card ${statusClass}" data-type="${t.type}" data-status="${t.paymentStatus}" data-cancelled="${isCancelled}">
+                            <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                                <div style="font-size:1.6rem; min-width:32px; text-align:center;">
+                                    ${isAbono ? '💵' : typeMeta.icon}
+                                </div>
+                                <div>
+                                    <div style="font-weight:bold; color:#fff; font-size:0.92rem; display:flex; align-items:center; gap:6px;">
+                                        <span>${escapeHTML(t.concept || 'Consumo')}</span>
+                                        ${!isAbono ? `<span class="badge badge-dark" style="font-size:0.68rem;">x${t.quantity || 1}</span>` : ''}
+                                    </div>
+                                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+                                        <span>${dateFormatted}</span>
+                                        ${t.createdBy ? ` • <span style="color:var(--text-secondary);">Por: ${escapeHTML(t.createdBy)}</span>` : ''}
+                                        ${t.notes ? ` • <em style="color:var(--piu-cyan);">"${escapeHTML(t.notes)}"</em>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                                <strong style="font-size:1.05rem; font-family:var(--font-heading); color:${isCancelled ? 'var(--text-muted)' : (isAbono ? 'var(--color-neon-lime)' : (isPending ? '#FF5252' : '#fff'))};">
+                                    ${isAbono ? `+${currencySymbol}${Number(t.totalAmount).toFixed(2)}` : `${currencySymbol}${Number(t.totalAmount).toFixed(2)}`}
+                                </strong>
+                                <div>
+                                    ${isCancelled ? `
+                                        <span class="badge badge-danger" style="font-size:0.65rem;">CANCELADO</span>
+                                    ` : (isAbono ? `
+                                        <span class="badge badge-success" style="font-size:0.65rem;">ABONO A CUENTA</span>
+                                    ` : (isPending ? `
+                                        <span class="badge badge-danger" style="font-size:0.65rem;">PENDIENTE</span>
+                                    ` : `
+                                        <span class="badge badge-dark" style="font-size:0.65rem; color:var(--color-chartreuse); border-color:var(--color-chartreuse);">PAGADO</span>
+                                    `))}
+
+                                    ${!isCancelled ? `
+                                        <button type="button" class="btn btn-outline btn-xs btn-cancel-tx" data-tx-id="${t.id}" style="padding:1px 6px; font-size:0.65rem; margin-left:4px;" title="Anular este registro">
+                                            ✕
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+
+    const bodyEl = modalEl.querySelector('.modal-body') || modalEl;
+    const contentTarget = bodyEl.querySelector('div') || bodyEl;
+    contentTarget.innerHTML = contentHtml;
+
+    // Filtros
+    modalEl.querySelectorAll('.btn-acc-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            modalEl.querySelectorAll('.btn-acc-filter').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const filter = btn.dataset.filter;
+            modalEl.querySelectorAll('.movement-item-card').forEach(card => {
+                const type = card.dataset.type;
+                const status = card.dataset.status;
+                if (filter === 'ALL') {
+                    card.style.display = 'flex';
+                } else if (filter === 'PENDING') {
+                    card.style.display = (status === 'PENDING' && card.dataset.cancelled === 'false') ? 'flex' : 'none';
+                } else if (filter === 'PAID') {
+                    card.style.display = (status === 'PAID' && type !== 'ABONO' && card.dataset.cancelled === 'false') ? 'flex' : 'none';
+                } else if (filter === 'ABONO') {
+                    card.style.display = (type === 'ABONO' && card.dataset.cancelled === 'false') ? 'flex' : 'none';
+                }
+            });
+        });
+    });
+
+    // Nuevo Consumo desde la cuenta
+    modalEl.querySelector('#btn-acc-new-csm')?.addEventListener('click', () => {
+        modal.close();
+        openQuickConsumptionModal(client, business, mainContainer, () => {
+            openPlayerAccountModal(client, business, mainContainer, onSavedCallback);
+            if (onSavedCallback) onSavedCallback();
+        });
+    });
+
+    // Nuevo Abono desde la cuenta
+    modalEl.querySelector('#btn-acc-new-payment')?.addEventListener('click', () => {
+        modal.close();
+        openPaymentModal(client, business, mainContainer, () => {
+            openPlayerAccountModal(client, business, mainContainer, onSavedCallback);
+            if (onSavedCallback) onSavedCallback();
+        });
+    });
+
+    // Cancelar transacción
+    modalEl.querySelectorAll('.btn-cancel-tx').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const txId = btn.dataset.txId;
+            if (confirm("¿Estás seguro de anular este movimiento? El saldo del jugador se recalculará automáticamente.")) {
+                try {
+                    await accountManager.cancelTransaction(business.id, client.id, txId);
+                    toast.info("Movimiento anulado.");
+                    modal.close();
+                    openPlayerAccountModal(client, business, mainContainer, onSavedCallback);
+                    if (onSavedCallback) onSavedCallback();
+                } catch (e) {
+                    toast.error(e.message);
+                }
+            }
+        });
+    });
+}
+
+/**
+ * ============================================================================
+ * MODAL: REGISTRO DE ABONO / PAGO A CUENTA (FASE 2)
+ * ============================================================================
+ */
+export function openPaymentModal(client, business, mainContainer = null, onSavedCallback = null) {
+    const contentHtml = `
+        <form id="form-account-payment" class="cyber-form" style="padding:4px;">
+            <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); margin-bottom:14px; border-left:3px solid var(--color-neon-lime);">
+                <div style="font-weight:bold; color:#fff; font-size:1.05rem;">${escapeHTML(client.name)}</div>
+                <small style="color:var(--text-muted);">Registrar liquidación o abono a favor para la cuenta en ${escapeHTML(business.name)}</small>
+            </div>
+
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="pay-amount"><span class="neon-arrow">◆</span> Monto a Abonar ($) *</label>
+                <input type="number" id="pay-amount" class="cyber-input" placeholder="0.00" min="1" step="0.5" required style="font-size:1.4rem; font-weight:bold; color:var(--color-neon-lime); text-align:center;">
+            </div>
+
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="pay-method"><span class="neon-arrow">◆</span> Método de Recepción *</label>
+                <select id="pay-method" class="cyber-select">
+                    <option value="CASH" selected>💵 Efectivo</option>
+                    <option value="TRANSFER">📱 Transferencia (SPEI)</option>
+                    <option value="CARD">💳 Tarjeta Bancaria</option>
+                    <option value="OTHER">📦 Otro</option>
+                </select>
+            </div>
+
+            <div class="form-group" style="margin-bottom:8px;">
+                <label for="pay-notes"><span class="neon-arrow">◆</span> Notas / Folio de comprobante</label>
+                <input type="text" id="pay-notes" class="cyber-input" placeholder="Ej. Pago en caja recepción / Folio #1234">
+            </div>
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-pay">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-submit-pay" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:bold; border:none;">
+            <span>💵 Registrar Abono</span>
+        </button>
+    `;
+
+    const modalEl = modal.open({
+        title: `Registrar Abono / Pago — ${escapeHTML(client.name)}`,
+        icon: '💵',
+        contentHtml,
+        footerHtml,
+        maxWidth: '440px'
+    });
+
+    modalEl.querySelector('#btn-cancel-pay').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-submit-pay').onclick = async () => {
+        const amountInput = modalEl.querySelector('#pay-amount');
+        const amount = parseFloat(amountInput.value);
+
+        if (isNaN(amount) || amount <= 0) {
+            toast.error("Por favor ingresa un monto válido mayor a 0.");
+            amountInput.focus();
+            return;
+        }
+
+        const method = modalEl.querySelector('#pay-method').value;
+        const notes = modalEl.querySelector('#pay-notes').value.trim();
+
+        try {
+            const submitBtn = modalEl.querySelector('#btn-submit-pay');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<span>⏳ Registrando...</span>`;
+
+            await accountManager.recordPayment({
+                businessId: business.id,
+                playerId: client.id,
+                playerUsername: client.username || '',
+                playerName: client.name || '',
+                amount,
+                paymentMethod: method,
+                notes
+            });
+
+            toast.success(`¡Abono de $${amount.toFixed(2)} registrado correctamente!`);
+            modal.close();
+
+            if (onSavedCallback) onSavedCallback();
+        } catch (err) {
+            toast.error(err.message);
+            const submitBtn = modalEl.querySelector('#btn-submit-pay');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<span>💵 Registrar Abono</span>`;
+            }
+        }
+    };
 }
