@@ -291,6 +291,8 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     updateCost();
 
     // Autocompletado de Clientes para el Encargado/Superusuario
+    let selectedClientRef = null;
+
     if (isStaff) {
         const nameInput = modalEl.querySelector('#book-name');
         const phoneInput = modalEl.querySelector('#book-phone');
@@ -298,6 +300,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
         nameInput.addEventListener('input', (e) => {
             const queryText = e.target.value.trim().toLowerCase();
+            selectedClientRef = null;
             if (!queryText) {
                 suggestionsDiv.innerHTML = '';
                 suggestionsDiv.classList.add('hidden');
@@ -317,7 +320,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             }
 
             suggestionsDiv.innerHTML = matches.map(c => `
-                <div class="suggestion-item" data-id="${c.id}" data-name="${c.name}" data-phone="${c.phone || ''}" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; transition: background 0.2s; color:#ffffff;">
+                <div class="suggestion-item" data-id="${c.id}" data-username="${c.username || ''}" data-name="${c.name}" data-phone="${c.phone || ''}" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; transition: background 0.2s; color:#ffffff;">
                     <div>
                         <span style="font-size:1.1rem; margin-right:6px;">${c.avatar || '🕺'}</span>
                         <strong style="color:#ffffff;">${c.name}</strong>
@@ -340,6 +343,12 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                     evt.stopPropagation();
                     nameInput.value = item.dataset.name;
                     phoneInput.value = item.dataset.phone;
+                    selectedClientRef = {
+                        id: item.dataset.id,
+                        username: item.dataset.username,
+                        name: item.dataset.name,
+                        phone: item.dataset.phone
+                    };
                     suggestionsDiv.innerHTML = '';
                     suggestionsDiv.classList.add('hidden');
                 });
@@ -381,6 +390,24 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
         try {
             const playersMode = parseInt(modalEl.querySelector('#book-players-mode')?.value, 10) || 1;
+            const enteredName = nameInput.value.trim();
+            const enteredPhone = phoneInput.value.trim();
+
+            let targetClientId = selectedClientRef?.id || null;
+            let targetClientUsername = selectedClientRef?.username || null;
+
+            if (!targetClientId && isStaff && clients.length > 0) {
+                const found = clients.find(c => 
+                    (c.username && c.username.toLowerCase() === enteredName.toLowerCase()) ||
+                    (c.name && c.name.toLowerCase() === enteredName.toLowerCase()) ||
+                    (enteredPhone && c.phone && c.phone.replace(/\D/g, '') === enteredPhone.replace(/\D/g, ''))
+                );
+                if (found) {
+                    targetClientId = found.id;
+                    targetClientUsername = found.username;
+                }
+            }
+
             const booking = await store.requestReservation({
                 machineId: machineSelect.value,
                 date: dateInput.value,
@@ -388,8 +415,10 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 endTime: endTimeVal,
                 durationMinutes,
                 playersMode,
-                clientName: nameInput.value.trim(),
-                clientPhone: phoneInput.value.trim(),
+                clientId: targetClientId,
+                clientUsername: targetClientUsername,
+                clientName: enteredName,
+                clientPhone: enteredPhone,
                 notes: notesInput.value.trim()
             });
 

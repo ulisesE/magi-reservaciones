@@ -455,6 +455,10 @@ class Store {
         return loaded;
     }
 
+    getReservations() {
+        return [...this.reservations, ...this.pendingReservations];
+    }
+
     async syncMachinesToFirebase(machines) {
         if (!isFirebaseAvailable || !db) return;
         for (const m of machines) {
@@ -573,12 +577,33 @@ class Store {
         const isClient = authManager.isClientUser();
         const activeUser = authManager.getCurrentUser();
 
+        let resolvedClientId = bookingData.clientId || null;
+        let resolvedClientUsername = bookingData.clientUsername || null;
+
+        if (isClient && activeUser) {
+            resolvedClientId = activeUser.id;
+            resolvedClientUsername = activeUser.username;
+        } else if (!resolvedClientId) {
+            const searchKey = (bookingData.clientUsername || bookingData.clientName || '').trim().toLowerCase();
+            const searchPhone = (bookingData.clientPhone || '').replace(/\D/g, '');
+            const allPlayers = authManager.getClientUsers ? authManager.getClientUsers() : [];
+            const matchedPlayer = allPlayers.find(p => 
+                (p.username && (p.username.toLowerCase() === searchKey || (bookingData.clientUsername && p.username.toLowerCase() === bookingData.clientUsername.toLowerCase()))) ||
+                (p.name && p.name.toLowerCase() === searchKey) ||
+                (searchPhone && p.phone && p.phone.replace(/\D/g, '') === searchPhone)
+            );
+            if (matchedPlayer) {
+                resolvedClientId = matchedPlayer.id;
+                resolvedClientUsername = matchedPlayer.username;
+            }
+        }
+
         const newReservation = {
             id: 'res_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
             businessId: this.currentBusiness.id,
             machineId: bookingData.machineId,
-            clientId: bookingData.clientId || (isClient ? activeUser.id : null),
-            clientUsername: bookingData.clientUsername || (isClient ? activeUser.username : null),
+            clientId: resolvedClientId,
+            clientUsername: resolvedClientUsername,
             clientName: bookingData.clientName.trim(),
             clientPhone: bookingData.clientPhone ? bookingData.clientPhone.trim() : '',
             clientEmail: bookingData.clientEmail ? bookingData.clientEmail.trim() : '',
