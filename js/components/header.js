@@ -4,6 +4,7 @@ import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { authManager } from '../core/authManager.js';
 import { openBookingModal } from '../views/clientBookingModal.js';
+import { openChangelogModal } from './changelogModal.js';
 import { modal } from './modal.js';
 import { toast } from './toast.js';
 
@@ -29,7 +30,10 @@ export function renderHeader(container) {
                             <div class="brand-title">
                                 <span class="piu-highlight">PUMP IT UP</span> HUB
                             </div>
-                            <div class="brand-subtitle">Plataforma Modular de Reservaciones</div>
+                            <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
+                                <span>Plataforma Modular de Reservaciones</span>
+                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.5.0">v1.5.0</button>
+                            </div>
                         </div>
                     </div>
 
@@ -84,7 +88,10 @@ export function renderHeader(container) {
                         <div class="brand-title" style="font-size:1.15rem;">
                             <span class="piu-highlight">${business?.name || 'Pump It Up'}</span>
                         </div>
-                        <div class="brand-subtitle">${business?.city || 'Arcade'}</div>
+                        <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
+                            <span>${business?.city || 'Arcade'}</span>
+                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.5.0">v1.5.0</button>
+                        </div>
                     </div>
                 </div>
 
@@ -129,70 +136,82 @@ export function renderHeader(container) {
             <!-- Barra de Pestañas y Vistas del Local -->
             <div class="header-nav-row">
                 <nav class="view-nav-tabs">
-                    <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME">
-                        <span class="tab-icon">🏠</span>
-                        <span class="tab-text">Inicio</span>
-                    </button>
-                    <button class="nav-tab ${currentView === 'DAY' ? 'active' : ''}" data-view="DAY">
-                        <span class="tab-icon">📅</span>
-                        <span class="tab-text">Vista Día (Grid)</span>
-                    </button>
-                    <button class="nav-tab ${currentView === 'WEEK' ? 'active' : ''}" data-view="WEEK">
-                        <span class="tab-icon">📊</span>
-                        <span class="tab-text">Vista Semana</span>
-                    </button>
-                    <button class="nav-tab ${currentView === 'MONTH' ? 'active' : ''}" data-view="MONTH">
-                        <span class="tab-icon">🗓️</span>
-                        <span class="tab-text">Vista Mes</span>
-                    </button>
-                    <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES">
-                        <span class="tab-icon">🕹️</span>
-                        <span class="tab-text">Máquinas</span>
-                    </button>
-                    
-                    <!-- Pestaña Mi Perfil para todos los usuarios autenticados -->
-                    ${currentUser ? `
-                        <button class="nav-tab ${currentView === 'MY_PROFILE' ? 'active' : ''}" data-view="MY_PROFILE" style="border-bottom-color:var(--piu-cyan); color:var(--piu-cyan);">
-                            <span class="tab-icon">👤</span>
-                            <span class="tab-text">${isClientUser ? 'Mi Perfil y Reservas' : 'Mi Perfil'}</span>
+                    <!-- Cluster Principal (Vistas Públicas y Calendario) -->
+                    <div class="nav-cluster">
+                        <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME" title="Página de inicio">
+                            <span class="tab-icon">🏠</span>
+                            <span class="tab-text">Inicio</span>
                         </button>
-                    ` : ''}
+                        <button class="nav-tab ${currentView === 'DAY' ? 'active' : ''}" data-view="DAY" title="Vista por día y horarios">
+                            <span class="tab-icon">📅</span>
+                            <span class="tab-text">Día</span>
+                        </button>
+                        <button class="nav-tab ${currentView === 'WEEK' ? 'active' : ''}" data-view="WEEK" title="Vista semanal">
+                            <span class="tab-icon">📊</span>
+                            <span class="tab-text">Semana</span>
+                        </button>
+                        <button class="nav-tab ${currentView === 'MONTH' ? 'active' : ''}" data-view="MONTH" title="Vista mensual">
+                            <span class="tab-icon">🗓️</span>
+                            <span class="tab-text">Mes</span>
+                        </button>
+                        <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES" title="Catálogo de máquinas disponibles">
+                            <span class="tab-icon">🕹️</span>
+                            <span class="tab-text">Máquinas</span>
+                        </button>
 
-                    <!-- Pestañas exclusivas para Staff (Encargado y Superadmin) -->
+                        <!-- Perfil para usuarios autenticados -->
+                        ${currentUser ? `
+                            <button class="nav-tab profile-tab ${currentView === 'MY_PROFILE' ? 'active' : ''}" data-view="MY_PROFILE" title="Mi Perfil, reservaciones y cuenta personal">
+                                <span class="tab-icon">👤</span>
+                                <span class="tab-text">${isClientUser ? 'Mi Perfil' : 'Mi Cuenta'}</span>
+                            </button>
+                        ` : ''}
+                    </div>
+
+                    <!-- Cluster de Operación & Staff (Solo visible para Encargado y Superadmin) -->
                     ${isStaff ? `
-                        <button class="nav-tab ${currentView === 'ANALYTICS' ? 'active' : ''}" data-view="ANALYTICS" style="border-bottom-color:var(--color-neon-lime); color:var(--color-neon-lime);">
-                            <span class="tab-icon">📈</span>
-                            <span class="tab-text">Rendimiento</span>
-                        </button>
-                        <button class="nav-tab ${currentView === 'REQUESTS' ? 'active' : ''}" data-view="REQUESTS">
-                            <span class="tab-icon">📥</span>
-                            <span class="tab-text">Solicitudes</span>
-                            ${pendingCount > 0 ? `<span class="badge-counter glow-red animate-bounce">${pendingCount}</span>` : ''}
-                        </button>
-                        <button class="nav-tab ${currentView === 'CLIENTS' ? 'active' : ''}" data-view="CLIENTS">
-                            <span class="tab-icon">👥</span>
-                            <span class="tab-text">Directorio</span>
-                        </button>
-                        <button class="nav-tab ${currentView === 'CATALOGS' ? 'active' : ''}" data-view="CATALOGS">
-                            <span class="tab-icon">🗄️</span>
-                            <span class="tab-text">Catálogos</span>
-                        </button>
-                        <button class="nav-tab ${currentView === 'BUSINESS' ? 'active' : ''}" data-view="BUSINESS">
-                            <span class="tab-icon">⚙️</span>
-                            <span class="tab-text">Ajustes Local</span>
-                        </button>
-                    ` : ''}
-
-                    ${isSuperAdmin ? `
-                        <button class="nav-tab ${currentView === 'SUPERADMIN' ? 'active' : ''}" data-view="SUPERADMIN" style="border-bottom-color:var(--color-neon-lime); color:var(--color-neon-lime);">
-                            <span class="tab-icon">👑</span>
-                            <span class="tab-text">Panel Global</span>
-                        </button>
+                        <div class="nav-cluster staff-zone" title="Herramientas del Encargado / Staff">
+                            <button class="nav-tab staff-tab ${currentView === 'CLIENTS' ? 'active' : ''}" data-view="CLIENTS" title="Directorio, saldo y consumos de jugadores">
+                                <span class="tab-icon">👥</span>
+                                <span class="tab-text">Jugadores & Cuentas</span>
+                            </button>
+                            <button class="nav-tab staff-tab ${currentView === 'REQUESTS' ? 'active' : ''}" data-view="REQUESTS" title="Solicitudes pendientes de reservación">
+                                <span class="tab-icon">📥</span>
+                                <span class="tab-text">Solicitudes</span>
+                                ${pendingCount > 0 ? `<span class="badge-counter glow-red animate-bounce">${pendingCount}</span>` : ''}
+                            </button>
+                            <button class="nav-tab staff-tab ${currentView === 'ANALYTICS' ? 'active' : ''}" data-view="ANALYTICS" title="Rendimiento, ocupación y corte">
+                                <span class="tab-icon">📈</span>
+                                <span class="tab-text">Rendimiento</span>
+                            </button>
+                            <button class="nav-tab staff-tab ${currentView === 'BUSINESS' ? 'active' : ''}" data-view="BUSINESS" title="Configuración de la sucursal y marca">
+                                <span class="tab-icon">⚙️</span>
+                                <span class="tab-text">Ajustes</span>
+                            </button>
+                            <button class="nav-tab staff-tab ${currentView === 'CATALOGS' ? 'active' : ''}" data-view="CATALOGS" title="Catálogos de modelos y versiones">
+                                <span class="tab-icon">🗄️</span>
+                                <span class="tab-text">Catálogos</span>
+                            </button>
+                            ${isSuperAdmin ? `
+                                <button class="nav-tab staff-tab ${currentView === 'SUPERADMIN' ? 'active' : ''}" data-view="SUPERADMIN" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);" title="Panel Maestro Global">
+                                    <span class="tab-icon">👑</span>
+                                    <span class="tab-text">Global</span>
+                                </button>
+                            ` : ''}
+                        </div>
                     ` : ''}
                 </nav>
             </div>
         </header>
     `;
+
+    // Evento para abrir el Changelog modal
+    container.querySelectorAll('.btn-open-changelog-header').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openChangelogModal();
+        });
+    });
 
     // Evento Regresar al Index para cambiar de local
     container.querySelector('#btn-back-to-index')?.addEventListener('click', () => {

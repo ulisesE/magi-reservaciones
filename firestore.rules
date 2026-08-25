@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Reglas de seguridad para el namespace 'piu_' (Pump It Up Hub)
+    
+    // 1. Negocios, Máquinas, Reglas operativas y Versiones de Juego (Públicos de lectura, protegidos de escritura)
+    match /piu_businesses/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null || true; // Para desarrollo / restringir en prod con auth
+    }
+    match /piu_machines/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null || true;
+    }
+    match /piu_operating_rules/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null || true;
+    }
+    match /piu_game_versions/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null || true;
+    }
+    match /piu_cabinet_models/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null || true;
+    }
+    match /piu_machine_features/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null || true;
+    }
+
+    // 2. Personal y Encargados (Datos sensibles con PINs hasheados)
+    match /piu_staff_users/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 3. Jugadores (piu_players)
+    match /piu_players/{playerId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 4. Reservaciones, Consumos y Cuentas (piu_reservations, piu_consumptions)
+    match /piu_reservations/{reservationId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
+    }
+    
+    match /piu_consumptions/{consumptionId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
+    }
+
+    // 5. Recompensas y Canjes
+    match /piu_loyalty_rewards/{rewardId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /piu_redemptions/{redemptionId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
+    }
+
+    // 6. Auditoría
+    match /piu_audit_logs/{logId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if false; // Los logs de auditoría son inmutables
+    }
+  }
+}

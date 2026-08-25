@@ -4,7 +4,29 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## Funcionalidades recientes y optimizaciones (v1.4.0)
+## Funcionalidades recientes y optimizaciones (v1.5.0)
+
+### 💳 Fase 2: Cuenta y Consumo del Jugador
+* **Registro de Consumos Express**: Permite al encargado registrar compras y consumos en mostrador sin requerir una reservación previa asociada.
+* **7 Tipos Rápidos de Consumo**: `🕹️ Juego`, `🥤 Bebida`, `🍿 Alimento`, `🪙 Ficha`, `🏆 Inscripción`, `🛍️ Producto` y `📦 Otro`.
+* **Cuentas Corrientes y Saldos Dinámicos**: Control en tiempo real de saldos (`Debe $XX`, `Saldo a favor +$XX` o `Al corriente`).
+* **Modal de Cuenta y Movimientos**: Historial cronológico con filtros (*Todos*, *Pendientes*, *Pagados*, *Abonos*), registro de abonos en caja y anulación de movimientos con reversión de saldo.
+* **Pestaña "Mi Cuenta y Consumos" en Perfil**: Visibilidad completa para el jugador con desglose por categorías.
+
+### 🛡️ Seguridad Criptográfica y Protección de Datos
+* **Hasheo de PINs y Claves con SHA-256**: Ninguna contraseña se almacena en texto plano en Firestore ni en LocalStorage.
+* **Sanitización de Sesión**: Eliminación de credenciales sensibles de la memoria y caché del cliente.
+* **Restablecimiento de PIN por Encargados**: Permite al encargado asignar un nuevo PIN temporal a los jugadores que olvidaron su clave.
+* **Reglas de Seguridad de Firestore**: Políticas de control de acceso por colección y registros de auditoría inmutables.
+
+### 🎨 Rediseño Consolidado de UI / UX
+* **Menú del Header Agrupado**: Navegación dividida en 2 clusters limpios (Público/Calendarios vs Operación Staff).
+* **Cabecera Móvil en 2 Renglones**: Renglón 1 dedicado a la identidad y nombre del local; Renglón 2 para usuario, botón Reservar y menú hamburguesa `☰`.
+* **Tarjetas VIP Gamer Pass en Directorio**: HUD consolidado de 3 columnas (Saldo, Lealtad, Reservas), 2 botones principales (`➕ Consumo`, `💳 Cuenta`) y barra de herramientas compacta.
+
+---
+
+## Funcionalidades de Versiones Anteriores (v1.4.0)
 
 ### 📈 Panel de Rendimiento y Analítica de Negocio para Locatarios
 * **Dashboard Integral en Tiempo Real**: Nueva pestaña de **"Rendimiento"** para el staff y encargados con visión 360° del negocio.

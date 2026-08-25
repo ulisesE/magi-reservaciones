@@ -151,32 +151,56 @@
 
 /* Navigation Row */
 .header-nav-row {
-    background: rgba(1, 24, 22, 0.7);
-    border-top: 1px solid rgba(104, 242, 5, 0.08);
+    background: rgba(1, 18, 16, 0.85);
+    border-top: 1px solid rgba(104, 242, 5, 0.12);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .view-nav-tabs {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 6px 20px;
     display: flex;
-    gap: 4px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     overflow-x: auto;
+}
+
+.nav-cluster {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.nav-cluster.staff-zone {
+    background: rgba(104, 242, 5, 0.04);
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+    border: 1px solid rgba(104, 242, 5, 0.15);
+}
+
+.nav-cluster-divider {
+    width: 1px;
+    height: 22px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 0 4px;
 }
 
 .nav-tab {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     background: transparent;
-    border: none;
-    border-bottom: 3px solid transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
     color: var(--text-muted);
     font-family: var(--font-heading);
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     font-weight: 700;
-    letter-spacing: 0.5px;
-    padding: 12px 18px;
+    letter-spacing: 0.3px;
+    padding: 7px 14px;
     cursor: pointer;
     transition: all 0.2s ease;
     white-space: nowrap;
@@ -185,22 +209,38 @@
 
 .nav-tab:hover {
     color: var(--text-main);
-    background: rgba(104, 242, 5, 0.05);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-tab.active {
     color: #ffffff;
-    border-bottom-color: var(--color-neon-lime);
-    background: linear-gradient(to top, rgba(104, 242, 5, 0.15), transparent);
-    text-shadow: 0 0 10px rgba(104, 242, 5, 0.5);
+    background: linear-gradient(135deg, rgba(8, 140, 79, 0.35), rgba(104, 242, 5, 0.25));
+    border-color: var(--color-neon-lime);
+    box-shadow: 0 0 12px rgba(104, 242, 5, 0.25);
+    text-shadow: 0 0 8px rgba(104, 242, 5, 0.6);
+}
+
+.nav-tab.staff-tab.active {
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(8, 140, 79, 0.3));
+    border-color: var(--piu-cyan);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+}
+
+.nav-tab.profile-tab {
+    color: var(--piu-cyan);
+}
+
+.nav-tab.profile-tab.active {
+    background: rgba(0, 229, 255, 0.15);
+    border-color: var(--piu-cyan);
 }
 
 .badge-counter {
     background: var(--color-neon-lime);
     color: #011816;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 900;
-    padding: 2px 7px;
+    padding: 1px 6px;
     border-radius: var(--radius-full);
     margin-left: 2px;
 }
@@ -474,76 +514,185 @@
     margin-bottom: 6px;
 }
 
-/* Responsive Header */
-@media (max-width: 768px) {
+/* Responsive Header (2 Renglones Claros: Renglón 1 = Local, Renglón 2 = Usuario, Reserva, Menú) */
+@media (max-width: 860px) {
     .header-top-row {
-        flex-wrap: wrap;
-        padding: 10px 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 10px 14px 8px 14px;
+        gap: 8px;
     }
+
+    /* Renglón 1: Identidad y Nombre del Local */
     .header-brand {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding-bottom: 8px;
+    }
+    .brand-badge-icon {
+        font-size: 1.4rem;
+        flex-shrink: 0;
+    }
+    .brand-text {
         flex: 1;
         min-width: 0;
     }
-    .header-actions { gap: 8px; }
-    .app-header.header-guest .header-top-row {
-        align-items: flex-start;
+    .brand-title {
+        font-size: 1.05rem !important;
+        font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
-    .app-header.header-guest .header-brand {
-        flex-basis: 100%;
+    .brand-subtitle {
+        font-size: 0.72rem;
+        color: var(--text-muted);
     }
-    .app-header.header-guest .header-actions {
+    .btn-back-hub {
+        margin-left: auto;
+        padding: 4px 9px;
+        font-size: 0.75rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    /* Ocultar selector redundante en móviles */
+    .header-tenant-selector {
+        display: none !important;
+    }
+
+    /* Renglón 2: Usuario / Login + Botón Reservar + Menú Hamburguesa */
+    .header-actions {
         width: 100%;
-        flex-wrap: wrap;
-        justify-content: flex-end;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
     }
-    .app-header.header-guest .login-action-label,
-    .app-header.header-guest .quick-book-label {
+
+    #btn-open-login {
+        flex: 1;
+        font-size: 0.8rem;
+        padding: 6px 10px;
+        white-space: nowrap;
+    }
+
+    .user-session-pill {
+        flex: 1;
+        min-width: 0;
+        max-width: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 8px !important;
+        background: var(--bg-dark-700);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-full);
+    }
+    .user-session-clickable {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .user-session-clickable strong {
+        max-width: 110px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 0.8rem !important;
+        color: #fff;
+    }
+    .user-session-clickable small {
+        font-size: 0.62rem !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    #btn-logout {
+        padding: 2px 7px !important;
+        font-size: 0.68rem !important;
+        flex-shrink: 0;
+    }
+
+    .btn-quick-book, #btn-quick-book {
+        padding: 6px 12px !important;
+        font-size: 0.8rem !important;
+        flex-shrink: 0;
+    }
+    .quick-book-label {
         font-size: 0;
     }
-    .app-header.header-guest .login-action-label::after {
-        content: '🔐 Entrar';
-        font-size: 0.78rem;
-    }
-    .app-header.header-guest .quick-book-label::after {
+    .quick-book-label::after {
         content: '➕ Reservar';
         font-size: 0.78rem;
+        font-weight: 800;
     }
+
     .btn-mobile-nav {
         display: inline-flex;
-        min-width: 38px;
+        min-width: 36px;
+        height: 36px;
+        align-items: center;
         justify-content: center;
-        font-size: 1.1rem;
-        padding: 6px 9px;
-    }
-    .header-tenant-selector {
-        order: 3;
-        width: 100%;
+        font-size: 1.15rem;
+        padding: 4px;
+        flex-shrink: 0;
     }
     .view-nav-tabs {
-        padding: 0 14px;
+        padding: 0 12px;
         flex-direction: column;
         align-items: stretch;
-        gap: 0;
+        gap: 8px;
         overflow: hidden;
         max-height: 0;
         padding-top: 0;
         padding-bottom: 0;
-        transition: max-height 0.25s ease, padding 0.25s ease;
+        transition: max-height 0.3s ease, padding 0.3s ease;
     }
     .header-nav-row.mobile-nav-open .view-nav-tabs {
-        max-height: 620px;
-        padding-top: 6px;
-        padding-bottom: 10px;
+        max-height: 900px;
+        overflow-y: auto;
+        padding-top: 10px;
+        padding-bottom: 14px;
+    }
+    .nav-cluster {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 4px;
+    }
+    .nav-cluster.staff-zone {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        background: rgba(104, 242, 5, 0.04);
+        border: 1px dashed rgba(104, 242, 5, 0.25);
+        border-radius: var(--radius-sm);
+        padding: 8px;
+        margin-top: 6px;
     }
     .nav-tab {
         width: 100%;
+        display: flex;
+        align-items: center;
         justify-content: flex-start;
-        border-bottom: 1px solid rgba(104, 242, 5, 0.12);
-        border-left: 3px solid transparent;
-        padding: 11px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 9px 14px;
+        font-size: 0.9rem;
     }
     .nav-tab.active {
-        border-bottom-color: rgba(104, 242, 5, 0.2);
-        border-left-color: var(--color-neon-lime);
+        background: linear-gradient(135deg, rgba(8, 140, 79, 0.35), rgba(104, 242, 5, 0.25));
+        border-color: var(--color-neon-lime);
+    }
+    .nav-tab.staff-tab.active {
+        background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(8, 140, 79, 0.3));
+        border-color: var(--piu-cyan);
     }
 }
