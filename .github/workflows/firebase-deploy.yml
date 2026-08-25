@@ -3,11 +3,12 @@ name: Deploy to Firebase Hosting
 on:
   push:
     branches:
-      - FireStore # Se dispara automáticamente al subir cambios a esta rama
+      - FireStore
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout de Código
         uses: actions/checkout@v4
@@ -17,9 +18,15 @@ jobs:
           cd functions
           npm install
 
-      - name: Desplegar en Firebase (Funciones, Hosting e Índices)
+      - name: Verificar cuenta de servicio
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MAGI_SUITE }}
+        run: |
+          python -c "import os,json; print(json.loads(os.environ['GCP_SA_KEY'])['client_email'])"
+
+      - name: Desplegar en Firebase
         uses: w9jds/firebase-action@master
         with:
-          args: deploy --project test-89a00 --force 
+          args: deploy --project test-89a00 --force
         env:
           GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MAGI_SUITE }}
