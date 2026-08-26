@@ -259,7 +259,7 @@ class TenantManager {
         }
 
         // Comprobar si hay una sesión activa de Encargado bloqueada a una sucursal específica
-        const sessionRaw = localStorage.getItem('piu_active_user_session');
+        const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
         let managerBizId = null;
         if (sessionRaw) {
             try {
@@ -329,7 +329,7 @@ class TenantManager {
      * El usuario selecciona un local desde la pantalla de bienvenida (Index)
      */
     async selectLocal(businessId) {
-        const sessionRaw = localStorage.getItem('piu_active_user_session');
+        const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
         if (sessionRaw) {
             try {
                 const sess = JSON.parse(sessionRaw);
@@ -354,7 +354,8 @@ class TenantManager {
      * Regresar al Index para cambiar de local (Bloqueado para encargados)
      */
     clearSelectedLocal() {
-        const sessionRaw = localStorage.getItem('piu_active_user_session');
+        const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
+        let isSuperAdmin = false;
         if (sessionRaw) {
             try {
                 const sess = JSON.parse(sessionRaw);
@@ -362,7 +363,15 @@ class TenantManager {
                     // El encargado no puede salir de su sucursal asignada
                     return;
                 }
+                if (sess && sess.role === 'SUPERADMIN') {
+                    isSuperAdmin = true;
+                }
             } catch (e) {}
+        }
+
+        // Si el cambio de local está bloqueado globalmente, el superadmin sí puede salir, pero otros no
+        if (this.disableChangeLocalGlobally && !isSuperAdmin) {
+            return;
         }
 
         this.isLocalSelected = false;
