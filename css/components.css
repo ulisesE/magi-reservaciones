@@ -11,7 +11,7 @@
     border-bottom: 1px solid rgba(104, 242, 5, 0.2);
     position: sticky;
     top: 0;
-    z-index: 100;
+    z-index: 1000;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
@@ -63,69 +63,64 @@
     font-weight: 500;
 }
 
-/* Tenant Selector */
+/* Ocultar selector redundante */
 .header-tenant-selector {
-    display: flex;
+    display: none !important;
+}
+
+.header-action-divider {
+    width: 1px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 0 4px;
+}
+
+.user-session-pill {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: var(--bg-dark-800);
-    padding: 4px 12px;
-    border-radius: var(--radius-sm);
+    background: var(--bg-dark-700);
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
     border: 1px solid var(--border-color);
-}
-
-.tenant-label {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.cyber-select-sm {
-    background: transparent;
-    border: none;
-    color: var(--text-main);
-    font-family: var(--font-main);
-    font-weight: 600;
-    font-size: 0.88rem;
-    outline: none;
     cursor: pointer;
-}
-.cyber-select-sm option {
-    background: var(--bg-dark-800);
-    color: var(--text-main);
+    transition: all 0.2s ease;
+    color: inherit;
+    font-family: inherit;
 }
 
-/* Role Switcher & Action */
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.user-session-pill:hover {
+    border-color: var(--color-neon-lime);
+    background: var(--bg-dark-800);
+    box-shadow: 0 0 10px rgba(104, 242, 5, 0.2);
 }
 
 .btn-mobile-nav { display: none; }
 
 .btn-role-toggle {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
+    gap: 6px;
     border-radius: var(--radius-full);
+    font-size: 0.78rem;
+    font-weight: 800;
+    padding: 5px 12px;
     border: 1px solid var(--border-color);
-    background: var(--bg-dark-800);
-    color: var(--text-main);
-    font-family: var(--font-heading);
-    font-size: 0.85rem;
-    font-weight: 700;
+    background: var(--bg-dark-700);
+    color: var(--text-muted);
     cursor: pointer;
-    transition: all 0.25s ease;
+    transition: all 0.2s ease;
+}
+
+.btn-role-toggle:hover {
+    border-color: var(--color-neon-lime);
+    color: var(--text-main);
 }
 
 .btn-role-toggle.role-client {
     border-color: rgba(195, 217, 30, 0.4);
-    background: rgba(195, 217, 30, 0.08);
+    background: rgba(195, 217, 30, 0.1);
+    color: var(--color-chartreuse);
 }
 .btn-role-toggle.role-client .role-indicator {
     background: var(--color-chartreuse);
@@ -155,6 +150,9 @@
     border-top: 1px solid rgba(104, 242, 5, 0.12);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 1001;
+    overflow: visible;
 }
 
 .view-nav-tabs {
@@ -165,7 +163,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    overflow-x: auto;
+    overflow: visible;
+    position: relative;
 }
 
 .nav-cluster {
@@ -243,6 +242,125 @@
     padding: 1px 6px;
     border-radius: var(--radius-full);
     margin-left: 2px;
+}
+
+/* ==========================================================================
+   DROPDOWNS COMPACTOS DE NAVEGACIÓN (0 SCROLL)
+   ========================================================================== */
+.nav-dropdown-wrapper {
+    position: relative;
+    display: inline-flex;
+    z-index: 2000;
+}
+
+.nav-dropdown-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dropdown-caret {
+    font-size: 0.75rem;
+    transition: transform 0.2s ease;
+    opacity: 0.75;
+}
+
+.nav-dropdown-wrapper.open .dropdown-caret {
+    transform: rotate(180deg);
+}
+
+.nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 250px;
+    background: rgba(1, 24, 22, 0.98);
+    border: 1px solid rgba(104, 242, 5, 0.35);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.95), 0 0 25px rgba(104, 242, 5, 0.25);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 3000;
+    flex-direction: column;
+    gap: 4px;
+    animation: navDropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nav-dropdown-menu.align-right {
+    left: auto;
+    right: 0;
+}
+
+.nav-dropdown-wrapper.open .nav-dropdown-menu {
+    display: flex;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: 1px solid transparent;
+    color: #ffffff;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dropdown-item.active {
+    background: linear-gradient(135deg, rgba(8, 140, 79, 0.4), rgba(104, 242, 5, 0.25));
+    border-color: var(--color-neon-lime);
+    box-shadow: 0 0 10px rgba(104, 242, 5, 0.2);
+}
+
+.dropdown-item .item-icon {
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+.dropdown-item .item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dropdown-item .item-info strong {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.dropdown-item .item-info small {
+    font-size: 0.73rem;
+    color: var(--text-muted);
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 4px 0;
+}
+
+@keyframes navDropdownFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ==========================================================================
@@ -694,5 +812,18 @@
     .nav-tab.staff-tab.active {
         background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(8, 140, 79, 0.3));
         border-color: var(--piu-cyan);
+    }
+    .nav-dropdown-wrapper {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .nav-dropdown-menu {
+        position: static;
+        width: 100%;
+        box-shadow: none;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px dashed rgba(255, 255, 255, 0.15);
+        margin-top: 4px;
     }
 }

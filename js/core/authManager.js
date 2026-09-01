@@ -1,7 +1,4 @@
-// js/core/authManager.js
-// Gestor de Autenticación, Roles y Control de Acceso Multi-Nivel con Protección Criptográfica SHA-256
-// Niveles: SUPERADMIN, MANAGER (Encargado de Local), CLIENT (Cliente del Local)
-import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc, query, where, getDoc, limit } from '../firebaseConfig.js';
+import { db, isFirebaseAvailable, COLLECTIONS, collection, getDocs, setDoc, doc, updateDoc, deleteDoc, query, where, getDoc, limit, onSnapshot } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { loyaltyManager } from './loyaltyManager.js';
 import { hashPin, verifyPin, sanitizeUserSession } from './securityUtils.js';
@@ -47,10 +44,11 @@ class AuthManager {
         this.staffUsers = [];
         this.clientUsers = [];
         this.listeners = [];
+        this.unsubscribeStaff = null;
     }
 
     async init() {
-        // Pre-calcular hashes para los usuarios de semilla
+        // Pre-calcular hashes para los usuarios de semilla (solo respaldo)
         for (const u of DEFAULT_STAFF_USERS) {
             if (!u.pinHash && u.pin) {
                 u.pinHash = await hashPin(u.pin);
@@ -58,31 +56,59 @@ class AuthManager {
             }
         }
 
-        // Verificar si la base de datos de staff necesita inicialización (seeding)
+        // 1. Cargar caché local rápida
+        const localStaff = localStorage.getItem('piu_staff_users_cache');
+        if (localStaff) {
+            try { this.staffUsers = JSON.parse(localStaff); } catch (e) { this.staffUsers = []; }
+        }
+
+        // 2. FIRESTORE ES EL MANDANTE (Single Source of Truth)
         if (isFirebaseAvailable && db) {
             try {
-                const checkSnap = await getDocs(query(collection(db, COLLECTIONS.STAFF_USERS), limit(1)));
-                if (checkSnap.empty) {
-                    console.log("🌱 Inicializando base de datos de staff con usuarios protegidos por hash...");
+                const staffSnap = await getDocs(collection(db, COLLECTIONS.STAFF_USERS));
+                if (staffSnap.empty) {
+                    // Solo si Firestore está 100% vacío, inicializar con las semillas seguras
+                    console.log("🌱 Inicializando base de datos de staff en Firestore...");
                     for (const u of DEFAULT_STAFF_USERS) {
                         const secureUser = { ...u };
                         delete secureUser.pin;
                         if (!secureUser.pinHash && u.pin) {
                             secureUser.pinHash = await hashPin(u.pin);
                         }
-                        await setDoc(doc(db, COLLECTIONS.STAFF_USERS, u.id), secureUser);
+                        await setDoc(doc(db, COLLECTIONS.STAFF_USERS, u.id), secureUser, { merge: true });
                     }
+                    this.staffUsers = [...DEFAULT_STAFF_USERS];
+                } else {
+                    const loaded = [];
+                    staffSnap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                    this.staffUsers = loaded;
+                    localStorage.setItem('piu_staff_users_cache', JSON.stringify(loaded));
                 }
             } catch (err) {
-                console.warn("Error verificando/inicializando staff de Firebase:", err);
+                console.warn("Error cargando staff de Firebase en init:", err);
             }
+
+            // Suscripción reactiva en tiempo real a cambios de usuarios de personal / superadmin
+            this.unsubscribeStaff?.();
+            this.unsubscribeStaff = onSnapshot(collection(db, COLLECTIONS.STAFF_USERS), (snapshot) => {
+                if (!snapshot.empty) {
+                    const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    this.staffUsers = loaded;
+                    localStorage.setItem('piu_staff_users_cache', JSON.stringify(loaded));
+
+                    // Si el usuario actual es staff o superadmin, actualizar su sesión en tiempo real
+                    if (this.currentUser && (this.currentUser.role === 'SUPERADMIN' || this.currentUser.role === 'MANAGER')) {
+                        const updatedSelf = loaded.find(u => u.id === this.currentUser.id || (this.currentUser.role === 'SUPERADMIN' && u.role === 'SUPERADMIN'));
+                        if (updatedSelf) {
+                            this.currentUser = sanitizeUserSession({ ...this.currentUser, ...updatedSelf });
+                            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
+                        }
+                    }
+                    this.notify();
+                }
+            }, (error) => console.warn('Error sincronizando staff de Firebase:', error));
         }
 
-        // Cargar caché local del personal si existe
-        const localStaff = localStorage.getItem('piu_staff_users_cache');
-        if (localStaff) {
-            try { this.staffUsers = JSON.parse(localStaff); } catch (e) { this.staffUsers = []; }
-        }
         if (this.staffUsers.length === 0) {
             this.staffUsers = [...DEFAULT_STAFF_USERS];
         }
@@ -93,7 +119,31 @@ class AuthManager {
             try { this.clientUsers = JSON.parse(localClients); } catch (e) { this.clientUsers = []; }
         }
 
-        // Recuperar sesión activa si existía de forma segura y directa
+        // Cargar y suscribir jugadores en tiempo real desde Firestore (Firestore es el Mandante)
+        if (isFirebaseAvailable && db) {
+            try {
+                const playersSnap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                const loadedPlayers = [];
+                playersSnap.forEach(d => loadedPlayers.push({ id: d.id, ...d.data() }));
+                if (loadedPlayers.length > 0) {
+                    this.clientUsers = loadedPlayers;
+                    localStorage.setItem('piu_registered_players_cache', JSON.stringify(loadedPlayers));
+                }
+            } catch (err) {
+                console.warn("Error cargando jugadores de Firebase en init:", err);
+            }
+
+            this.unsubscribePlayers?.();
+            this.unsubscribePlayers = onSnapshot(collection(db, COLLECTIONS.PLAYERS), (snapshot) => {
+                const loadedPlayers = [];
+                snapshot.forEach(d => loadedPlayers.push({ id: d.id, ...d.data() }));
+                this.clientUsers = loadedPlayers;
+                localStorage.setItem('piu_registered_players_cache', JSON.stringify(loadedPlayers));
+                this.notify();
+            }, (err) => console.warn("Error sincronizando jugadores en tiempo real:", err));
+        }
+
+        // Recuperar y validar sesión activa contra Firestore (Firestore manda)
         const savedSession = localStorage.getItem(AUTH_STORAGE_KEY);
         if (savedSession) {
             try {
@@ -114,6 +164,7 @@ class AuthManager {
 
                 if (exists) {
                     this.currentUser = sanitizeUserSession(exists);
+                    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
                 } else {
                     this.currentUser = sanitizeUserSession(user);
                 }
@@ -123,6 +174,21 @@ class AuthManager {
         }
 
         return this.currentUser;
+    }
+
+    async fetchClientUsers() {
+        if (isFirebaseAvailable && db) {
+            try {
+                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                const loaded = [];
+                snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                this.clientUsers = loaded;
+                localStorage.setItem('piu_registered_players_cache', JSON.stringify(loaded));
+            } catch (e) {
+                console.warn("Error fetching client users from Firestore:", e);
+            }
+        }
+        return this.getClientUsers();
     }
 
     async loadStaffUsers() {
@@ -136,7 +202,7 @@ class AuthManager {
                     localStorage.setItem('piu_staff_users_cache', JSON.stringify(loaded));
 
                     if (this.currentUser && (this.currentUser.role === 'SUPERADMIN' || this.currentUser.role === 'MANAGER')) {
-                        const activeInLoaded = loaded.find(u => u.id === this.currentUser.id);
+                        const activeInLoaded = loaded.find(u => u.id === this.currentUser.id || (this.currentUser.role === 'SUPERADMIN' && u.role === 'SUPERADMIN'));
                         if (activeInLoaded) {
                             this.currentUser = sanitizeUserSession({ ...this.currentUser, ...activeInLoaded });
                             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
@@ -237,25 +303,21 @@ class AuthManager {
             }
         }
 
-        // Fallback local a semillas o caché si no se encontraron en Firestore
+        // Fallback local a lista real de personal en memoria/caché antes de semillas
         if (candidateUsers.length === 0) {
-            DEFAULT_STAFF_USERS.forEach(u => {
-                if (u.username.toLowerCase() === uTrim) {
+            const currentStaffList = this.staffUsers.length > 0 ? this.staffUsers : (() => {
+                const localStaff = localStorage.getItem('piu_staff_users_cache');
+                if (localStaff) {
+                    try { return JSON.parse(localStaff); } catch(e) {}
+                }
+                return DEFAULT_STAFF_USERS;
+            })();
+
+            currentStaffList.forEach(u => {
+                if (u.username?.toLowerCase() === uTrim) {
                     candidateUsers.push({ ...u });
                 }
             });
-
-            const localStaff = localStorage.getItem('piu_staff_users_cache');
-            if (localStaff) {
-                try {
-                    const cached = JSON.parse(localStaff);
-                    cached.forEach(u => {
-                        if (u.username.toLowerCase() === uTrim && !candidateUsers.some(c => c.id === u.id)) {
-                            candidateUsers.push({ ...u });
-                        }
-                    });
-                } catch(e) {}
-            }
 
             const localClients = localStorage.getItem('piu_registered_players_cache');
             if (localClients) {
@@ -287,10 +349,7 @@ class AuthManager {
 
                     if (isFirebaseAvailable && db && user._coll && user.id) {
                         try {
-                            await updateDoc(doc(db, user._coll, user.id), {
-                                pinHash: newHash,
-                                pin: deleteDoc // eliminar campo legado
-                            });
+                            await setDoc(doc(db, user._coll, user.id), { pinHash: newHash }, { merge: true });
                         } catch(e) {}
                     }
                 }
@@ -329,11 +388,11 @@ class AuthManager {
 
         // Verificar unicidad de username
         const localStaff = localStorage.getItem('piu_staff_users_cache');
-        let cachedStaff = DEFAULT_STAFF_USERS;
+        let cachedStaff = this.staffUsers.length > 0 ? this.staffUsers : DEFAULT_STAFF_USERS;
         if (localStaff) {
             try { cachedStaff = JSON.parse(localStaff); } catch(e) {}
         }
-        const staffExists = cachedStaff.some(u => u.username.toLowerCase() === cleanUsername);
+        const staffExists = cachedStaff.some(u => u.username?.toLowerCase() === cleanUsername);
 
         const localPlayers = localStorage.getItem('piu_registered_players_cache');
         let cachedPlayers = [];
@@ -389,7 +448,7 @@ class AuthManager {
 
         if (isFirebaseAvailable && db) {
             try {
-                await setDoc(doc(db, COLLECTIONS.PLAYERS, newPlayer.id), newPlayer);
+                await setDoc(doc(db, COLLECTIONS.PLAYERS, newPlayer.id), newPlayer, { merge: true });
             } catch (e) {
                 console.warn("Error guardando jugador en Firebase:", e);
             }
@@ -435,7 +494,7 @@ class AuthManager {
 
         if (isFirebaseAvailable && db) {
             try {
-                await updateDoc(doc(db, COLLECTIONS.PLAYERS, clientId), updatedFields);
+                await setDoc(doc(db, COLLECTIONS.PLAYERS, clientId), updatedFields, { merge: true });
             } catch (e) {
                 console.warn("Error actualizando perfil en Firebase:", e);
             }
@@ -459,8 +518,8 @@ class AuthManager {
             username: userData.username.trim().toLowerCase().replace(/\s+/g, '_'),
             pinHash,
             name: userData.name.trim(),
-            role: 'MANAGER',
-            businessId: userData.businessId,
+            role: userData.role || 'MANAGER',
+            businessId: userData.businessId || null,
             email: userData.email?.trim() || '',
             avatar: userData.avatar || '🕹️',
             createdAt: new Date().toISOString()
@@ -478,7 +537,7 @@ class AuthManager {
 
         if (isFirebaseAvailable && db) {
             try {
-                await setDoc(doc(db, COLLECTIONS.STAFF_USERS, newStaff.id), newStaff);
+                await setDoc(doc(db, COLLECTIONS.STAFF_USERS, newStaff.id), newStaff, { merge: true });
             } catch (e) {
                 console.warn("Error guardando staff en Firebase:", e);
             }
@@ -501,26 +560,28 @@ class AuthManager {
             }
         }
         const index = this.staffUsers.findIndex(u => u.id === userId);
-        if (index === -1) return null;
-
-        this.staffUsers[index] = { ...this.staffUsers[index], ...updatedFields };
+        if (index !== -1) {
+            this.staffUsers[index] = { ...this.staffUsers[index], ...updatedFields };
+        } else {
+            this.staffUsers.push({ id: userId, ...updatedFields });
+        }
         localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
 
-        if (this.currentUser && this.currentUser.id === userId) {
+        if (this.currentUser && (this.currentUser.id === userId || (this.currentUser.role === 'SUPERADMIN' && updatedFields.role === 'SUPERADMIN'))) {
             this.currentUser = sanitizeUserSession({ ...this.currentUser, ...updatedFields });
             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
         }
 
         if (isFirebaseAvailable && db) {
             try {
-                await updateDoc(doc(db, COLLECTIONS.STAFF_USERS, userId), updatedFields);
+                await setDoc(doc(db, COLLECTIONS.STAFF_USERS, userId), updatedFields, { merge: true });
             } catch (e) {
                 console.warn("Error editando staff en Firebase:", e);
             }
         }
 
         this.notify();
-        return this.staffUsers[index];
+        return this.staffUsers[index] || { id: userId, ...updatedFields };
     }
 
     async deleteStaffManager(userId) {

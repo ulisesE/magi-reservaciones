@@ -269,7 +269,11 @@ function calculateAnalyticsMetrics(reservations, machines, business, startStr, e
     const totalAvailableHours = daysCount * machCount * dailyOperatingHours;
     const overallUtilization = Math.min(100, Math.round((totalHours / (totalAvailableHours || 1)) * 100));
 
-    // Desglose por Máquina
+    // Desglose por Máquina y Comisiones
+    let totalCommissionsPayout = 0;
+    let totalLocalNetRevenue = 0;
+    let commissionMachinesCount = 0;
+
     const machineStats = machines.map(m => {
         const mConfirmed = confirmedRes.filter(r => r.machineId === m.id);
         const mRevenue = mConfirmed.reduce((sum, r) => sum + (Number(r.totalCost) || 0), 0);
@@ -281,14 +285,31 @@ function calculateAnalyticsMetrics(reservations, machines, business, startStr, e
         const mCapacityHours = daysCount * dailyOperatingHours;
         const mUtil = Math.min(100, Math.round((mHours / (mCapacityHours || 1)) * 100));
 
+        // Esquema de Comisión
+        const isCommission = m.ownershipType === 'COMMISSION';
+        if (isCommission) commissionMachinesCount++;
+        const partnerPct = isCommission ? (Number(m.partnerPercentage) || 50) : 0;
+        const localPct = 100 - partnerPct;
+        const partnerPayout = isCommission ? Math.round((mRevenue * (partnerPct / 100)) * 100) / 100 : 0;
+        const localNet = isCommission ? Math.round((mRevenue - partnerPayout) * 100) / 100 : mRevenue;
+
+        totalCommissionsPayout += partnerPayout;
+        totalLocalNetRevenue += localNet;
+
         return {
             id: m.id,
             name: m.name,
             model: m.model || 'Pump It Up',
             version: m.version || 'Phoenix',
+            ownershipType: m.ownershipType || 'OWNED',
+            partnerName: m.partnerName || '',
+            partnerPercentage: partnerPct,
+            localPercentage: localPct,
             bookingsCount: mConfirmed.length,
             hours: mHours,
             revenue: mRevenue,
+            partnerPayout,
+            localNet,
             utilization: mUtil
         };
     });
@@ -364,7 +385,9 @@ function calculateAnalyticsMetrics(reservations, machines, business, startStr, e
         confirmationRate,
         cancellationRate,
         overallUtilization,
-        daysCount,
+        totalCommissionsPayout,
+        totalLocalNetRevenue,
+        commissionMachinesCount,
         machineStats,
         trendData,
         hoursDist,
@@ -476,6 +499,36 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                     <span>⚠️ <strong>${stats.cancelledCount}</strong> reservaciones canceladas</span>
                 </div>
             </div>
+
+            <!-- FILA DE REPARTO DE COMISIONES (CONFIDENCIAL LOCATARIO) -->
+            <div style="grid-column: 1 / -1; background:linear-gradient(135deg, rgba(20,24,35,0.98), rgba(12,15,22,0.98)); border:1px solid rgba(255, 193, 7, 0.4); border-radius:var(--radius-sm); padding:14px 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; box-shadow:0 4px 20px rgba(0,0,0,0.4);">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:1.6rem; background:rgba(255,193,7,0.1); padding:6px; border-radius:var(--radius-sm);">🤝</span>
+                    <div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <strong style="color:#fff; font-size:0.95rem;">Reparto Financiero por Máquinas Comisionadas</strong>
+                            <span class="badge ${stats.commissionMachinesCount > 0 ? 'badge-warning' : 'badge-dark'}" style="font-size:0.7rem;">
+                                ${stats.commissionMachinesCount > 0 ? `${stats.commissionMachinesCount} comisionada(s)` : '100% máquinas propias'}
+                            </span>
+                        </div>
+                        <p style="color:var(--text-muted); font-size:0.76rem; margin:2px 0 0 0;">Cálculo confidencial según porcentaje pactado con socios operadores de cada gabinete.</p>
+                    </div>
+                </div>
+                <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
+                    <div style="text-align:right; background:rgba(255,255,255,0.03); padding:6px 12px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+                        <small style="color:var(--text-muted); font-size:0.72rem; display:block;">Facturación Bruta</small>
+                        <strong style="color:#fff; font-family:var(--font-mono); font-size:1.05rem;">${currency}${stats.totalRevenue.toLocaleString()}</strong>
+                    </div>
+                    <div style="text-align:right; background:rgba(255,193,7,0.06); padding:6px 12px; border-radius:var(--radius-sm); border:1px solid rgba(255,193,7,0.3);">
+                        <small style="color:#FFC107; font-size:0.72rem; display:block; font-weight:700;">- Pago a Socios (${stats.commissionMachinesCount})</small>
+                        <strong style="color:#FFC107; font-family:var(--font-mono); font-size:1.05rem;">-${currency}${stats.totalCommissionsPayout.toLocaleString()}</strong>
+                    </div>
+                    <div style="text-align:right; background:rgba(104,242,5,0.1); border:1px solid rgba(104,242,5,0.4); padding:6px 14px; border-radius:var(--radius-sm);">
+                        <small style="color:var(--color-neon-lime); font-size:0.72rem; display:block; font-weight:700;">= Ingreso Neto Local</small>
+                        <strong style="color:var(--color-neon-lime); font-family:var(--font-mono); font-size:1.25rem;">${currency}${stats.totalLocalNetRevenue.toLocaleString()}</strong>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- SECCIÓN DE GRÁFICAS INTERACTIVAS (CHART.JS) -->
@@ -532,24 +585,26 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
         </div>
 
         <!-- TABLAS DETALLADAS Y AUDITORÍA -->
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(350px, 1fr)); gap:20px; margin-top:20px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:20px; margin-top:20px;">
             
-            <!-- Tabla 1: Desglose por Máquina -->
+            <!-- Tabla 1: Desglose y Reparto por Máquina -->
             <div class="analytics-table-card">
                 <div class="chart-header">
                     <h3 class="chart-title">
-                        <span>🕹️ Detalle de Ocupación por Máquina</span>
+                        <span>🕹️ Detalle de Ocupación y Reparto por Máquina</span>
                     </h3>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">Confidencial Staff</small>
                 </div>
                 <div style="overflow-x:auto;">
                     <table class="cyber-analytics-table">
                         <thead>
                             <tr>
                                 <th>Máquina</th>
-                                <th>Reservas</th>
+                                <th>Esquema</th>
                                 <th>Horas</th>
-                                <th>Ocupación</th>
-                                <th>Ingresos</th>
+                                <th>Bruto</th>
+                                <th style="color:#FFC107;">Pago Socio</th>
+                                <th style="color:var(--color-neon-lime);">Neto Local</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -557,19 +612,32 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                                 <tr>
                                     <td>
                                         <strong style="color:#fff;">${m.name}</strong><br>
-                                        <small style="color:var(--text-dimmed); font-size:0.75rem;">${m.version}</small>
+                                        <small style="color:var(--text-dimmed); font-size:0.72rem;">${m.model} • ${m.version}</small>
                                     </td>
-                                    <td><span class="badge badge-dark">${m.bookingsCount}</span></td>
-                                    <td><strong>${m.hours} hrs</strong></td>
                                     <td>
-                                        <div style="display:flex; align-items:center; gap:8px;">
-                                            <span>${m.utilization}%</span>
-                                            <div class="machine-util-bar-track" style="width:50px; margin:0;">
-                                                <div class="machine-util-bar-fill" style="width:${m.utilization}%;"></div>
-                                            </div>
-                                        </div>
+                                        ${m.ownershipType === 'COMMISSION' ? `
+                                            <span class="badge badge-warning" style="font-size:0.7rem; display:inline-block;" title="Socio: ${m.partnerName || 'Sin asignar'}">
+                                                🤝 ${m.partnerPercentage}% Socio
+                                            </span><br>
+                                            <small style="color:var(--text-muted); font-size:0.68rem;">${m.partnerName || 'Socio'}</small>
+                                        ` : `
+                                            <span class="badge badge-success" style="font-size:0.7rem;">
+                                                🏢 100% Propia
+                                            </span>
+                                        `}
                                     </td>
-                                    <td><strong style="color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${m.revenue.toLocaleString()}</strong></td>
+                                    <td><strong>${m.hours} hrs</strong> (${m.bookingsCount} res)</td>
+                                    <td><strong style="color:#fff; font-family:var(--font-mono);">${currency}${m.revenue.toLocaleString()}</strong></td>
+                                    <td>
+                                        ${m.partnerPayout > 0 ? `
+                                            <strong style="color:#FFC107; font-family:var(--font-mono);">-${currency}${m.partnerPayout.toLocaleString()}</strong>
+                                        ` : `
+                                            <span style="color:var(--text-muted); font-size:0.8rem;">$0</span>
+                                        `}
+                                    </td>
+                                    <td>
+                                        <strong style="color:var(--color-neon-lime); font-family:var(--font-mono); font-size:0.95rem;">${currency}${m.localNet.toLocaleString()}</strong>
+                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -946,29 +1014,49 @@ function exportAnalyticsToCSV(reservations, business) {
         return;
     }
 
-    const headers = ["ID", "Fecha", "Inicio", "Fin", "Duracion_Min", "Cliente", "Telefono", "Maquina_ID", "Estado", "Costo", "Creado_El"];
-    const rows = filtered.map(r => [
-        `"${r.id || ''}"`,
-        `"${r.date || ''}"`,
-        `"${r.startTime || ''}"`,
-        `"${r.endTime || ''}"`,
-        r.durationMinutes || 60,
-        `"${(r.clientName || '').replace(/"/g, '""')}"`,
-        `"${(r.clientPhone || '').replace(/"/g, '""')}"`,
-        `"${(r.machineId || '').replace(/"/g, '""')}"`,
-        `"${r.status || 'CONFIRMED'}"`,
-        r.totalCost || 0,
-        `"${r.createdAt || ''}"`
-    ]);
+    const machinesMap = {};
+    (store.machines || []).forEach(m => {
+        machinesMap[m.id] = m;
+    });
+
+    const headers = ["ID", "Fecha", "Inicio", "Fin", "Duracion_Min", "Cliente", "Telefono", "Maquina_ID", "Maquina_Nombre", "Esquema_Posesion", "Socio_Operador", "Pct_Socio", "Costo_Total", "Pago_Comision_Socio", "Neto_Local", "Estado", "Creado_El"];
+    const rows = filtered.map(r => {
+        const mach = machinesMap[r.machineId] || {};
+        const cost = Number(r.totalCost) || 0;
+        const isComm = mach.ownershipType === 'COMMISSION';
+        const partnerPct = isComm ? (Number(mach.partnerPercentage) || 50) : 0;
+        const partnerPayout = isComm && (r.status === 'CONFIRMED' || r.status === 'COMPLETED') ? Math.round((cost * (partnerPct / 100)) * 100) / 100 : 0;
+        const localNet = (r.status === 'CONFIRMED' || r.status === 'COMPLETED') ? Math.round((cost - partnerPayout) * 100) / 100 : 0;
+
+        return [
+            `"${r.id || ''}"`,
+            `"${r.date || ''}"`,
+            `"${r.startTime || ''}"`,
+            `"${r.endTime || ''}"`,
+            r.durationMinutes || 60,
+            `"${(r.clientName || '').replace(/"/g, '""')}"`,
+            `"${(r.clientPhone || '').replace(/"/g, '""')}"`,
+            `"${(r.machineId || '').replace(/"/g, '""')}"`,
+            `"${(mach.name || r.machineName || '').replace(/"/g, '""')}"`,
+            `"${isComm ? 'COMISIONADA' : 'PROPIA'}"`,
+            `"${(mach.partnerName || '').replace(/"/g, '""')}"`,
+            isComm ? `${partnerPct}%` : '0%',
+            cost,
+            partnerPayout,
+            localNet,
+            `"${r.status || 'CONFIRMED'}"`,
+            `"${r.createdAt || ''}"`
+        ];
+    });
 
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Reporte_Rendimiento_${business?.id || 'Local'}_${filterStartDate}_al_${filterEndDate}.csv`);
+    link.setAttribute("download", `Reporte_Rendimiento_y_Comisiones_${business?.id || 'Local'}_${filterStartDate}_al_${filterEndDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    toast.success("Archivo CSV generado y descargado correctamente.");
+    toast.success("Archivo CSV generado con desglose de comisiones.");
 }

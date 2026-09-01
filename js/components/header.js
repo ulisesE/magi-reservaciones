@@ -7,6 +7,7 @@ import { openBookingModal } from '../views/clientBookingModal.js';
 import { openChangelogModal } from './changelogModal.js';
 import { modal } from './modal.js';
 import { toast } from './toast.js';
+import { navShortcutsManager } from '../core/navShortcutsManager.js';
 
 export function renderHeader(container) {
     const isLocalSelected = tenantManager.isLocalSelected;
@@ -18,6 +19,13 @@ export function renderHeader(container) {
     const isClientUser = authManager.isClientUser();
     const pendingCount = store.getPendingRequestsCount();
     const currentView = store.currentView;
+
+    const userId = currentUser ? (currentUser.id || currentUser.username || 'staff') : 'default';
+    const availableStaffModules = isStaff ? navShortcutsManager.getAvailableModules(isSuperAdmin) : [];
+    const pinnedShortcutIds = isStaff ? navShortcutsManager.getPinnedShortcuts(userId, isSuperAdmin) : [];
+
+    const pinnedModules = availableStaffModules.filter(m => pinnedShortcutIds.includes(m.id));
+    const unpinnedModules = availableStaffModules.filter(m => !pinnedShortcutIds.includes(m.id));
 
     // Si estamos en la pantalla de bienvenida (sin local seleccionado)
     if (!isLocalSelected && !isSuperAdmin) {
@@ -32,7 +40,7 @@ export function renderHeader(container) {
                             </div>
                             <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                                 <span>Plataforma Modular de Reservaciones</span>
-                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.5.0">v1.5.0</button>
+                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.6.0">v1.6.0</button>
                             </div>
                         </div>
                     </div>
@@ -50,8 +58,8 @@ export function renderHeader(container) {
                                 <button id="btn-logout" class="btn-xs btn-danger btn" style="margin-left:6px;" title="Cerrar sesión">Salir</button>
                             </div>
                         ` : `
-                            <button id="btn-open-login" class="btn btn-outline btn-sm">
-                                <span>🔐 Iniciar Sesión / Registro</span>
+                            <button id="btn-open-login" class="btn btn-primary btn-sm">
+                                <span>🔐 Acceso Staff</span>
                             </button>
                         `}
                     </div>
@@ -90,42 +98,88 @@ export function renderHeader(container) {
                         </div>
                         <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                             <span>${business?.city || 'Arcade'}</span>
-                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.5.0">v1.5.0</button>
+                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.6.0">v1.6.0</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Indicador de Local Bloqueado -->
-                <div class="header-tenant-selector" style="border-color:rgba(104, 242, 5, 0.4); background:rgba(104, 242, 5, 0.06);">
-                    <span style="font-size:0.85rem; font-weight:700; color:var(--color-neon-lime);">
-                        📍 Sala Activa: <strong>${business?.name || 'Local'}</strong>
-                    </span>
-                </div>
-
                 <!-- Control de Acceso y Acciones -->
-                <div class="header-actions">
+                <div class="header-actions" style="display:flex; align-items:center; gap:14px;">
+                    <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
+                        <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
+                    </button>
+
+                    <div class="header-action-divider"></div>
+
                     ${!currentUser ? `
-                        <button id="btn-open-login" class="btn btn-outline btn-sm" title="Iniciar sesión o registrarte como Jugador">
+                        <button id="btn-open-login" class="btn btn-outline btn-sm" title="Iniciar sesión o registrarte como Jugador" style="border-radius:var(--radius-full);">
                             <span class="login-action-label">🔐 Iniciar Sesión / Registro</span>
                         </button>
                     ` : `
-                        <div class="user-session-pill" style="display:flex; align-items:center; gap:8px; background:var(--bg-dark-700); padding:4px 10px; border-radius:var(--radius-full); border:1px solid var(--border-color);">
-                            <div class="user-session-clickable" id="btn-user-profile-header" style="display:flex; align-items:center; gap:8px; cursor:pointer;" title="Ver y editar mi perfil">
-                                <span style="font-size:1rem;">${currentUser.avatar || '👤'}</span>
-                                <div style="display:flex; flex-direction:column; line-height:1.1;">
-                                    <strong style="font-size:0.8rem; color:#fff;">${currentUser.name}</strong>
+                        <!-- Menú Desplegable de Usuario (Perfil y Salir) -->
+                        <div class="nav-dropdown-wrapper">
+                            <button class="user-session-pill nav-dropdown-btn" type="button" title="Opciones de cuenta y perfil" style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:1.15rem;">${currentUser.avatar || '👤'}</span>
+                                <div style="display:flex; flex-direction:column; line-height:1.1; text-align:left;">
+                                    <strong style="font-size:0.82rem; color:#fff;">${currentUser.name}</strong>
                                     <small style="font-size:0.68rem; color:${isClientUser ? 'var(--piu-cyan)' : (isSuperAdmin ? 'var(--color-neon-lime)' : 'var(--color-chartreuse)')}; font-weight:700;">
                                         ${isClientUser ? '🎮 JUGADOR' : (isSuperAdmin ? '👑 SUPERADMIN' : '🕹️ ENCARGADO')}
                                     </small>
                                 </div>
+                                <span class="dropdown-caret" style="font-size:0.75rem; margin-left:2px;">▾</span>
+                            </button>
+                            <div class="nav-dropdown-menu align-right" style="min-width:260px;">
+                                <div style="padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.08); margin-bottom:4px;">
+                                    <div style="display:flex; align-items:center; gap:10px;">
+                                        <span style="font-size:1.6rem;">${currentUser.avatar || '👤'}</span>
+                                        <div>
+                                            <strong style="color:#ffffff; font-size:0.92rem; display:block;">${currentUser.name}</strong>
+                                            <span style="color:${isClientUser ? 'var(--piu-cyan)' : 'var(--color-neon-lime)'}; font-size:0.75rem; font-weight:700;">
+                                                ${isClientUser ? 'Jugador Registrado' : (isSuperAdmin ? 'Superadministrador Global' : 'Encargado de Sucursal')}
+                                            </span>
+                                            ${currentUser.username ? `<span style="display:block; font-size:0.72rem; color:var(--text-muted); font-family:var(--font-mono);">@${currentUser.username}</span>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button class="dropdown-item" data-view="MY_PROFILE">
+                                    <span class="item-icon">👤</span>
+                                    <div class="item-info">
+                                        <strong>${isClientUser ? 'Mi Perfil & Pase Digital' : 'Mi Cuenta'}</strong>
+                                        <small>Ver estadísticas y reservaciones</small>
+                                    </div>
+                                </button>
+
+                                ${isStaff ? `
+                                    <button class="dropdown-item btn-customize-shortcuts" type="button">
+                                        <span class="item-icon">✏️</span>
+                                        <div class="item-info">
+                                            <strong>Personalizar Barra Staff...</strong>
+                                            <small>Elegir accesos directos visibles</small>
+                                        </div>
+                                    </button>
+                                ` : ''}
+
+                                <button class="dropdown-item btn-open-changelog-header" type="button">
+                                    <span class="item-icon">📜</span>
+                                    <div class="item-info">
+                                        <strong>Novedades (v1.6.0)</strong>
+                                        <small>Ver registro de cambios</small>
+                                    </div>
+                                </button>
+
+                                <div class="dropdown-divider"></div>
+
+                                <button class="dropdown-item" id="btn-logout" style="color:var(--color-neon-pink);">
+                                    <span class="item-icon">🚪</span>
+                                    <div class="item-info">
+                                        <strong style="color:var(--color-neon-pink);">Cerrar Sesión</strong>
+                                        <small>Salir de la cuenta en este equipo</small>
+                                    </div>
+                                </button>
                             </div>
-                            <button id="btn-logout" class="btn-xs btn-danger btn" style="margin-left:4px;" title="Cerrar sesión">Salir</button>
                         </div>
                     `}
-
-                    <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red">
-                        <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
-                    </button>
 
                     <button id="btn-mobile-nav" class="btn btn-outline btn-sm btn-mobile-nav" type="button" aria-label="Abrir menú de navegación" aria-expanded="false">
                         <span>☰</span>
@@ -133,71 +187,103 @@ export function renderHeader(container) {
                 </div>
             </div>
 
-            <!-- Barra de Pestañas y Vistas del Local -->
+            <!-- Barra de Navegación -->
             <div class="header-nav-row">
                 <nav class="view-nav-tabs">
-                    <!-- Cluster Principal (Vistas Públicas y Calendario) -->
                     <div class="nav-cluster">
-                        <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME" title="Página de inicio">
+                        <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME" title="Inicio">
                             <span class="tab-icon">🏠</span>
                             <span class="tab-text">Inicio</span>
                         </button>
-                        <button class="nav-tab ${currentView === 'DAY' ? 'active' : ''}" data-view="DAY" title="Vista por día y horarios">
-                            <span class="tab-icon">📅</span>
-                            <span class="tab-text">Día</span>
-                        </button>
-                        <button class="nav-tab ${currentView === 'WEEK' ? 'active' : ''}" data-view="WEEK" title="Vista semanal">
-                            <span class="tab-icon">📊</span>
-                            <span class="tab-text">Semana</span>
-                        </button>
-                        <button class="nav-tab ${currentView === 'MONTH' ? 'active' : ''}" data-view="MONTH" title="Vista mensual">
-                            <span class="tab-icon">🗓️</span>
-                            <span class="tab-text">Mes</span>
-                        </button>
-                        <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES" title="Catálogo de máquinas disponibles">
+
+                        <div class="nav-dropdown-wrapper">
+                            <button class="nav-tab nav-dropdown-btn ${['DAY', 'WEEK', 'MONTH'].includes(currentView) ? 'active' : ''}" type="button" title="Vistas de Calendario y Horarios">
+                                <span class="tab-icon">📅</span>
+                                <span class="tab-text">${currentView === 'WEEK' ? 'Semana' : currentView === 'MONTH' ? 'Mes' : 'Calendario'}</span>
+                                <span class="dropdown-caret">▾</span>
+                            </button>
+                            <div class="nav-dropdown-menu">
+                                <button class="dropdown-item ${currentView === 'DAY' ? 'active' : ''}" data-view="DAY">
+                                    <span class="item-icon">📅</span>
+                                    <div class="item-info">
+                                        <strong>Vista Día</strong>
+                                        <small>Cuadrícula de slots por máquina</small>
+                                    </div>
+                                </button>
+                                <button class="dropdown-item ${currentView === 'WEEK' ? 'active' : ''}" data-view="WEEK">
+                                    <span class="item-icon">📊</span>
+                                    <div class="item-info">
+                                        <strong>Vista Semana</strong>
+                                        <small>Disponibilidad y afluencia 7 días</small>
+                                    </div>
+                                </button>
+                                <button class="dropdown-item ${currentView === 'MONTH' ? 'active' : ''}" data-view="MONTH">
+                                    <span class="item-icon">🗓️</span>
+                                    <div class="item-info">
+                                        <strong>Vista Mes</strong>
+                                        <small>Calendario mensual global</small>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES">
                             <span class="tab-icon">🕹️</span>
                             <span class="tab-text">Máquinas</span>
                         </button>
 
-                        <!-- Perfil para usuarios autenticados -->
                         ${currentUser ? `
-                            <button class="nav-tab profile-tab ${currentView === 'MY_PROFILE' ? 'active' : ''}" data-view="MY_PROFILE" title="Mi Perfil, reservaciones y cuenta personal">
+                            <button class="nav-tab ${currentView === 'MY_PROFILE' ? 'active' : ''}" data-view="MY_PROFILE">
                                 <span class="tab-icon">👤</span>
                                 <span class="tab-text">${isClientUser ? 'Mi Perfil' : 'Mi Cuenta'}</span>
                             </button>
                         ` : ''}
                     </div>
 
-                    <!-- Cluster de Operación & Staff (Solo visible para Encargado y Superadmin) -->
+                    <!-- Cluster de Operación & Staff (Personalizable por el usuario) -->
                     ${isStaff ? `
                         <div class="nav-cluster staff-zone" title="Herramientas del Encargado / Staff">
-                            <button class="nav-tab staff-tab ${currentView === 'CLIENTS' ? 'active' : ''}" data-view="CLIENTS" title="Directorio, saldo y consumos de jugadores">
-                                <span class="tab-icon">👥</span>
-                                <span class="tab-text">Jugadores & Cuentas</span>
-                            </button>
-                            <button class="nav-tab staff-tab ${currentView === 'REQUESTS' ? 'active' : ''}" data-view="REQUESTS" title="Solicitudes pendientes de reservación">
-                                <span class="tab-icon">📥</span>
-                                <span class="tab-text">Solicitudes</span>
-                                ${pendingCount > 0 ? `<span class="badge-counter glow-red animate-bounce">${pendingCount}</span>` : ''}
-                            </button>
-                            <button class="nav-tab staff-tab ${currentView === 'ANALYTICS' ? 'active' : ''}" data-view="ANALYTICS" title="Rendimiento, ocupación y corte">
-                                <span class="tab-icon">📈</span>
-                                <span class="tab-text">Rendimiento</span>
-                            </button>
-                            <button class="nav-tab staff-tab ${currentView === 'BUSINESS' ? 'active' : ''}" data-view="BUSINESS" title="Configuración de la sucursal y marca">
-                                <span class="tab-icon">⚙️</span>
-                                <span class="tab-text">Ajustes</span>
-                            </button>
-                            <button class="nav-tab staff-tab ${currentView === 'CATALOGS' ? 'active' : ''}" data-view="CATALOGS" title="Catálogos de modelos y versiones">
-                                <span class="tab-icon">🗄️</span>
-                                <span class="tab-text">Catálogos</span>
-                            </button>
-                            ${isSuperAdmin ? `
-                                <button class="nav-tab staff-tab ${currentView === 'SUPERADMIN' ? 'active' : ''}" data-view="SUPERADMIN" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);" title="Panel Maestro Global">
-                                    <span class="tab-icon">👑</span>
-                                    <span class="tab-text">Global</span>
+                            ${pinnedModules.map(m => `
+                                <button class="nav-tab staff-tab ${currentView === m.viewId ? 'active' : ''}" data-view="${m.viewId}" title="${m.title}: ${m.description}">
+                                    <span class="tab-icon">${m.icon}</span>
+                                    <span class="tab-text">${m.title}</span>
+                                    ${m.hasCounter && pendingCount > 0 ? `<span class="badge-counter glow-red animate-bounce">${pendingCount}</span>` : ''}
                                 </button>
-                            ` : ''}
+                            `).join('')}
+
+                            ${unpinnedModules.length > 0 ? `
+                                <!-- Dropdown de Módulos Restantes y Personalización -->
+                                <div class="nav-dropdown-wrapper">
+                                    <button class="nav-tab staff-tab nav-dropdown-btn ${unpinnedModules.some(m => m.viewId === currentView) ? 'active' : ''}" type="button" title="Módulos de Gestión y Ajustes">
+                                        <span class="tab-icon">⚙️</span>
+                                        <span class="tab-text">${unpinnedModules.some(m => m.viewId === currentView) ? (unpinnedModules.find(m => m.viewId === currentView)?.title || 'Gestión') : 'Gestión'}</span>
+                                        <span class="dropdown-caret">▾</span>
+                                    </button>
+                                    <div class="nav-dropdown-menu align-right">
+                                        ${unpinnedModules.map(m => `
+                                            <button class="dropdown-item ${m.id === 'SUPERADMIN' ? 'superadmin-item' : ''} ${currentView === m.viewId ? 'active' : ''}" data-view="${m.viewId}">
+                                                <span class="item-icon">${m.icon}</span>
+                                                <div class="item-info">
+                                                    <strong ${m.id === 'SUPERADMIN' ? 'style="color:var(--color-neon-lime);"' : ''}>${m.title}</strong>
+                                                    <small>${m.description}</small>
+                                                </div>
+                                            </button>
+                                        `).join('')}
+                                        <div class="dropdown-divider"></div>
+                                        <button class="dropdown-item btn-customize-shortcuts" style="color:var(--color-neon-cyan);" title="Elegir qué botones ver fijos en la barra">
+                                            <span class="item-icon">✏️</span>
+                                            <div class="item-info">
+                                                <strong style="color:var(--color-neon-cyan);">Personalizar Barra...</strong>
+                                                <small>Elegir accesos directos visibles</small>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            ` : `
+                                <button class="nav-tab staff-tab btn-customize-shortcuts" title="Personalizar accesos directos de staff">
+                                    <span class="tab-icon">✏️</span>
+                                </button>
+                            `}
                         </div>
                     ` : ''}
                 </nav>
@@ -218,6 +304,15 @@ export function renderHeader(container) {
         tenantManager.clearSelectedLocal();
         store.setCurrentView('DAY');
         toast.info("Regresando a la selección de locales...");
+    });
+
+    // Botón para personalizar accesos directos
+    container.querySelectorAll('.btn-customize-shortcuts').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            container.querySelectorAll('.nav-dropdown-wrapper.open').forEach(w => w.classList.remove('open'));
+            openCustomizeShortcutsModal(userId, isSuperAdmin, container);
+        });
     });
 
     const loginBtn = container.querySelector('#btn-open-login');
@@ -258,16 +353,116 @@ export function renderHeader(container) {
         mobileNavBtn.querySelector('span').textContent = isOpen ? '✕' : '☰';
     });
 
-    const navTabs = container.querySelectorAll('.nav-tab');
-    navTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const view = tab.dataset.view;
-            navRow?.classList.remove('mobile-nav-open');
-            mobileNavBtn?.setAttribute('aria-expanded', 'false');
-            if (mobileNavBtn?.querySelector('span')) mobileNavBtn.querySelector('span').textContent = '☰';
-            store.setCurrentView(view);
+    // Toggle para dropdowns de navegación (Calendario y Gestión)
+    container.querySelectorAll('.nav-dropdown-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const wrapper = btn.closest('.nav-dropdown-wrapper');
+            const isOpen = wrapper.classList.contains('open');
+            container.querySelectorAll('.nav-dropdown-wrapper.open').forEach(w => w.classList.remove('open'));
+            if (!isOpen) {
+                wrapper.classList.add('open');
+            }
         });
     });
+
+    // Eventos en botones de navegación directa y elementos de menú desplegable
+    container.querySelectorAll('.nav-tab[data-view], .dropdown-item[data-view]').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const view = item.dataset.view;
+            if (view) {
+                container.querySelectorAll('.nav-dropdown-wrapper.open').forEach(w => w.classList.remove('open'));
+                navRow?.classList.remove('mobile-nav-open');
+                mobileNavBtn?.setAttribute('aria-expanded', 'false');
+                if (mobileNavBtn?.querySelector('span')) mobileNavBtn.querySelector('span').textContent = '☰';
+                store.setCurrentView(view);
+            }
+        });
+    });
+
+    // Cerrar dropdowns al hacer clic en cualquier parte fuera del header
+    document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+            container.querySelectorAll('.nav-dropdown-wrapper.open').forEach(w => w.classList.remove('open'));
+        }
+    });
+}
+
+/**
+ * Modal Interactivo: Personalizar Accesos Directos de la Barra de Staff
+ */
+export function openCustomizeShortcutsModal(userId, isSuperAdmin, headerContainer) {
+    const available = navShortcutsManager.getAvailableModules(isSuperAdmin);
+    const currentPinned = new Set(navShortcutsManager.getPinnedShortcuts(userId, isSuperAdmin));
+
+    const contentHtml = `
+        <div style="display:flex; flex-direction:column; gap:14px;">
+            <p style="font-size:0.88rem; color:var(--text-secondary); margin:0;">
+                Selecciona los módulos que deseas tener como <strong>accesos directos visibles</strong> en tu barra de herramientas. Los no seleccionados permanecerán accesibles dentro del desplegable <strong>"Gestión ▾"</strong>:
+            </p>
+
+            <div style="display:flex; flex-direction:column; gap:8px; max-height:340px; overflow-y:auto; padding:4px 2px;">
+                ${available.map(m => {
+                    const isChecked = currentPinned.has(m.id);
+                    return `
+                        <label class="shortcut-option-card" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; background:var(--bg-dark-800); border:1px solid ${isChecked ? 'var(--color-neon-lime)' : 'rgba(255,255,255,0.08)'}; border-radius:var(--radius-sm); cursor:pointer; transition:all 0.2s ease;">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <span style="font-size:1.4rem;">${m.icon}</span>
+                                <div>
+                                    <strong style="color:#ffffff; font-size:0.92rem; display:block;">${m.title}</strong>
+                                    <small style="color:var(--text-muted); font-size:0.75rem;">${m.description}</small>
+                                </div>
+                            </div>
+                            <input type="checkbox" class="shortcut-checkbox" value="${m.id}" ${isChecked ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:var(--color-neon-lime);">
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+
+            <div style="background:rgba(0,229,255,0.06); border-left:3px solid var(--piu-cyan); padding:8px 12px; border-radius:4px; font-size:0.78rem; color:var(--text-muted);">
+                💡 <strong>Consejo</strong>: Recomendamos fijar entre 3 y 4 accesos directos para mantener una navegación limpia y sin desplazamientos en cualquier pantalla.
+            </div>
+        </div>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-reset-shortcuts" style="margin-right:auto;">🔄 Restablecer Defaults</button>
+        <button type="button" class="btn btn-outline" id="btn-cancel-shortcuts">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-save-shortcuts">💾 Guardar Accesos</button>
+    `;
+
+    const modalEl = modal.open({
+        title: 'Personalizar Barra de Accesos Staff',
+        icon: '✏️',
+        contentHtml,
+        footerHtml,
+        maxWidth: '520px'
+    });
+
+    modalEl.querySelector('#btn-cancel-shortcuts').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-reset-shortcuts').onclick = () => {
+        navShortcutsManager.resetToDefaults(userId);
+        toast.info("Accesos directos restablecidos por defecto.");
+        modal.close();
+        if (headerContainer) renderHeader(headerContainer);
+    };
+
+    modalEl.querySelector('#btn-save-shortcuts').onclick = () => {
+        const checkedBoxes = modalEl.querySelectorAll('.shortcut-checkbox:checked');
+        const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
+
+        if (selectedIds.length === 0) {
+            toast.error("Debes seleccionar al menos 1 acceso directo para tu barra.");
+            return;
+        }
+
+        navShortcutsManager.savePinnedShortcuts(userId, selectedIds);
+        toast.success("Barra de accesos directos actualizada exitosamente.");
+        modal.close();
+        if (headerContainer) renderHeader(headerContainer);
+    };
 }
 
 /**

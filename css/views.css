@@ -2189,5 +2189,49 @@
     padding-top: 8px;
 }
 
+/* ==========================================================================
+   CUENTA FÁCIL & CAJA RÁPIDA (v1.6.0)
+   ========================================================================== */
+.accounts-view-wrapper {
+    padding-bottom: 40px;
+}
 
+.border-glow-red {
+    border-color: rgba(255, 46, 126, 0.5) !important;
+    box-shadow: 0 0 16px rgba(255, 46, 126, 0.2);
+}
 
+.debtor-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.debtor-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    border-color: var(--color-neon-pink);
+}
+
+.btn-add-pos-item {
+    transition: all 0.15s ease;
+}
+
+.btn-add-pos-item:hover {
+    background: rgba(0, 229, 255, 0.1) !important;
+    border-color: var(--color-neon-cyan) !important;
+    transform: scale(1.03);
+}
+
+.btn-add-pos-item:active {
+    transform: scale(0.97);
+}
+
+#pos-products-grid::-webkit-scrollbar,
+#pos-cart-items::-webkit-scrollbar {
+    width: 5px;
+}
+
+#pos-products-grid::-webkit-scrollbar-thumb,
+#pos-cart-items::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
