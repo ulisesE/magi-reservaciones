@@ -4,12 +4,13 @@ import { store } from '../core/store.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { authManager } from '../core/authManager.js';
 import { catalogsManager } from '../core/catalogsManager.js';
+import { accountManager } from '../core/accountManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { DAYS_OF_WEEK, format12Hour, timeToMinutes } from '../core/timeUtils.js';
 import { loyaltyManager } from '../core/loyaltyManager.js';
 
-let activeCatalogTab = 'FEATURES'; // 'FEATURES', 'RULES', 'VERSIONS'
+let activeCatalogTab = 'PRODUCTS'; // 'PRODUCTS', 'FEATURES', 'RULES', 'VERSIONS', 'REWARDS'
 
 export async function renderCatalogsManagementView(container) {
     const business = store.currentBusiness || tenantManager.getActiveBusiness();
@@ -17,6 +18,7 @@ export async function renderCatalogsManagementView(container) {
     const gameVersions = catalogsManager.getGameVersions();
     const features = await catalogsManager.getFeaturesByBusiness(business.id);
     const rewards = await loyaltyManager.getRewardsCatalog(business.id);
+    const products = await accountManager.getProducts(business.id);
     const isSuperAdmin = authManager.isSuperAdmin();
 
     container.innerHTML = `
@@ -25,12 +27,15 @@ export async function renderCatalogsManagementView(container) {
             <div class="view-header-bar">
                 <div class="header-left">
                     <h2 class="friendly-date-title">🗄️ Administración de Catálogos de la Sucursal</h2>
-                    <p class="subtitle-text">Configuración de accesorios de hardware, periféricos (Pantallas, AM.PASS, Audio) y horarios de <strong>${business.name}</strong></p>
+                    <p class="subtitle-text">Configuración de productos en venta, hardware, periféricos y horarios de <strong>${business.name}</strong></p>
                 </div>
             </div>
 
             <!-- Navegación de Pestañas de Catálogos -->
             <div class="requests-filter-bar" style="margin-bottom:20px;">
+                <button class="filter-tab ${activeCatalogTab === 'PRODUCTS' ? 'active' : ''}" data-cat-tab="PRODUCTS">
+                    <span>🛍️ Productos y Precios (${products.length})</span>
+                </button>
                 <button class="filter-tab ${activeCatalogTab === 'FEATURES' ? 'active' : ''}" data-cat-tab="FEATURES">
                     <span>🔌 Accesorios y Hardware (${features.length})</span>
                 </button>
@@ -47,7 +52,7 @@ export async function renderCatalogsManagementView(container) {
 
             <!-- Contenido de Pestaña -->
             <div id="catalog-tab-content">
-                ${renderCatalogContent(activeCatalogTab, features, gameVersions, businesses, business, isSuperAdmin, rewards)}
+                ${renderCatalogContent(activeCatalogTab, features, gameVersions, businesses, business, isSuperAdmin, rewards, products)}
             </div>
         </div>
     `;
@@ -57,6 +62,32 @@ export async function renderCatalogsManagementView(container) {
         tab.addEventListener('click', () => {
             activeCatalogTab = tab.dataset.catTab;
             renderCatalogsManagementView(container);
+        });
+    });
+
+    // ==========================================
+    // Eventos de Productos y Precios (Local)
+    // ==========================================
+    container.querySelector('#btn-add-product')?.addEventListener('click', () => {
+        openProductModal(business.id, null, container);
+    });
+
+    container.querySelectorAll('.btn-edit-product').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const prod = products.find(p => p.id === id);
+            if (prod) openProductModal(business.id, prod, container);
+        });
+    });
+
+    container.querySelectorAll('.btn-delete-product').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            if (confirm("¿Estás seguro de eliminar este producto del catálogo de la sala?")) {
+                await accountManager.deleteProduct(business.id, id);
+                toast.info("Producto eliminado del catálogo.");
+                renderCatalogsManagementView(container);
+            }
         });
     });
 
@@ -109,48 +140,43 @@ export async function renderCatalogsManagementView(container) {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
             const current = btn.dataset.current;
-            const nextStatus = current === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-            try {
-                await catalogsManager.updateFeature(business.id, id, { status: nextStatus });
-                toast.success(`Accesorio ${nextStatus === 'ACTIVE' ? 'activado' : 'desactivado'} para el catálogo de máquinas.`);
-                renderCatalogsManagementView(container);
-            } catch (e) {
-                toast.error(e.message);
-            }
+            await catalogsManager.toggleFeatureStatus(business.id, id, current);
+            toast.info("Estado del accesorio actualizado.");
+            renderCatalogsManagementView(container);
         });
     });
 
     container.querySelectorAll('.btn-delete-feature').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
-            if (confirm("¿Eliminar este accesorio/hardware del catálogo del local?")) {
+            if (confirm("¿Estás seguro de eliminar este componente del catálogo del local?")) {
                 await catalogsManager.deleteFeature(business.id, id);
-                toast.info("Accesorio eliminado del catálogo.");
+                toast.info("Accesorio eliminado.");
                 renderCatalogsManagementView(container);
             }
         });
     });
 
     // ==========================================
-    // Eventos de Versiones de Juego (Global)
+    // Eventos de Versiones de Software (Solo Superadmin)
     // ==========================================
     if (isSuperAdmin) {
-        container.querySelector('#btn-add-game-ver')?.addEventListener('click', () => {
+        container.querySelector('#btn-add-version')?.addEventListener('click', () => {
             openGameVersionModal(null, container);
         });
 
-        container.querySelectorAll('.btn-edit-game-ver').forEach(btn => {
+        container.querySelectorAll('.btn-edit-version').forEach(btn => {
             btn.addEventListener('click', () => {
                 const id = btn.dataset.id;
-                const version = catalogsManager.getGameVersions().find(v => v.id === id);
-                if (version) openGameVersionModal(version, container);
+                const v = gameVersions.find(gv => gv.id === id);
+                if (v) openGameVersionModal(v, container);
             });
         });
 
-        container.querySelectorAll('.btn-delete-game-ver').forEach(btn => {
+        container.querySelectorAll('.btn-delete-version').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const id = btn.dataset.id;
-                if (confirm("¿Eliminar esta versión de juego del catálogo maestro?")) {
+                if (confirm("⚠️ ¿Estás seguro de eliminar esta versión de juego del catálogo global?")) {
                     await catalogsManager.deleteGameVersion(id);
                     toast.info("Versión eliminada del catálogo.");
                     renderCatalogsManagementView(container);
@@ -165,7 +191,71 @@ export async function renderCatalogsManagementView(container) {
     });
 }
 
-function renderCatalogContent(tab, features, gameVersions, businesses, currentBusiness, isSuperAdmin, rewards = []) {
+function renderCatalogContent(tab, features, gameVersions, businesses, currentBusiness, isSuperAdmin, rewards = [], products = []) {
+    if (tab === 'PRODUCTS') {
+        return `
+            <div class="settings-card">
+                <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div class="title-with-icon">
+                        <span class="t-icon">🛍️</span>
+                        <div>
+                            <h3>Catálogo de Productos y Precios en Sala</h3>
+                            <small>Configura los artículos, bebidas, fichas y snacks con sus precios de venta en ${currentBusiness.name}</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm glow-red" id="btn-add-product">
+                        <span>➕ Registrar Nuevo Producto</span>
+                    </button>
+                </div>
+
+                <div class="catalogs-table-wrapper">
+                    <table class="catalogs-table">
+                        <thead>
+                            <tr>
+                                <th>Icono</th>
+                                <th>Producto / Artículo</th>
+                                <th>Categoría</th>
+                                <th>Precio Unitario</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${products.length === 0 ? `
+                                <tr>
+                                    <td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted);">
+                                        No hay productos registrados en este local. Haz clic en "➕ Registrar Nuevo Producto".
+                                    </td>
+                                </tr>
+                            ` : products.map(p => {
+                                const isActive = p.status === 'ACTIVE';
+                                return `
+                                    <tr>
+                                        <td style="font-size:1.6rem; text-align:center;">${p.icon || '🛍️'}</td>
+                                        <td><strong style="color:#ffffff; font-size:0.95rem;">${p.name}</strong></td>
+                                        <td><span class="badge badge-primary">${(p.category || 'otro').toUpperCase()}</span></td>
+                                        <td><strong class="highlight-gold" style="font-size:1.05rem; font-family:var(--font-mono);">${currentBusiness.currencySymbol || '$'}${Number(p.price).toFixed(2)}</strong></td>
+                                        <td>
+                                            <span class="badge ${isActive ? 'badge-success' : 'badge-danger'}">
+                                                ${isActive ? 'ACTIVO' : 'INACTIVO'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div style="display:flex; gap:6px;">
+                                                <button class="btn btn-outline btn-xs btn-edit-product" data-id="${p.id}">✏️ Editar</button>
+                                                <button class="btn btn-danger btn-xs btn-delete-product" data-id="${p.id}" title="Eliminar producto">🗑️</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
     if (tab === 'FEATURES') {
         return `
             <div class="settings-card">
@@ -941,3 +1031,111 @@ function openConfigureTiersModal(business, mainContainer) {
         }
     };
 }
+
+function openProductModal(businessId, product = null, mainContainer) {
+    const isEdit = !!product;
+    const PRODUCT_ICONS = ['🥤', '🍺', '🍿', '🍫', '🪙', '🕹️', '🏆', '🛍️', '⚡', '☕', '🧁', '📦'];
+
+    const contentHtml = `
+        <form id="form-product" class="cyber-form">
+            <div class="form-group">
+                <label><span class="neon-arrow">◆</span> Icono del Producto</label>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                    ${PRODUCT_ICONS.map(ic => `
+                        <button type="button" class="btn btn-outline btn-xs btn-prod-icon ${ic === (product?.icon || '🥤') ? 'active glow-red' : ''}" data-icon="${ic}" style="font-size:1.3rem; padding:4px 8px;">
+                            ${ic}
+                        </button>
+                    `).join('')}
+                </div>
+                <input type="hidden" id="prod-icon" value="${product ? product.icon : '🥤'}">
+            </div>
+
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="prod-name"><span class="neon-arrow">◆</span> Nombre del Producto / Artículo *</label>
+                    <input type="text" id="prod-name" class="cyber-input" value="${product ? product.name : ''}" placeholder="Ej. Boing Mango 500ml" required>
+                </div>
+                <div class="form-group">
+                    <label for="prod-category"><span class="neon-arrow">◆</span> Categoría *</label>
+                    <select id="prod-category" class="cyber-select">
+                        <option value="bebida" ${product?.category === 'bebida' ? 'selected' : ''}>🥤 Bebida / Hidratación</option>
+                        <option value="alimento" ${product?.category === 'alimento' ? 'selected' : ''}>🍿 Alimento / Snack</option>
+                        <option value="ficha" ${product?.category === 'ficha' ? 'selected' : ''}>🪙 Ficha / Token PIU</option>
+                        <option value="juego" ${product?.category === 'juego' ? 'selected' : ''}>🕹️ Tiempo de Juego / Reta</option>
+                        <option value="inscripcion" ${product?.category === 'inscripcion' ? 'selected' : ''}>🏆 Inscripción Torneo</option>
+                        <option value="producto" ${product?.category === 'producto' ? 'selected' : ''}>🛍️ Accesorio / AM.PASS / Merch</option>
+                        <option value="otro" ${product?.category === 'otro' ? 'selected' : ''}>📦 Otro / Varios</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row grid-2">
+                <div class="form-group">
+                    <label for="prod-price"><span class="neon-arrow">◆</span> Precio Unitario ($) *</label>
+                    <input type="number" id="prod-price" class="cyber-input" value="${product ? product.price : 20}" min="0" step="0.5" placeholder="20.00" required>
+                </div>
+                <div class="form-group">
+                    <label for="prod-status"><span class="neon-arrow">◆</span> Estado en Catálogo *</label>
+                    <select id="prod-status" class="cyber-select">
+                        <option value="ACTIVE" ${product?.status === 'ACTIVE' || !product ? 'selected' : ''}>🟢 Activo (Disponible para venta)</option>
+                        <option value="INACTIVE" ${product?.status === 'INACTIVE' ? 'selected' : ''}>⚪ Inactivo (Oculto)</option>
+                    </select>
+                </div>
+            </div>
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-prod">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-save-prod">💾 ${isEdit ? 'Guardar Cambios' : 'Registrar Producto'}</button>
+    `;
+
+    const modalEl = modal.open({
+        title: isEdit ? `Editar Producto: ${product.name}` : 'Registrar Producto en Sala',
+        icon: '🛍️',
+        contentHtml,
+        footerHtml,
+        maxWidth: '520px'
+    });
+
+    modalEl.querySelectorAll('.btn-prod-icon').forEach(btn => {
+        btn.onclick = () => {
+            modalEl.querySelectorAll('.btn-prod-icon').forEach(b => b.classList.remove('active', 'glow-red'));
+            btn.classList.add('active', 'glow-red');
+            modalEl.querySelector('#prod-icon').value = btn.dataset.icon;
+        };
+    });
+
+    modalEl.querySelector('#btn-cancel-prod').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-prod').onclick = async () => {
+        const name = modalEl.querySelector('#prod-name').value.trim();
+        const category = modalEl.querySelector('#prod-category').value;
+        const price = parseFloat(modalEl.querySelector('#prod-price').value) || 0;
+        const status = modalEl.querySelector('#prod-status').value;
+        const icon = modalEl.querySelector('#prod-icon').value || '🛍️';
+
+        if (!name) {
+            toast.error("El nombre del producto es obligatorio.");
+            return;
+        }
+
+        try {
+            await accountManager.saveProduct(businessId, {
+                ...(product ? { id: product.id } : {}),
+                name,
+                category,
+                price,
+                status,
+                icon
+            });
+
+            toast.success(isEdit ? `Producto "${name}" actualizado.` : `Producto "${name}" agregado al catálogo.`);
+            modal.close();
+            renderCatalogsManagementView(mainContainer);
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
+}
+

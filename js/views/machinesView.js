@@ -80,6 +80,21 @@ export function renderMachinesView(container) {
                                 <div class="mach-features-tags">
                                     ${(m.features || []).map(f => `<span class="feature-tag">⚡ ${f}</span>`).join('')}
                                 </div>
+
+                                ${isStaff ? `
+                                    <div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.1);">
+                                        ${m.ownershipType === 'COMMISSION' ? `
+                                            <div style="background:rgba(255,193,7,0.08); border:1px solid rgba(255,193,7,0.3); border-radius:4px; padding:4px 8px; font-size:0.75rem; color:#FFC107; display:flex; justify-content:space-between; align-items:center;">
+                                                <span>🤝 <strong>Comisión:</strong> ${m.partnerPercentage || 50}% (${m.partnerName || 'Socio'})</span>
+                                                <span style="color:var(--color-neon-lime); font-weight:700;">Local: ${100 - (m.partnerPercentage || 50)}%</span>
+                                            </div>
+                                        ` : `
+                                            <div style="background:rgba(104,242,5,0.06); border:1px solid rgba(104,242,5,0.2); border-radius:4px; padding:3px 8px; font-size:0.72rem; color:var(--color-neon-lime);">
+                                                🏢 <strong>Propiedad:</strong> 100% Local (Propia)
+                                            </div>
+                                        `}
+                                    </div>
+                                ` : ''}
                             </div>
 
                             ${isStaff ? `
@@ -273,6 +288,45 @@ async function openMachineFormModal(machine = null) {
                 <label for="mach-pads"><span class="neon-arrow">◆</span> Calibración de Sensores y Pads</label>
                 <textarea id="mach-pads" class="cyber-textarea" rows="2" placeholder="Ej. Sensores FSR nuevos, sensibilidad 4.5/5, barra reforzada...">${machine ? machine.padsCondition : ''}</textarea>
             </div>
+
+            <!-- Esquema de Propiedad y Comisión (Confidencial / Staff) -->
+            <div style="background:rgba(20, 24, 35, 0.85); border:1px solid rgba(255, 193, 7, 0.3); border-radius:var(--radius-sm); padding:14px; margin-top:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <label style="font-weight:700; color:#FFC107; margin:0; display:flex; align-items:center; gap:6px;">
+                        <span>🤝</span> Esquema de Propiedad y Comisión (Confidencial Locatario)
+                    </label>
+                    <small style="color:var(--text-muted); font-size:0.72rem;">Solo visible para el personal</small>
+                </div>
+
+                <div class="form-row grid-2">
+                    <div class="form-group">
+                        <label for="mach-ownership"><span class="neon-arrow">◆</span> Tipo de Posesión</label>
+                        <select id="mach-ownership" class="cyber-select">
+                            <option value="OWNED" ${(!machine || machine.ownershipType === 'OWNED') ? 'selected' : ''}>🏢 Propia (100% Ingresos para el Local)</option>
+                            <option value="COMMISSION" ${machine?.ownershipType === 'COMMISSION' ? 'selected' : ''}>🤝 Comisionada / Consignación (Reparto con Socio)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="wrap-partner-pct" style="${machine?.ownershipType === 'COMMISSION' ? '' : 'display:none;'}">
+                        <label for="mach-partner-pct"><span class="neon-arrow">◆</span> % Comisión del Socio Dueño</label>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <input type="number" id="mach-partner-pct" class="cyber-input" value="${machine ? (machine.partnerPercentage ?? 50) : 50}" min="1" max="99" style="width:85px; font-weight:bold; color:#FFC107;">
+                            <span style="font-weight:bold; color:#FFC107;">% Socio</span>
+                            <span id="label-local-pct" style="color:var(--color-neon-lime); margin-left:auto; font-weight:700; font-size:0.78rem;">Local: ${100 - (machine ? (machine.partnerPercentage ?? 50) : 50)}%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row grid-2" id="wrap-partner-info" style="${machine?.ownershipType === 'COMMISSION' ? '' : 'display:none;'}">
+                    <div class="form-group">
+                        <label for="mach-partner-name"><span class="neon-arrow">◆</span> Nombre del Socio / Operador</label>
+                        <input type="text" id="mach-partner-name" class="cyber-input" value="${machine?.partnerName || ''}" placeholder="Ej. Pedro Gómez / Arcade Mex">
+                    </div>
+                    <div class="form-group">
+                        <label for="mach-partner-phone"><span class="neon-arrow">◆</span> Teléfono / Contacto de Liquidación</label>
+                        <input type="text" id="mach-partner-phone" class="cyber-input" value="${machine?.partnerPhone || ''}" placeholder="Ej. 5512345678 / Cuenta Bancaria">
+                    </div>
+                </div>
+            </div>
         </form>
     `;
 
@@ -288,7 +342,27 @@ async function openMachineFormModal(machine = null) {
         icon: '🕹️',
         contentHtml,
         footerHtml,
-        maxWidth: '580px'
+        maxWidth: '600px'
+    });
+
+    // Toggle dinámico de campos de comisión
+    const ownershipSelect = modalEl.querySelector('#mach-ownership');
+    const wrapPartnerPct = modalEl.querySelector('#wrap-partner-pct');
+    const wrapPartnerInfo = modalEl.querySelector('#wrap-partner-info');
+    const partnerPctInput = modalEl.querySelector('#mach-partner-pct');
+    const localPctLabel = modalEl.querySelector('#label-local-pct');
+
+    ownershipSelect?.addEventListener('change', (e) => {
+        const isComm = e.target.value === 'COMMISSION';
+        wrapPartnerPct.style.display = isComm ? '' : 'none';
+        wrapPartnerInfo.style.display = isComm ? '' : 'none';
+    });
+
+    partnerPctInput?.addEventListener('input', (e) => {
+        let val = parseInt(e.target.value) || 0;
+        if (val < 0) val = 0;
+        if (val > 100) val = 100;
+        if (localPctLabel) localPctLabel.textContent = `Local: ${100 - val}%`;
     });
 
     modalEl.querySelector('#btn-cancel-mach').onclick = () => modal.close();
@@ -303,6 +377,12 @@ async function openMachineFormModal(machine = null) {
         const imageUrl = modalEl.querySelector('#mach-img').value.trim() || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80';
         const padsCondition = modalEl.querySelector('#mach-pads').value.trim();
 
+        // Datos de propiedad y comisiones
+        const ownershipType = modalEl.querySelector('#mach-ownership')?.value || 'OWNED';
+        const partnerPercentage = ownershipType === 'COMMISSION' ? (parseFloat(modalEl.querySelector('#mach-partner-pct')?.value) || 50) : 0;
+        const partnerName = ownershipType === 'COMMISSION' ? modalEl.querySelector('#mach-partner-name')?.value.trim() : '';
+        const partnerPhone = ownershipType === 'COMMISSION' ? modalEl.querySelector('#mach-partner-phone')?.value.trim() : '';
+
         // Obtener accesorios marcados
         const selectedFeatures = [];
         modalEl.querySelectorAll('.mach-feat-checkbox:checked').forEach(cb => {
@@ -315,15 +395,16 @@ async function openMachineFormModal(machine = null) {
         }
 
         try {
+            const machineData = {
+                name, model, version, hourlyRate, hourlyRate2P, status, imageUrl, padsCondition, features: selectedFeatures,
+                ownershipType, partnerPercentage, partnerName, partnerPhone
+            };
+
             if (isEdit) {
-                await store.updateMachine(machine.id, {
-                    name, model, version, hourlyRate, hourlyRate2P, status, imageUrl, padsCondition, features: selectedFeatures
-                });
+                await store.updateMachine(machine.id, machineData);
                 toast.success("Máquina actualizada correctamente.");
             } else {
-                await store.addMachine({
-                    name, model, version, hourlyRate, hourlyRate2P, status, imageUrl, padsCondition, features: selectedFeatures
-                });
+                await store.addMachine(machineData);
                 toast.success("Nueva máquina registrada en el catálogo.");
             }
             modal.close();

@@ -4,7 +4,31 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## Funcionalidades recientes y optimizaciones (v1.5.0)
+## Funcionalidades recientes y optimizaciones (v1.6.0)
+
+### 💳 Módulo "Cuenta Fácil" & Flujo de Caja
+* **KPIs de Caja en Tiempo Real**: 💰 *Por Cobrar General* (deuda acumulada de la sala), 👥 *Clientes Deudores* (conteo de cuentas con adeudo) y 🛒 *Total Venta Fiada* (monto histórico de fiados).
+* **Directorio de Cuentas por Cobrar**: Tarjetas para cada cliente con saldo pendiente con accesos de 1 clic: `➕ Cargar`, `💵 Liquidar` y `📜 Ver Cuenta`.
+* **Terminal POS Multi-Producto / Cobro Rápido**:
+  * Buscador predictivo inteligente con prioridad estricta (`@username` ➔ `Nombre` ➔ `Teléfono`) y tolerancia a errores tipográficos.
+  * Fallback automático para registrar ventas mostrador a clientes no registrados con su nombre personalizado.
+  * Selector interactivo de productos del catálogo con botones de incremento/decremento **`+` / `-`**.
+  * Botón **"➕ Otro Concepto"** para ingresar conceptos libres con precios manuales.
+  * Registro como *⏳ Cargar a la Cuenta (Fiado)* o *🟢 Pagado al Momento (Contado)*.
+* **Panel de Últimos Movimientos**:
+  * Registro cronológico con fecha y hora exacta (`HH:mm`), cliente, detalle desglosado con cantidades y emojis (ej. *Boing Mango x2 ($40), Cerveza Corona x1 ($35)*), total y badge de estado.
+  * **Filtro Rápido por Cliente**: Desplegable para auditar las transacciones de un jugador específico en un solo clic.
+  * Filtros por periodo (*Hoy*, *Esta semana*, *Este mes*, *Histórico*) y estado.
+  * Botón de cobro express (`💵`) y botón de eliminación física permanente en Firestore (`🗑️`).
+
+### 🛍️ Catálogo de Productos y Precios en Sala
+* **Gestión de Artículos por Sucursal**: Pestaña dedicada en Catálogos para dar de alta, editar y eliminar bebidas, botanas, fichas, pases AM.PASS, tiempo libre e inscripciones.
+* **Aislamiento Confidencial Multi-Tenant**: Cada local posee su propio catálogo, precios y movimientos totalmente aislados en Firestore (`piu_products`).
+* **Arrastre Continuo de Deudas**: Los saldos por cobrar se arrastran automáticamente entre días con auditoría de fecha y hora fidedigna.
+
+---
+
+## Funcionalidades de Versiones Anteriores (v1.5.0)
 
 ### 💳 Fase 2: Cuenta y Consumo del Jugador
 * **Registro de Consumos Express**: Permite al encargado registrar compras y consumos en mostrador sin requerir una reservación previa asociada.
@@ -18,6 +42,12 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 * **Sanitización de Sesión**: Eliminación de credenciales sensibles de la memoria y caché del cliente.
 * **Restablecimiento de PIN por Encargados**: Permite al encargado asignar un nuevo PIN temporal a los jugadores que olvidaron su clave.
 * **Reglas de Seguridad de Firestore**: Políticas de control de acceso por colección y registros de auditoría inmutables.
+
+### 🤝 Esquema Confidencial de Máquinas en Comisión y Reparto
+* **Gestión de Propiedad por Gabinete**: Configuración exclusiva para personal de máquinas propias (100% ingresos) o comisionadas (% Socio, nombre de operador y teléfono).
+* **Privacidad Total**: Oculto completamente a los clientes; solo el encargado o superadmin visualizan estos datos internos.
+* **Reparto Financiero en Dashboard**: Cálculo automático de Facturación Bruta, Pago a Socios y Ganancia Neta para el Local.
+* **Liquidación y Exportación**: Tabla de desglose por máquina y reportes CSV listos para entregar cuentas a socios operadores.
 
 ### 🎨 Rediseño Consolidado de UI / UX
 * **Menú del Header Agrupado**: Navegación dividida en 2 clusters limpios (Público/Calendarios vs Operación Staff).

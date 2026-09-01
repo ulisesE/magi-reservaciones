@@ -85,7 +85,8 @@ export const COLLECTIONS = {
     LOYALTY_REWARDS: `${FIRESTORE_PREFIX}_loyalty_rewards`,
     REDEMPTIONS: `${FIRESTORE_PREFIX}_redemptions`,
     PLAYER_ACCOUNTS: `${FIRESTORE_PREFIX}_player_accounts`,
-    CONSUMPTIONS: `${FIRESTORE_PREFIX}_consumptions`
+    CONSUMPTIONS: `${FIRESTORE_PREFIX}_consumptions`,
+    PRODUCTS: `${FIRESTORE_PREFIX}_products`
 };
 
 export { 

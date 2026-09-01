@@ -384,7 +384,7 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                             <span>Desactivar el botón "Cambiar de Local" GLOBALMENTE (Bloquear navegación en todas las sucursales)</span>
                         </label>
                         <small style="display:block; margin-top:6px; color:var(--text-muted); font-size:0.78rem; line-height:1.4;">
-                            💡 <em>Si se activa, el botón "Cambiar de Local" se ocultará en todas las sucursales para clientes e invitados, forzándolos a permanecer en la sucursal activa. El Superadmin siempre podrá verlo para no perder acceso.</em>
+                            💡 <em>Si se activa, el botón "Cambiar de Local" se ocultará en todas las sucursales para clientes, invitados y locatarios, forzándolos a permanecer en la sucursal activa. Los Superusuarios siempre podrán verlo para no perder acceso ni control.</em>
                         </small>
                     </div>
                 </div>
