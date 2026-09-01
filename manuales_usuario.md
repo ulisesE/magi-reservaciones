@@ -23,11 +23,13 @@ Este documento está estructurado para detallar el flujo de trabajo, responsabil
 | **Configurar marca, horario y costos del local** | Si | Si | No | No |
 | **Configurar modo de lealtad (Consumo vs Visitas)** | Si | Si | No | No |
 | **Consultar Dashboard y Analítica de Rendimiento** | Si | Si | No | No |
+| **💳 Módulo Cuenta Fácil (Caja, POS y Cobros)** | Si | Si | No | No |
+| **🛍️ Catálogo de Productos y Precios del Local** | Si | Si | No | No |
 | **Aprobar, rechazar o reprogramar reservas** | Si | Si | No | No |
 | **Crear reservas directas en mostrador** | Si | Si | No | No |
 | **Registrar y editar clientes locales** | Si | Si (Paginado) | Si (Propio perfil) | No |
 | **Ver datos sensibles (teléfono/correo) de otros** | Si | Si | No (Privado) | No |
-| **Consultar historial personal y estadísticas** | No | No | Si (Pass QR) | No |
+| **Consultar historial personal y deudas propias** | No | No | Si (Pass QR) | No |
 | **Exportar reportes de negocio en CSV** | Si | Si | No | No |
 | **Ver disponibilidad en tiempo real (Día/Sem/Mes)**| Si | Si | Si | Si |
 | **Enviar solicitud de reservación en línea** | Si | Si | Si (Auto-llenado) | Si (Llenado manual) |
@@ -151,7 +153,39 @@ Módulo analítico en tiempo real diseñado para que el locatario y su personal 
 4. **Auditoría y Exportación**:
    * **👑 Top Clientes**: Ranking con podio (🥇, 🥈, 🥉) de los jugadores más fieles, detallando sus horas jugadas e inversión económica.
    * **🕹️ Detalle de Ocupación**: Métricas individuales por máquina (horas, facturación y porcentaje de utilización).
-   * **📥 Exportación a CSV**: Descarga instantánea de todas las reservaciones del periodo en formato `.csv` compatible con Excel y Google Sheets.
+### 💳 Módulo "Cuenta Fácil" & Flujo de Caja (Pestaña "Cuenta Fácil")
+Módulo financiero y punto de venta express diseñado para registrar consumos de mostrador, llevar el control de deudas arrastradas (fiado) y administrar los cobros en sala:
+
+1. **KPIs Hero de Caja en Tiempo Real**:
+   * 💰 **Por Cobrar General**: Muestra el total acumulado de deudas que los jugadores adeudan a la sucursal. Se actualiza de inmediato con cada compra o abono.
+   * 👥 **Clientes Deudores**: Contador en vivo del número de clientes con saldo pendiente de pago.
+   * 🛒 **Total Venta Fiada**: Monto total acumulado de todas las ventas que se han despachado a crédito en el local.
+2. **Directorio de Cuentas por Cobrar**:
+   * Tarjetas HUD personalizadas para cada jugador que adeuda saldo con su Nombre, GamerTag (`@username`), teléfono y saldo pendiente.
+   * **Acciones Rápidas en Tarjeta**:
+     * **`➕ Cargar`**: Abre la terminal de venta con el jugador preseleccionado.
+     * **`💵 Liquidar`**: Despliega el modal de cobro directo con el saldo total pendiente prellenado.
+     * **`📜 Ver Cuenta`**: Abre el estado de cuenta histórico con el total consumido, total abonado y tabla de transacciones.
+3. **Terminal POS Multi-Producto / Venta Rápida**:
+   * **Buscador Predictivo Priorizado**:
+     * 🥇 **Prioridad 1**: Búsqueda inmediata por `@username` / GamerTag.
+     * 🥈 **Prioridad 2**: Búsqueda por Nombre o Apellidos.
+     * 🥉 **Prioridad 3**: Búsqueda por dígitos del teléfono.
+     * **Fallback Automático**: Si el cliente no está en el catálogo, permite ingresar cualquier nombre libre (ej. *"Don Pepe"*) y registrar la venta al mostrador a su nombre sin bloquear la operación.
+   * **Carrito Reactivo con Controles `+` y `-`**: Permite elegir artículos del catálogo del local y ajustar sus cantidades con subtotal dinámico.
+   * **Botón "➕ Otro Concepto"**: Permite agregar conceptos libres no listados en catálogo con precio editable.
+   * **Tipo de Venta**: Se puede registrar como *⏳ Cargar a la Cuenta (Fiado / Pendiente)* o como *🟢 Pagado al Momento (Contado)*.
+4. **Panel de Últimos Movimientos**:
+   * Tabla con Fecha/Hora fidedigna (`HH:mm`), Cliente, **Detalle de productos y cantidades** (ej. *Boing Mango x2 ($40), Cerveza Corona x1 ($35)*), Total y Estado (*Fiado*, *Pagado*, *Abono*, *Anulado*).
+   * **Filtro Rápido por Cliente**: Desplegable para auditar las compras de un jugador específico en 1 solo clic.
+   * Filtros por periodo (*Hoy*, *Esta semana*, *Este mes*, *Todo*) y por estado.
+   * **Botón 💵 Cobrar**: Permite saldar consumos fiados.
+   * **Botón 🗑️ Eliminar**: Elimina físicamente la transacción de Firestore (`deleteDoc`) y recalcula el saldo contable en tiempo real.
+
+### 🛍️ Catálogo de Productos y Precios (Pestaña "Catálogos" ➔ "Productos")
+Permite a la sucursal definir su inventario de artículos a la venta (Bebidas, Botanas, Fichas, Tiempo Libre de Máquina, AM.PASS, Inscripciones a Torneos, etc.):
+* **Campos del Producto**: Nombre, Categoría (*Bebida, Alimento, Ficha, Juego, Inscripción, Producto u Otro*), Icono Emoji representativo, Precio Unitario ($) y Estado (*Activo / Inactivo*).
+* **Aislamiento Confidencial Multi-Tenant**: Cada local administra sus propios productos y precios; ninguna otra sucursal puede consultar ni modificar esta información.
 
 ### 📥 Control de Solicitudes (Menú "Bandeja")
 La bandeja está dividida por estados para facilitar la atención rápida:

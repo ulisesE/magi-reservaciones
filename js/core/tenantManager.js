@@ -117,6 +117,7 @@ class TenantManager {
         this.isLocalSelected = false; // Controla si el usuario ya eligió local o debe ver la pantalla de selección inicial
         this.listeners = [];
         this.unsubscribeBusinesses = null;
+        this.unsubscribeGlobalConfig = null;
         this.disableChangeLocalGlobally = false;
     }
 
@@ -124,27 +125,39 @@ class TenantManager {
         let loaded = [];
         let loadedFromFirestore = false;
 
-        // Cargar Configuración Global
-        this.disableChangeLocalGlobally = false;
+        // 1. Cargar Configuración Global (Firestore es el Mandante)
+        const localConfig = localStorage.getItem('piu_global_config_v1');
+        if (localConfig) {
+            try {
+                const parsed = JSON.parse(localConfig);
+                this.disableChangeLocalGlobally = !!parsed.disableChangeLocalGlobally;
+            } catch (e) {}
+        }
+
         if (isFirebaseAvailable && db) {
             try {
                 const docSnap = await getDoc(doc(db, 'piu_system_settings', 'global_config'));
                 if (docSnap.exists()) {
                     this.disableChangeLocalGlobally = !!docSnap.data().disableChangeLocalGlobally;
+                    localStorage.setItem('piu_global_config_v1', JSON.stringify({
+                        disableChangeLocalGlobally: this.disableChangeLocalGlobally
+                    }));
                 }
             } catch (err) {
                 console.warn("Error cargando config global de Firebase:", err);
             }
-        }
-        
-        const localConfig = localStorage.getItem('piu_global_config_v1');
-        if (localConfig) {
-            try {
-                const parsed = JSON.parse(localConfig);
-                if (!isFirebaseAvailable || this.disableChangeLocalGlobally === undefined) {
-                    this.disableChangeLocalGlobally = !!parsed.disableChangeLocalGlobally;
+
+            // Suscripción reactiva en tiempo real a la configuración global
+            this.unsubscribeGlobalConfig?.();
+            this.unsubscribeGlobalConfig = onSnapshot(doc(db, 'piu_system_settings', 'global_config'), (snapshot) => {
+                if (snapshot.exists()) {
+                    this.disableChangeLocalGlobally = !!snapshot.data().disableChangeLocalGlobally;
+                    localStorage.setItem('piu_global_config_v1', JSON.stringify({
+                        disableChangeLocalGlobally: this.disableChangeLocalGlobally
+                    }));
+                    this.notify();
                 }
-            } catch (e) {}
+            }, (error) => console.warn('Error sincronizando config global:', error));
         }
 
         if (isFirebaseAvailable && db) {
@@ -351,7 +364,7 @@ class TenantManager {
     }
 
     /**
-     * Regresar al Index para cambiar de local (Bloqueado para encargados)
+     * Regresar al Index para cambiar de local
      */
     clearSelectedLocal() {
         const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
@@ -572,7 +585,7 @@ class TenantManager {
                 await setDoc(doc(db, 'piu_system_settings', 'global_config'), {
                     disableChangeLocalGlobally: this.disableChangeLocalGlobally,
                     updatedAt: new Date().toISOString()
-                });
+                }, { merge: true });
             } catch (e) {
                 console.warn("Error guardando config global en Firebase:", e);
             }

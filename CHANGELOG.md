@@ -6,6 +6,40 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.6.0] - 2026-09-01
+
+### 🚀 Nuevas Características
+- **Pantalla y Módulo "Cuenta Fácil" (`js/views/accountsView.js`)**:
+  - **KPIs Hero de Caja en Tiempo Real**:
+    - 💰 **Por Cobrar General**: Deuda total acumulada y arrastrada en la sala.
+    - 👥 **Clientes Deudores**: Conteo de cuentas activas con saldo pendiente.
+    - 🛒 **Total Venta Fiada**: Monto total acumulado de consumos registrados a crédito en el local.
+  - **Directorio de Cuentas por Cobrar**:
+    - Tarjetas HUD para cada cliente deudor con su nombre, GamerTag (`@username`), teléfono, saldo adeudado y botones de acción rápida (`➕ Cargar`, `💵 Liquidar`, `📜 Ver Cuenta`).
+  - **Terminal POS Multi-Producto / Cobro Rápido**:
+    - **Buscador Predictivo con Prioridad Estricta**: Jerarquía de búsqueda optimizada (1° `@username` / GamerTag, 2° Nombre completo, 3° Teléfono) con tolerancia a errores tipográficos, acentos y mayúsculas.
+    - **Fallback Dinámico a Venta Mostrador**: Permite escribir cualquier nombre libre (ej. *"Don Pepe"*) para registrar ventas al público general sin estar registrado en el catálogo.
+    - Buscador reactivo de productos del catálogo.
+    - Carrito de compra con controles de cantidad **`+` y `-`** y subtotal dinámico.
+    - Botón **"➕ Otro Concepto"** para ingresar cualquier concepto personalizado no listado en catálogo con su precio libre.
+    - Registro como *⏳ Cargar a la Cuenta (Fiado / Pendiente)* o *🟢 Pagado al Momento (Contado)*.
+  - **Panel de Últimos Movimientos**:
+    - Tabla cronológica completa con fecha y hora exacta (`HH:mm`), cliente, **detalle de productos y cantidades** (ej. *Boing Mango x2, Cerveza x1*), total y estado.
+    - **Filtro interactivo por cliente**: Desplegable para auditar las transacciones de un jugador específico en 1 clic.
+    - Filtros por periodo (*Hoy*, *Esta semana*, *Este mes*, *Histórico*) y estado (*Pagados*, *Fiados*, *Abonos*, *Anulados*).
+    - Acciones de liquidación de adeudos con 1 clic (`💵`) y botón de **eliminación permanente de la base de datos** (`🗑️` con `deleteDoc` y recálculo automático de saldo).
+
+- **Catálogo de Productos y Precios (`js/views/catalogsManagementView.js`)**:
+  - Nueva pestaña **"🛍️ Productos y Precios"** en el módulo de Catálogos de la sucursal.
+  - CRUD completo para registrar artículos de venta (Boing, Coca-Cola, Cerveza, Fichas, Snacks, etc.) con categoría, icono emoji, precio unitario y estado.
+  - Almacenado en tiempo real en Firestore (`piu_products`).
+
+- **Aislamiento Multi-Tenant y Confidencialidad por Sucursal**:
+  - Todos los productos, consumos, deudas, abonos y movimientos están estrictamente aislados por `businessId`. Ningún local puede ver los precios, cuentas ni transacciones de otra sucursal.
+  - Arrastre continuo de deudas a través de los días con fecha y hora fidedignas en cada registro.
+
+---
+
 ## [1.5.0] - 2026-08-25
 
 ### 🚀 Nuevas Características
@@ -32,10 +66,31 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
   - Restablecimiento seguro de PIN temporal para jugadores directamente desde el formulario de edición del encargado.
   - Reglas de seguridad de Firestore con inmutabilidad para registros de auditoría (`piu_audit_logs`).
 
+- **Esquema Confidencial de Máquinas en Comisión y Reparto de Ingresos (`js/views/tenantAnalyticsView.js` y `js/views/machinesView.js`)**:
+  - Configuración de propiedad por máquina exclusiva para staff: `🏢 Propia (100%)` o `🤝 Comisionada / Consignación` (% Socio, nombre de operador y datos de liquidación).
+  - Privacidad total: Los clientes y jugadores no tienen acceso ni visibilidad sobre qué máquinas son comisionadas o los porcentajes de reparto.
+  - Métricas financieras en el Dashboard de Rendimiento:
+    - 💰 **Facturación Bruta**: Total recaudado en el local.
+    - 🤝 **Pago a Socios Operadores**: Monto total a transferir por concepto de comisiones.
+    - 🏢 **Ingreso Neto del Local**: Ganancia neta libre para la sala.
+  - Tabla desglosada por máquina con columnas de ocupación, facturación bruta, comisión a socio y neto local.
+  - Exportación en **CSV** con desglose completo de comisiones para entregar cuentas a socios.
+
 - **Rediseño del Menú del Header y Tarjetas de Jugador**:
   - Reorganización de la barra de navegación en 2 clusters limpios (Público/Calendarios vs Operación Staff) reduciendo la dispersión de botones.
   - Cabecera móvil en 2 renglones dedicados (Renglón 1: Marca/Local; Renglón 2: Usuario, botón Reservar y menú ☰) evitando elementos encimados.
   - Tarjetas de Jugador rediseñadas como **VIP Gamer Pass** con HUD de 3 métricas (Saldo/Deuda, Lealtad, Reservas), 2 botones primarios (`➕ Consumo`, `💳 Cuenta`) y barra de herramientas inferior.
+
+### 🛠️ Correcciones y Mejoras
+- **Control Universal del Botón "Cambiar de Local" (`js/components/header.js`)**:
+  - Corrección de la visibilidad del botón para que al activar el bloqueo (global o por sucursal), se oculte para **todos** los usuarios (clientes, invitados y encargados/locatarios), manteniéndose accesible **exclusivamente para Superusuarios (Superadmin)**.
+- **Sincronización Reactiva en Tiempo Real (`js/core/tenantManager.js`)**:
+  - Suscripción con `onSnapshot` sobre la configuración global en Firestore (`piu_system_settings/global_config`), actualizando la interfaz al instante en todos los dispositivos conectados sin necesidad de recargar la página.
+- **Firestore como Mandante Único y Blindaje del Superusuario (`js/core/authManager.js`)**:
+  - Carga fidedigna y obligatoria de `piu_staff_users` desde Firestore en el inicio de la aplicación (`init`).
+  - Listener en tiempo real (`onSnapshot`) para la colección de personal y superadministrador.
+  - Protección de credenciales personalizadas del Superusuario (`megajefelink` y su PIN/hash) contra sobreescrituras accidentales por semillas por defecto (`DEFAULT_STAFF_USERS`).
+  - Escritura garantizada en Firestore mediante `setDoc` con opción `merge: true`.
 
 ---
 

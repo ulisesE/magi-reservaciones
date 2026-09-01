@@ -4,10 +4,38 @@ import { modal } from './modal.js';
 
 export const CHANGELOG_DATA = [
     {
-        version: 'v1.5.0',
-        date: '25 de Agosto de 2026',
+        version: 'v1.6.0',
+        date: '01 de Septiembre de 2026',
         badge: '🚀 Versión Actual',
         isCurrent: true,
+        highlights: [
+            {
+                title: '💳 Módulo y Pantalla Dedicada: Cuenta Fácil & Caja',
+                icon: '🛒',
+                items: [
+                    'Pantalla centralizada con KPIs Hero de caja: Por Cobrar General, Clientes Deudores y Total Venta Fiada.',
+                    'Directorio de cuentas por cobrar con tarjetas de jugadores deudores y accesos rápidos de cobro y abono.',
+                    'Terminal POS multi-producto con buscador interactivo, controles +/- de cantidad y botón de "Otro Concepto".',
+                    'Historial de movimientos con detalle desglosado de productos y cantidades (ej. Boing Mango x2, Cerveza x1).',
+                    'Filtro dinámico por cliente para auditar movimientos individuales en un clic, además de filtros por fecha y estado.',
+                    'Registro con fecha y hora exacta, arrastre continuo de saldos adeudados entre días y aislamiento multi-tenant confidencial por local.'
+                ]
+            },
+            {
+                title: '🛍️ Catálogo de Productos y Precios en Sala',
+                icon: '📦',
+                items: [
+                    'Nueva pestaña en Catálogos para dar de alta, editar y eliminar productos propios del local con precio e icono.',
+                    'Sincronización en tiempo real y persistencia garantizada en Firestore (piu_products) con semillas predeterminadas.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.5.0',
+        date: '25 de Agosto de 2026',
+        badge: 'Estable',
+        isCurrent: false,
         highlights: [
             {
                 title: '💳 Fase 2: Cuenta y Consumo del Jugador',
@@ -38,6 +66,16 @@ export const CHANGELOG_DATA = [
                     'Menú del Header agrupado en 2 clusters limpios (Público/Calendarios vs Operación Staff).',
                     'Cabecera móvil inteligente dividida en 2 renglones dedicados (Renglón 1: Marca/Local; Renglón 2: Usuario, Reserva y Menú ☰).',
                     'Tarjetas de Jugador rediseñadas estilo VIP Gamer Pass con HUD de 3 métricas y jerarquía clara de acciones.'
+                ]
+            },
+            {
+                title: '🤝 Esquema Confidencial de Máquinas en Comisión',
+                icon: '💼',
+                items: [
+                    'Configuración de posesión por gabinete: Propia (100%) vs Comisionada con % y datos del socio operador.',
+                    'Privacidad estricta: visible únicamente para personal autenticado.',
+                    'Cálculo automático de Facturación Bruta, Pago a Socios y Ganancia Neta para el local en el panel de Rendimiento.',
+                    'Exportación de reportes CSV con desglose detallado para liquidación de cuentas.'
                 ]
             }
         ]

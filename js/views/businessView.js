@@ -457,10 +457,10 @@ export function renderBusinessView(container) {
                             <div class="form-group" style="margin-bottom:0;">
                                 <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700;">
                                     <input type="checkbox" id="biz-disable-change-local" style="width:18px; height:18px; accent-color:var(--color-neon-lime); cursor:pointer;" ${business.disableChangeLocal ? 'checked' : ''}>
-                                    <span>Bloquear Navegación a esta Sucursal (Ocultar botón "Cambiar de Local" a clientes e invitados)</span>
+                                    <span>Bloquear Navegación a esta Sucursal (Ocultar botón "Cambiar de Local" a clientes, invitados y locatarios)</span>
                                 </label>
                                 <small style="display:block; margin-top:6px; color:var(--text-muted); font-size:0.78rem; line-height:1.4;">
-                                    💡 <em>Al activar esta opción, los usuarios que ingresen a esta sucursal no verán el botón para regresar a la pantalla de selección de locales. El Superadmin siempre podrá verlo para no perder acceso.</em>
+                                    💡 <em>Al activar esta opción, los usuarios que ingresen a esta sucursal no verán el botón para regresar a la pantalla de selección de locales. Los Superusuarios siempre podrán verlo para no perder acceso ni control.</em>
                                 </small>
                             </div>
                         </div>
