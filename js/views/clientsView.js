@@ -40,12 +40,27 @@ class ClientDirectoryManager {
             try {
                 // Traer la lista completa de jugadores desde Firestore (colección principal piu_players)
                 const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
-                snap.forEach(d => {
+                const isMalicious = (str) => {
+                    if (!str) return false;
+                    const s = String(str).toLowerCase();
+                    return s.includes('<img') || s.includes('<script') || s.includes('onerror') || s.includes('javascript:') || s.includes('eval(') || s.includes('xsstest');
+                };
+
+                for (const d of snap.docs) {
                     const data = d.data();
+                    // Si detectamos un registro de inyección XSS de prueba en Firestore, lo eliminamos de inmediato
+                    if (isMalicious(d.id) || isMalicious(data.name) || isMalicious(data.username) || isMalicious(data.avatar)) {
+                        try {
+                            deleteDoc(doc(db, COLLECTIONS.PLAYERS, d.id));
+                        } catch (err) {}
+                        continue;
+                    }
+
                     loaded.push({
                         id: d.id,
                         name: data.name || data.displayName || data.clientName || data.username || 'Jugador',
                         username: data.username || data.gamerTag || (data.name ? data.name.toLowerCase().replace(/\s+/g, '_') : ''),
+                        piuGameId: data.piuGameId || data.piuId || '',
                         phone: data.phone || data.clientPhone || data.tel || '',
                         email: data.email || data.clientEmail || '',
                         authUid: data.authUid || (d.id.length > 20 && !d.id.startsWith('usr_') && !d.id.startsWith('p_') ? d.id : null),
@@ -59,53 +74,32 @@ class ClientDirectoryManager {
                         role: data.role || 'CLIENT',
                         ...data
                     });
-                });
+                }
 
-                // Comprobación complementaria en caso de que existan documentos en 'users' o 'players'
-                try {
-                    const altSnap = await getDocs(collection(db, 'users'));
-                    altSnap.forEach(d => {
-                        if (!loaded.some(l => l.id === d.id || (l.authUid && l.authUid === d.id))) {
-                            const data = d.data();
-                            loaded.push({
-                                id: d.id,
-                                name: data.name || data.displayName || data.clientName || data.username || 'Usuario',
-                                username: data.username || data.gamerTag || '',
-                                phone: data.phone || '',
-                                email: data.email || '',
-                                authUid: d.id,
-                                role: data.role || 'CLIENT',
-                                ...data
-                            });
-                        }
-                    });
-                } catch (e) {}
             } catch (e) {
                 console.warn("Error cargando clientes de Firestore:", e);
             }
         }
 
-        // Fallback local y sincronización con AuthManager
-        const authPlayers = authManager.getClientUsers() || [];
-        authPlayers.forEach(ap => {
-            if (!loaded.some(l => l.id === ap.id || (l.username && ap.username && l.username.toLowerCase() === ap.username.toLowerCase()))) {
-                loaded.push(ap);
-            }
-        });
-
-        const local = localStorage.getItem('piu_registered_players_cache');
-        if (local) {
-            try {
-                const parsed = JSON.parse(local);
-                parsed.forEach(p => {
-                    if (!loaded.some(l => l.id === p.id)) {
-                        loaded.push(p);
+        // Fallback local solo si Firebase no está disponible o no devolvió datos
+        if (!isFirebaseAvailable || !db || loaded.length === 0) {
+            const local = localStorage.getItem('piu_registered_players_cache');
+            if (local) {
+                try {
+                    const parsed = JSON.parse(local);
+                    if (loaded.length === 0 && Array.isArray(parsed)) {
+                        loaded = parsed;
                     }
-                });
-            } catch (e) {}
+                } catch (e) {}
+            }
         }
 
-        // Guardar SIEMPRE la lista completa sin filtrar en caché y memoria
+        // Sincronizar memoria de authManager con los datos autoritativos
+        if (authManager) {
+            authManager.clientUsers = [...loaded];
+        }
+
+        // Guardar la lista autoritativa en caché y memoria
         this.allClients = [...loaded];
         this.saveLocally(this.allClients);
 
@@ -118,6 +112,7 @@ class ClientDirectoryManager {
             result = result.filter(c => {
                 const name = (c.name || '').toLowerCase();
                 const username = (c.username || '').toLowerCase();
+                const piuGameId = (c.piuGameId || '').toLowerCase();
                 const phone = (c.phone || '').replace(/\D/g, '');
                 const email = (c.email || '').toLowerCase();
                 const id = (c.id || '').toLowerCase();
@@ -127,6 +122,8 @@ class ClientDirectoryManager {
                 return name.includes(term) ||
                     username.includes(term) ||
                     username.includes(termClean) ||
+                    piuGameId.includes(term) ||
+                    piuGameId.replace(/#/g, '').includes(term.replace(/#/g, '')) ||
                     (termPhone && phone.includes(termPhone)) ||
                     email.includes(term) ||
                     id.includes(term) ||
@@ -150,7 +147,8 @@ class ClientDirectoryManager {
         const newClient = {
             id: 'usr_player_' + Date.now(),
             name: clientData.name.trim(),
-            username: clientData.username?.trim() || 'player_' + Math.random().toString(36).substr(2, 5),
+            username: clientData.username?.trim() || (clientData.name ? clientData.name.toLowerCase().replace(/\s+/g, '_') : 'player_' + Math.random().toString(36).substr(2, 5)),
+            piuGameId: clientData.piuGameId?.trim() || '',
             pinHash,
             phone: clientData.phone?.trim() || '',
             email: clientData.email?.trim() || '',
@@ -185,10 +183,21 @@ class ClientDirectoryManager {
 
     async updateClient(clientId, updatedFields) {
         const index = this.clients.findIndex(c => c.id === clientId);
-        if (index === -1) return null;
+        if (index !== -1) {
+            this.clients[index] = { ...this.clients[index], ...updatedFields };
+        }
+        const allIdx = this.allClients ? this.allClients.findIndex(c => c.id === clientId) : -1;
+        if (allIdx !== -1) {
+            this.allClients[allIdx] = { ...this.allClients[allIdx], ...updatedFields };
+        }
+        this.saveLocally(this.allClients || this.clients);
 
-        this.clients[index] = { ...this.clients[index], ...updatedFields };
-        this.saveLocally(this.clients);
+        if (authManager.clientUsers) {
+            const authIdx = authManager.clientUsers.findIndex(c => c.id === clientId);
+            if (authIdx !== -1) {
+                authManager.clientUsers[authIdx] = { ...authManager.clientUsers[authIdx], ...updatedFields };
+            }
+        }
 
         if (isFirebaseAvailable && db) {
             try {
@@ -197,12 +206,17 @@ class ClientDirectoryManager {
                 console.warn("Error actualizando cliente en Firebase:", e);
             }
         }
-        return this.clients[index];
+        return index !== -1 ? this.clients[index] : (allIdx !== -1 ? this.allClients[allIdx] : null);
     }
 
     async deleteClient(clientId) {
         this.clients = this.clients.filter(c => c.id !== clientId);
-        this.saveLocally(this.clients);
+        this.allClients = this.allClients.filter(c => c.id !== clientId);
+        this.saveLocally(this.allClients);
+
+        if (authManager.clientUsers) {
+            authManager.clientUsers = authManager.clientUsers.filter(c => c.id !== clientId);
+        }
 
         if (isFirebaseAvailable && db) {
             try {
@@ -212,6 +226,39 @@ class ClientDirectoryManager {
             }
         }
         return true;
+    }
+
+    async purgeCorruptedClients() {
+        let deletedCount = 0;
+        const isMalicious = (str) => {
+            if (!str) return false;
+            const s = String(str).toLowerCase();
+            return s.includes('<img') || s.includes('<script') || s.includes('onerror') || s.includes('javascript:') || s.includes('eval(') || s.includes('xsstest');
+        };
+
+        if (isFirebaseAvailable && db) {
+            try {
+                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                for (const d of snap.docs) {
+                    const data = d.data();
+                    if (isMalicious(d.id) || isMalicious(data.name) || isMalicious(data.username) || isMalicious(data.avatar) || isMalicious(data.notes)) {
+                        await deleteDoc(doc(db, COLLECTIONS.PLAYERS, d.id));
+                        deletedCount++;
+                    }
+                }
+            } catch (e) {
+                console.warn("Error purgando registros corruptos de Firebase:", e);
+            }
+        }
+
+        this.allClients = (this.allClients || []).filter(c => !isMalicious(c.id) && !isMalicious(c.name) && !isMalicious(c.username) && !isMalicious(c.avatar));
+        this.clients = (this.clients || []).filter(c => !isMalicious(c.id) && !isMalicious(c.name) && !isMalicious(c.username) && !isMalicious(c.avatar));
+        this.saveLocally(this.allClients);
+        if (authManager.clientUsers) {
+            authManager.clientUsers = authManager.clientUsers.filter(c => !isMalicious(c.id) && !isMalicious(c.name) && !isMalicious(c.username) && !isMalicious(c.avatar));
+        }
+
+        return deletedCount;
     }
 }
 
@@ -244,11 +291,16 @@ export async function renderClientsView(container, queryVal = '') {
                     <h2 class="friendly-date-title">👥 Directorio Global de Jugadores PIU</h2>
                     <p class="subtitle-text">Comunidad de jugadores registrados, niveles de Ligas Potosinas y contacto directo</p>
                 </div>
-                ${isSuperAdmin ? `
-                    <button class="btn btn-primary glow-red" id="btn-add-client">
-                        <span>➕ Registrar Nuevo Jugador</span>
-                    </button>
-                ` : ''}
+                <div style="display:flex; gap:8px; align-items:center;">
+                    ${isSuperAdmin ? `
+                        <button class="btn btn-outline btn-sm" id="btn-purge-xss" style="border-color:var(--color-neon-gold); color:var(--color-neon-gold); font-size:0.8rem;" title="Eliminar registros residuales con inyecciones o etiquetas HTML">
+                            <span>🧹 Purgar XSS</span>
+                        </button>
+                        <button class="btn btn-primary glow-red" id="btn-add-client">
+                            <span>➕ Registrar Nuevo Jugador</span>
+                        </button>
+                    ` : ''}
+                </div>
             </div>
 
             <!-- Buscador -->
@@ -300,6 +352,7 @@ export async function renderClientsView(container, queryVal = '') {
                                             <span class="badge" style="background:rgba(255,184,0,0.15); color:var(--color-neon-gold); border:1px solid rgba(255,184,0,0.3); font-size:0.65rem; padding:1px 6px;" title="Perfil clásico / PIN local">🟡 Clásico</span>
                                         `}
                                         ${c.username ? `<code style="font-size:0.7rem; color:var(--piu-cyan);">@${escapeHTML(c.username)}</code>` : ''}
+                                        ${c.piuGameId ? `<span class="badge" style="background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3); font-size:0.65rem; padding:1px 6px;" title="PIU ID Oficial en piugame.com">🎮 ${escapeHTML(c.piuGameId)}</span>` : ''}
                                     </div>
                                 </div>
                                 ${cleanPhone ? `
@@ -349,34 +402,34 @@ export async function renderClientsView(container, queryVal = '') {
 
                             <!-- Fila Principal de Acciones (Consumo + Cuenta) -->
                             <div class="gamer-action-row">
-                                <button class="btn btn-primary btn-xs btn-open-quick-consumption" data-id="${c.id}" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:800; border:none; padding:7px 10px; font-size:0.8rem;" title="Registrar consumo con tipos rápidos">
+                                <button class="btn btn-primary btn-xs btn-open-quick-consumption" data-id="${escapeHTML(c.id)}" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:800; border:none; padding:7px 10px; font-size:0.8rem;" title="Registrar consumo con tipos rápidos">
                                     ➕ Consumo
                                 </button>
-                                <button class="btn btn-outline btn-xs btn-open-account" data-id="${c.id}" style="border-color:var(--piu-cyan); color:var(--piu-cyan); font-weight:700; padding:7px 10px; font-size:0.8rem;" title="Ver estado de cuenta, historial y abonos">
+                                <button class="btn btn-outline btn-xs btn-open-account" data-id="${escapeHTML(c.id)}" style="border-color:var(--piu-cyan); color:var(--piu-cyan); font-weight:700; padding:7px 10px; font-size:0.8rem;" title="Ver estado de cuenta, historial y abonos">
                                     💳 Cuenta
                                 </button>
                             </div>
 
                             <!-- Barra de Herramientas de Gestión -->
                             <div class="gamer-toolbar-row">
-                                <button class="btn btn-outline btn-xs btn-edit-client" data-id="${c.id}" title="Editar perfil y restablecer PIN" style="font-size:0.75rem; padding:3px 8px;">
+                                <button class="btn btn-outline btn-xs btn-edit-client" data-id="${escapeHTML(c.id)}" title="Editar perfil y restablecer PIN" style="font-size:0.75rem; padding:3px 8px;">
                                     ✏️ Editar
                                 </button>
                                 ${business && business.loyaltyEnabled ? `
                                     ${activeMode === 'VISITS' ? `
-                                        <button class="btn btn-success btn-xs btn-quick-visit" data-id="${c.id}" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid var(--color-neon-lime); font-size:0.75rem; padding:3px 8px;" title="Registrar 1 visita al instante">
+                                        <button class="btn btn-success btn-xs btn-quick-visit" data-id="${escapeHTML(c.id)}" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid var(--color-neon-lime); font-size:0.75rem; padding:3px 8px;" title="Registrar 1 visita al instante">
                                             ➕ Visita
                                         </button>
                                     ` : ''}
-                                    <button class="btn btn-secondary btn-xs btn-adjust-loyalty" data-id="${c.id}" title="Ajustar puntos de lealtad" style="font-size:0.75rem; padding:3px 8px;">
+                                    <button class="btn btn-secondary btn-xs btn-adjust-loyalty" data-id="${escapeHTML(c.id)}" title="Ajustar puntos de lealtad" style="font-size:0.75rem; padding:3px 8px;">
                                         ⭐ Puntos
                                     </button>
-                                    <button class="btn btn-outline btn-xs btn-view-redemptions" data-id="${c.id}" title="Validar premios canjeados" style="font-size:0.75rem; padding:3px 8px;">
+                                    <button class="btn btn-outline btn-xs btn-view-redemptions" data-id="${escapeHTML(c.id)}" title="Validar premios canjeados" style="font-size:0.75rem; padding:3px 8px;">
                                         🎁 Canjes
                                     </button>
                                 ` : ''}
                                 ${isSuperAdmin ? `
-                                    <button class="btn btn-danger btn-xs btn-delete-client" data-id="${c.id}" title="Eliminar jugador del sistema" style="padding:3px 6px; font-size:0.75rem;">
+                                    <button class="btn btn-danger btn-xs btn-delete-client" data-id="${escapeHTML(c.id)}" title="Eliminar jugador del sistema" style="padding:3px 6px; font-size:0.75rem;">
                                         🗑️
                                     </button>
                                 ` : ''}
@@ -570,8 +623,17 @@ export async function renderClientsView(container, queryVal = '') {
         }
     });
 
-    // Evento Registrar
+    // Evento Registrar y Purgar
     if (isSuperAdmin) {
+        container.querySelector('#btn-purge-xss')?.addEventListener('click', async () => {
+            if (confirm("¿Purgar y eliminar permanentemente cualquier registro de prueba que contenga etiquetas HTML / XSS de Firebase?")) {
+                toast.info("Purgando registros corruptos de Firebase...");
+                const count = await clientDirManager.purgeCorruptedClients();
+                toast.success(`Se purgaron ${count} registros de prueba con éxito.`);
+                renderClientsView(container, '');
+            }
+        });
+
         container.querySelector('#btn-add-client')?.addEventListener('click', () => {
             openClientFormModal(null, container);
         });
@@ -680,6 +742,13 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
                     <input type="email" id="cli-email" class="cyber-input" value="${client ? escapeHTML(client.email) : ''}" placeholder="jugador@email.com">
                 </div>
                 <div class="form-group">
+                    <label for="cli-piu-id"><span class="neon-arrow">◆</span> PIU ID Oficial (piugame.com)</label>
+                    <input type="text" id="cli-piu-id" class="cyber-input" value="${client ? escapeHTML(client.piuGameId || '') : ''}" placeholder="Ej. megajefelink#1234">
+                </div>
+            </div>
+
+            <div class="form-row grid-2">
+                <div class="form-group">
                     <label for="cli-level"><span class="neon-arrow">◆</span> Nivel / Liga (Ligas Potosinas)</label>
                     <select id="cli-level" class="cyber-select">
                         <option value="Liga D" ${client?.skillLevel === 'Liga D' ? 'selected' : ''}>Liga D</option>
@@ -691,11 +760,10 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
                         <option value="Liga SSS" ${client?.skillLevel === 'Liga SSS' ? 'selected' : ''}>Liga SSS</option>
                     </select>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <label for="cli-mode"><span class="neon-arrow">◆</span> Modo Preferido</label>
-                <input type="text" id="cli-mode" class="cyber-input" value="${client ? escapeHTML(client.preferredMode || 'Single / Double') : 'Single / Double'}" placeholder="Ej. Single Speed, Doubles, Freestyle, Co-Op">
+                <div class="form-group">
+                    <label for="cli-mode"><span class="neon-arrow">◆</span> Modo Preferido</label>
+                    <input type="text" id="cli-mode" class="cyber-input" value="${client ? escapeHTML(client.preferredMode || 'Single / Double') : 'Single / Double'}" placeholder="Ej. Single Speed, Doubles, Freestyle, Co-Op">
+                </div>
             </div>
 
             <div class="form-group">
@@ -783,6 +851,7 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
         const name = modalEl.querySelector('#cli-name').value.trim();
         const phone = modalEl.querySelector('#cli-phone').value.trim();
         const email = modalEl.querySelector('#cli-email').value.trim();
+        const piuGameId = modalEl.querySelector('#cli-piu-id').value.trim();
         const skillLevel = modalEl.querySelector('#cli-level').value;
         const preferredMode = modalEl.querySelector('#cli-mode').value.trim();
         const notes = modalEl.querySelector('#cli-notes').value.trim();
@@ -795,7 +864,7 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
         try {
             if (isEdit) {
                 const updatePayload = {
-                    name, phone, email, skillLevel, preferredMode, notes
+                    name, phone, email, piuGameId, skillLevel, preferredMode, notes
                 };
 
                 const resetPin = modalEl.querySelector('#cli-reset-pin')?.value.trim();
@@ -819,7 +888,7 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
                 }
 
                 await clientDirManager.addClient({
-                    name, phone, email, pin: newPin, skillLevel, preferredMode, notes
+                    name, phone, email, piuGameId, pin: newPin, skillLevel, preferredMode, notes
                 });
                 toast.success(`Jugador "${name}" registrado en el catálogo global.`);
             }

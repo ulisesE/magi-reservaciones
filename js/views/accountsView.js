@@ -31,6 +31,7 @@ async function getAllAvailableClients() {
                     id: c.id,
                     name: c.name || 'Sin Nombre',
                     username: c.username || '',
+                    piuGameId: c.piuGameId || '',
                     phone: c.phone || '',
                     avatar: c.avatar || '🕺',
                     role: c.role || 'CLIENT'
@@ -51,6 +52,7 @@ async function getAllAvailableClients() {
                     id: c.id,
                     name: c.name || 'Sin Nombre',
                     username: c.username || '',
+                    piuGameId: c.piuGameId || '',
                     phone: c.phone || '',
                     avatar: c.avatar || '🕺',
                     role: c.role || 'CLIENT'
@@ -103,6 +105,7 @@ function getClientSearchScore(c, queryTerm) {
     if (!term) return 1;
 
     const user = clean(c.username);
+    const piuId = clean(c.piuGameId);
     const name = clean(c.name);
     const phone = String(c.phone || '').replace(/\D/g, '');
     const termDigits = raw.replace(/\D/g, '');
@@ -117,10 +120,13 @@ function getClientSearchScore(c, queryTerm) {
         return pIdx === pattern.length;
     };
 
-    // --- PRIORIDAD 1: USERNAME / GAMERTAG ---
+    // --- PRIORIDAD 1: PIU ID OFICIAL / USERNAME / GAMERTAG ---
+    if (piuId && (piuId === term || piuId.includes(term))) return 1000;
     if (user === term) return 1000;
+    if (piuId && piuId.startsWith(term)) return 900;
     if (user.startsWith(term)) return 850;
     if (user.includes(term)) return 700;
+    if (piuId && matchSubseq(piuId, term)) return 650;
     if (matchSubseq(user, term)) return 600;
 
     // --- PRIORIDAD 2: NOMBRE DEL CLIENTE ---
@@ -279,9 +285,9 @@ export async function renderAccountsView(container) {
                                                     ${avatar}
                                                 </div>
                                                 <div>
-                                                    <strong style="font-size:1.05rem; color:#ffffff; display:block;">${debtor.playerName}</strong>
-                                                    ${debtor.playerUsername ? `<span style="font-size:0.8rem; color:var(--color-neon-cyan); font-family:var(--font-mono);">@${debtor.playerUsername}</span>` : ''}
-                                                    ${phone ? `<small style="display:block; color:var(--text-muted); font-size:0.75rem;">📱 ${phone}</small>` : ''}
+                                                    <strong style="font-size:1.05rem; color:#ffffff; display:block;">${escapeHTML(debtor.playerName)}</strong>
+                                                    ${debtor.playerUsername ? `<span style="font-size:0.8rem; color:var(--color-neon-cyan); font-family:var(--font-mono);">@${escapeHTML(debtor.playerUsername)}</span>` : ''}
+                                                    ${phone ? `<small style="display:block; color:var(--text-muted); font-size:0.75rem;">📱 ${escapeHTML(phone)}</small>` : ''}
                                                 </div>
                                             </div>
                                             <div style="text-align:right;">
@@ -333,7 +339,7 @@ export async function renderAccountsView(container) {
                                 <option value="" ${!selectedFilterPlayerId ? 'selected' : ''}>Todos los clientes</option>
                                 ${clients.map(c => `
                                     <option value="${c.id}" ${selectedFilterPlayerId === c.id ? 'selected' : ''}>
-                                        ${c.name} (@${c.username || 'sin_tag'})
+                                        ${escapeHTML(c.name)} (@${escapeHTML(c.username || 'sin_tag')})
                                     </option>
                                 `).join('')}
                             </select>
@@ -406,19 +412,19 @@ export async function renderAccountsView(container) {
                                             <small style="display:block; color:var(--text-muted);">${formattedTime}</small>
                                         </td>
                                         <td>
-                                            <strong style="color:#ffffff; font-size:0.9rem;">${tx.playerName || 'Venta Mostrador'}</strong>
-                                            ${tx.playerUsername ? `<small style="display:block; color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${tx.playerUsername}</small>` : ''}
+                                            <strong style="color:#ffffff; font-size:0.9rem;">${escapeHTML(tx.playerName || 'Venta Mostrador')}</strong>
+                                            ${tx.playerUsername ? `<small style="display:block; color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${escapeHTML(tx.playerUsername)}</small>` : ''}
                                         </td>
                                         <td>
                                             <div style="font-size:0.88rem; color:#ffffff;">
                                                 ${isAbono ? `
                                                     <span style="color:var(--color-neon-lime); font-weight:700;">💵 Abono / Pago a cuenta</span>
                                                 ` : `
-                                                    <span>${tx.concept || 'Consumo en sala'}</span>
+                                                    <span>${escapeHTML(tx.concept || 'Consumo en sala')}</span>
                                                 `}
                                             </div>
-                                            ${tx.voidReason ? `<small style="color:var(--color-neon-pink); font-size:0.75rem; display:block;">Motivo anulación: ${tx.voidReason} (por ${tx.voidedBy || 'Encargado'})</small>` : ''}
-                                            ${tx.notes && !tx.voidReason ? `<small style="color:var(--text-muted); font-size:0.75rem;">Nota: ${tx.notes}</small>` : ''}
+                                            ${tx.voidReason ? `<small style="color:var(--color-neon-pink); font-size:0.75rem; display:block;">Motivo anulación: ${escapeHTML(tx.voidReason)} (por ${escapeHTML(tx.voidedBy || 'Encargado')})</small>` : ''}
+                                            ${tx.notes && !tx.voidReason ? `<small style="color:var(--text-muted); font-size:0.75rem;">Nota: ${escapeHTML(tx.notes)}</small>` : ''}
                                         </td>
                                         <td style="text-align:right; font-family:var(--font-mono); font-weight:900; font-size:1rem; color:${isAbono ? 'var(--color-neon-lime)' : isPending ? 'var(--color-neon-pink)' : '#ffffff'};">
                                             ${isAbono ? '+' : ''}${currency}${Number(tx.totalAmount).toFixed(2)}
@@ -699,15 +705,16 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
     const updateDebtBadge = async () => {
         if (!currentSelectedPlayerId || currentSelectedPlayerId === 'guest_walkin') {
             const displayName = currentSelectedPlayerName || 'Público General';
-            debtBadgeEl.innerHTML = `<span style="color:var(--text-muted);">👤 Venta Mostrador / General a nombre de: <strong>${displayName}</strong> (Sin cuenta fiada).</span>`;
+            debtBadgeEl.innerHTML = `<span style="color:var(--text-muted);">👤 Venta Mostrador / General a nombre de: <strong>${escapeHTML(displayName)}</strong> (Sin cuenta fiada).</span>`;
         } else {
             const acc = await accountManager.getPlayerAccount(business.id, currentSelectedPlayerId);
+            const safeName = escapeHTML(currentSelectedPlayerName);
             if (acc.netDebt > 0) {
-                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-pink); font-weight:700;">⚠️ ${currentSelectedPlayerName} tiene una deuda pendiente de ${currency}${acc.netDebt.toFixed(2)}.</span>`;
+                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-pink); font-weight:700;">⚠️ ${safeName} tiene una deuda pendiente de ${currency}${acc.netDebt.toFixed(2)}.</span>`;
             } else if (acc.creditBalance > 0) {
-                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-lime); font-weight:700;">✅ ${currentSelectedPlayerName} tiene saldo a favor de ${currency}${acc.creditBalance.toFixed(2)}.</span>`;
+                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-lime); font-weight:700;">✅ ${safeName} tiene saldo a favor de ${currency}${acc.creditBalance.toFixed(2)}.</span>`;
             } else {
-                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-lime);">✅ Cuenta de ${currentSelectedPlayerName} al corriente (Sin adeudos).</span>`;
+                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-lime);">✅ Cuenta de ${safeName} al corriente (Sin adeudos).</span>`;
             }
         }
     };
@@ -762,8 +769,11 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
                             <span style="font-size:1.3rem;">${c.avatar || '🕺'}</span>
                             <div>
                                 <strong style="color:#ffffff; font-size:0.9rem; display:block;">${escapeHTML(c.name)}</strong>
-                                <span style="color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${escapeHTML(c.username || 'sin_tag')}</span>
-                                ${c.phone ? `<small style="color:var(--text-muted); font-size:0.75rem; margin-left:6px;">📱 ${escapeHTML(c.phone)}</small>` : ''}
+                                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:2px;">
+                                    <span style="color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${escapeHTML(c.username || 'sin_tag')}</span>
+                                    ${c.piuGameId ? `<span class="badge" style="font-size:0.65rem; padding:1px 5px; background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3);">🎮 ${escapeHTML(c.piuGameId)}</span>` : ''}
+                                    ${c.phone ? `<small style="color:var(--text-muted); font-size:0.75rem;">📱 ${escapeHTML(c.phone)}</small>` : ''}
+                                </div>
                             </div>
                         </div>
                         <span class="badge badge-outline" style="font-size:0.7rem;">Seleccionar</span>
@@ -1084,8 +1094,8 @@ async function openPaymentModal(business, playerId, mainContainer) {
     const contentHtml = `
         <form id="form-quick-payment" class="cyber-form">
             <div style="background:var(--bg-dark-700); border-left:4px solid var(--color-neon-lime); padding:12px; border-radius:4px; margin-bottom:14px;">
-                <strong style="font-size:1.05rem; color:#ffffff; display:block;">${client.name}</strong>
-                ${client.username ? `<span style="color:var(--color-neon-cyan); font-size:0.8rem; font-family:var(--font-mono);">@${client.username}</span>` : ''}
+                <strong style="font-size:1.05rem; color:#ffffff; display:block;">${escapeHTML(client.name)}</strong>
+                ${client.username ? `<span style="color:var(--color-neon-cyan); font-size:0.8rem; font-family:var(--font-mono);">@${escapeHTML(client.username)}</span>` : ''}
                 <div style="margin-top:6px; font-size:0.85rem;">
                     Saldo Pendiente Actual: <strong style="color:var(--color-neon-pink); font-family:var(--font-mono);">${currency}${account.netDebt.toFixed(2)}</strong>
                 </div>
@@ -1209,7 +1219,7 @@ async function openStatementModal(business, playerId) {
                         ` : account.transactions.map(t => `
                             <tr style="${t.status === 'CANCELLED' ? 'opacity:0.4; text-decoration:line-through;' : ''}">
                                 <td style="font-family:var(--font-mono); font-size:0.78rem;">${(t.createdAt || '').slice(0, 10)}</td>
-                                <td>${t.type === 'ABONO' ? '💵 Abono a cuenta' : t.concept}</td>
+                                <td>${t.type === 'ABONO' ? '💵 Abono a cuenta' : escapeHTML(t.concept || 'Consumo')}</td>
                                 <td style="text-align:right; font-family:var(--font-mono); font-weight:700; color:${t.type === 'ABONO' ? 'var(--color-neon-lime)' : '#ffffff'};">
                                     ${t.type === 'ABONO' ? '+' : ''}${currency}${Number(t.totalAmount).toFixed(2)}
                                 </td>
@@ -1227,7 +1237,7 @@ async function openStatementModal(business, playerId) {
     `;
 
     modal.open({
-        title: `Estado de Cuenta: ${client.name}`,
+        title: `Estado de Cuenta: ${escapeHTML(client.name)}`,
         icon: '📜',
         contentHtml,
         footerHtml: `<button type="button" class="btn btn-primary" onclick="window.__closeCurrentModal()">Cerrar</button>`,
