@@ -4,7 +4,22 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## Funcionalidades recientes y optimizaciones (v1.7.0)
+## Funcionalidades recientes y optimizaciones (v1.7.1 - Hotfixes & PIU ID Integration)
+
+### 🎮 Soporte Oficial de PIU ID (`piugame.com`)
+* **Identificador Oficial de Juego**: Campo dedicado para PIU ID con discriminador numérico (ej. `megajefelink#1234`).
+* **Búsqueda Inteligente de Alta Relevancia**: Búsqueda inmediata en *Cuenta Fácil (POS)*, *Directorio de Jugadores* y *Reservaciones* por tag (`#1234` o `megajefelink#1234`).
+* **Insignias Visuales & Login Flexible**: Badges distintivos `🎮 PIU ID` en perfiles, tarjeta QR Pass y tabla de Superadmin; login directo por GamerTag, PIU ID o teléfono + PIN.
+
+### 🛡️ Aislamiento Estricto, Protección XSS & Purga de Seguridad
+* **Aislamiento Total**: Desconexión absoluta de colecciones externas (`users`), restringiendo el 100% de la operación a los catálogos dedicados `piu_players` y `piu_staff_users`.
+* **Sanitización HTML Integral**: Uso de `escapeHTML()` en todos los atributos `data-id`, títulos, tablas y modales para prevenir inyecciones de código.
+* **Auto-Purga y Herramienta Manual**: Limpieza automática y botón `🧹 Purgar XSS` en el Directorio para eliminar registros corruptos o residuales de Firebase.
+* **Fix de Creación Atómica**: Corrección de importación de Firebase Auth en `store.js` garantizando transacciones y auditorías sin errores de referencia.
+
+---
+
+## Funcionalidades Anteriores (v1.7.0)
 
 ### 🔒 Blindaje Financiero, Idempotencia y Transaccionalidad Atómica (Los 11 Pilares de MAGI)
 * **Transacciones Atómicas Integrales**: Toda operación monetaria (ventas, abonos, anulaciones, reservaciones) opera exclusivamente dentro de `runTransaction()` en Firestore.
