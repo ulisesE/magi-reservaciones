@@ -285,8 +285,10 @@ class Store {
                 const machSnap = await getDocs(machQuery);
                 machSnap.forEach(d => loadedMachines.push({ id: d.id, ...d.data() }));
 
-                // Inicialmente cargamos solo las reservas de hoy para no traer todo el histórico
-                const todayStr = new Date().toISOString().split('T')[0];
+                // Inicialmente cargamos las reservas de la fecha seleccionada/hoy usando la zona horaria local
+                const todayStr = this.selectedDate || formatDateKey(new Date());
+                this.currentSubscriptionRange = { start: todayStr, end: todayStr };
+
                 const resQuery = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
                     where("businessId", "==", bizId),
@@ -607,11 +609,18 @@ class Store {
         } else if (!resolvedClientId) {
             const searchKey = (bookingData.clientUsername || bookingData.clientName || '').trim().toLowerCase();
             const searchPhone = (bookingData.clientPhone || '').replace(/\D/g, '');
-            const allPlayers = authManager.getClientUsers ? authManager.getClientUsers() : [];
+            let allPlayers = authManager.getClientUsers ? (authManager.getClientUsers() || []) : [];
+            if (allPlayers.length === 0) {
+                try {
+                    const localCache = localStorage.getItem('piu_registered_players_cache');
+                    if (localCache) allPlayers = JSON.parse(localCache);
+                } catch(e) {}
+            }
             const matchedPlayer = allPlayers.find(p => 
                 (p.username && (p.username.toLowerCase() === searchKey || (bookingData.clientUsername && p.username.toLowerCase() === bookingData.clientUsername.toLowerCase()))) ||
                 (p.name && p.name.toLowerCase() === searchKey) ||
-                (searchPhone && p.phone && p.phone.replace(/\D/g, '') === searchPhone)
+                (searchPhone && p.phone && p.phone.replace(/\D/g, '') === searchPhone) ||
+                (p.id && p.id.toLowerCase() === searchKey)
             );
             if (matchedPlayer) {
                 resolvedClientId = matchedPlayer.id;

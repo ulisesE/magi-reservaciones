@@ -31,8 +31,23 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         return;
     }
 
-    // Cargar la lista de clientes si es encargado/superusuario para autocompletado
+    // Cargar la lista fresca de clientes si es encargado/superusuario para autocompletado
     let clients = [];
+    const getFreshClients = () => {
+        let list = (clientDirManager.allClients && clientDirManager.allClients.length > 0)
+            ? clientDirManager.allClients
+            : ((clientDirManager.clients && clientDirManager.clients.length > 0)
+                ? clientDirManager.clients
+                : (authManager.getClientUsers() || []));
+        if (list.length === 0) {
+            try {
+                const local = localStorage.getItem('piu_registered_players_cache');
+                if (local) list = JSON.parse(local);
+            } catch(e) {}
+        }
+        return list;
+    };
+
     if (isStaff) {
         clientDirManager.loadClients().then(list => {
             clients = list;
@@ -300,6 +315,8 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
         nameInput.addEventListener('input', (e) => {
             const queryText = e.target.value.trim().toLowerCase();
+            const queryClean = queryText.startsWith('@') ? queryText.substring(1) : queryText;
+            const queryPhone = queryText.replace(/\D/g, '');
             selectedClientRef = null;
             if (!queryText) {
                 suggestionsDiv.innerHTML = '';
@@ -307,11 +324,19 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 return;
             }
 
-            const matches = clients.filter(c => 
-                (c.name && c.name.toLowerCase().includes(queryText)) || 
-                (c.username && c.username.toLowerCase().includes(queryText)) ||
-                (c.phone && c.phone.includes(queryText))
-            ).slice(0, 5);
+            const freshList = getFreshClients();
+            const matches = freshList.filter(c => {
+                const cName = (c.name || '').toLowerCase();
+                const cUsername = (c.username || '').toLowerCase();
+                const cPhone = (c.phone || '').replace(/\D/g, '');
+                const cId = (c.id || '').toLowerCase();
+
+                return cName.includes(queryText) ||
+                    cUsername.includes(queryText) ||
+                    cUsername.includes(queryClean) ||
+                    (queryPhone && cPhone.includes(queryPhone)) ||
+                    cId.includes(queryText);
+            }).slice(0, 5);
 
             if (matches.length === 0) {
                 suggestionsDiv.innerHTML = '';
@@ -396,11 +421,13 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             let targetClientId = selectedClientRef?.id || null;
             let targetClientUsername = selectedClientRef?.username || null;
 
-            if (!targetClientId && isStaff && clients.length > 0) {
-                const found = clients.find(c => 
+            if (!targetClientId && isStaff) {
+                const freshList = getFreshClients();
+                const cleanPhone = enteredPhone.replace(/\D/g, '');
+                const found = freshList.find(c => 
                     (c.username && c.username.toLowerCase() === enteredName.toLowerCase()) ||
                     (c.name && c.name.toLowerCase() === enteredName.toLowerCase()) ||
-                    (enteredPhone && c.phone && c.phone.replace(/\D/g, '') === enteredPhone.replace(/\D/g, ''))
+                    (cleanPhone && c.phone && c.phone.replace(/\D/g, '') === cleanPhone)
                 );
                 if (found) {
                     targetClientId = found.id;

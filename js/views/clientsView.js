@@ -30,97 +30,112 @@ const clientsPageSize = 15;
 class ClientDirectoryManager {
     constructor() {
         this.clients = [];
+        this.allClients = [];
     }
 
     async loadClients(searchQuery = '') {
         let loaded = [];
-        const limitVal = 150;
         
         if (isFirebaseAvailable && db) {
             try {
-                let q;
-                if (searchQuery) {
-                    const term = searchQuery.trim().toLowerCase();
-                    
-                    // Si el término tiene el formato de un ID de jugador (p_...)
-                    if (term.startsWith('p_') || term.length > 15) {
-                        try {
-                            const docRef = doc(db, COLLECTIONS.PLAYERS, searchQuery.trim());
-                            const docSnap = await getDoc(docRef);
-                            if (docSnap.exists()) {
-                                loaded.push({ id: docSnap.id, ...docSnap.data() });
-                            }
-                        } catch (err) {
-                            console.warn("Error buscando cliente por ID:", err);
-                        }
-                    }
+                // Traer la lista completa de jugadores desde Firestore (colección principal piu_players)
+                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                snap.forEach(d => {
+                    const data = d.data();
+                    loaded.push({
+                        id: d.id,
+                        name: data.name || data.displayName || data.clientName || data.username || 'Jugador',
+                        username: data.username || data.gamerTag || (data.name ? data.name.toLowerCase().replace(/\s+/g, '_') : ''),
+                        phone: data.phone || data.clientPhone || data.tel || '',
+                        email: data.email || data.clientEmail || '',
+                        authUid: data.authUid || (d.id.length > 20 && !d.id.startsWith('usr_') && !d.id.startsWith('p_') ? d.id : null),
+                        pinHash: data.pinHash || null,
+                        avatar: data.avatar || '🕺',
+                        skillLevel: data.skillLevel || data.level || 'Liga C',
+                        preferredMode: data.preferredMode || 'Single / Double',
+                        notes: data.notes || '',
+                        loyalty: data.loyalty || {},
+                        accounts: data.accounts || {},
+                        role: data.role || 'CLIENT',
+                        ...data
+                    });
+                });
 
-                    if (loaded.length === 0) {
-                        const termPhone = term.replace(/\D/g, '');
-                        if (termPhone) {
-                            q = query(collection(db, COLLECTIONS.PLAYERS), where("phone", "==", termPhone), limit(limitVal));
-                        } else {
-                            q = query(collection(db, COLLECTIONS.PLAYERS), where("username", "==", term), limit(limitVal));
-                        }
-                        
-                        let snap = await getDocs(q);
-                        snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
-                    }
-
-                    if (loaded.length === 0) {
-                        // Prefijo de nombre
-                        q = query(
-                            collection(db, COLLECTIONS.PLAYERS), 
-                            where("name", ">=", searchQuery), 
-                            where("name", "<=", searchQuery + '\uf8ff'),
-                            limit(limitVal)
-                        );
-                        let snap = await getDocs(q);
-                        snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
-                    }
-                } else {
-                    q = query(collection(db, COLLECTIONS.PLAYERS), limit(limitVal));
-                    const snap = await getDocs(q);
-                    snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
-                }
-            } catch (e) {
-                console.warn("Error cargando clientes de Firebase:", e);
-            }
-        }
-
-        // Fallback local si Firebase no cargó nada
-        if (loaded.length === 0) {
-            const authPlayers = authManager.getClientUsers() || [];
-            authPlayers.forEach(ap => {
-                if (!loaded.some(l => l.id === ap.id || (l.username && l.username === ap.username))) {
-                    loaded.push(ap);
-                }
-            });
-
-            const local = localStorage.getItem('piu_registered_players_cache');
-            if (local) {
+                // Comprobación complementaria en caso de que existan documentos en 'users' o 'players'
                 try {
-                    const parsed = JSON.parse(local);
-                    parsed.forEach(p => {
-                        if (!loaded.some(l => l.id === p.id)) {
-                            loaded.push(p);
+                    const altSnap = await getDocs(collection(db, 'users'));
+                    altSnap.forEach(d => {
+                        if (!loaded.some(l => l.id === d.id || (l.authUid && l.authUid === d.id))) {
+                            const data = d.data();
+                            loaded.push({
+                                id: d.id,
+                                name: data.name || data.displayName || data.clientName || data.username || 'Usuario',
+                                username: data.username || data.gamerTag || '',
+                                phone: data.phone || '',
+                                email: data.email || '',
+                                authUid: d.id,
+                                role: data.role || 'CLIENT',
+                                ...data
+                            });
                         }
                     });
                 } catch (e) {}
+            } catch (e) {
+                console.warn("Error cargando clientes de Firestore:", e);
             }
         }
 
-        // Filtrar localmente si no hay Firebase
-        if (searchQuery && (!isFirebaseAvailable || !db)) {
-            const term = searchQuery.toLowerCase().trim();
-            loaded = loaded.filter(c => 
-                (c.name || '').toLowerCase().includes(term) ||
-                (c.username || '').toLowerCase().includes(term) ||
-                (c.phone || '').includes(term)
-            );
+        // Fallback local y sincronización con AuthManager
+        const authPlayers = authManager.getClientUsers() || [];
+        authPlayers.forEach(ap => {
+            if (!loaded.some(l => l.id === ap.id || (l.username && ap.username && l.username.toLowerCase() === ap.username.toLowerCase()))) {
+                loaded.push(ap);
+            }
+        });
+
+        const local = localStorage.getItem('piu_registered_players_cache');
+        if (local) {
+            try {
+                const parsed = JSON.parse(local);
+                parsed.forEach(p => {
+                    if (!loaded.some(l => l.id === p.id)) {
+                        loaded.push(p);
+                    }
+                });
+            } catch (e) {}
         }
 
-        this.clients = loaded;
+        // Guardar SIEMPRE la lista completa sin filtrar en caché y memoria
+        this.allClients = [...loaded];
+        this.saveLocally(this.allClients);
+
+        // Si hay una consulta de búsqueda, filtrar sobre la lista completa
+        let result = [...this.allClients];
+        if (searchQuery && searchQuery.trim()) {
+            const term = searchQuery.toLowerCase().trim();
+            const termClean = term.startsWith('@') ? term.substring(1) : term;
+            const termPhone = term.replace(/\D/g, '');
+            result = result.filter(c => {
+                const name = (c.name || '').toLowerCase();
+                const username = (c.username || '').toLowerCase();
+                const phone = (c.phone || '').replace(/\D/g, '');
+                const email = (c.email || '').toLowerCase();
+                const id = (c.id || '').toLowerCase();
+                const authUid = (c.authUid || '').toLowerCase();
+                const notes = (c.notes || '').toLowerCase();
+
+                return name.includes(term) ||
+                    username.includes(term) ||
+                    username.includes(termClean) ||
+                    (termPhone && phone.includes(termPhone)) ||
+                    email.includes(term) ||
+                    id.includes(term) ||
+                    authUid.includes(term) ||
+                    notes.includes(term);
+            });
+        }
+
+        this.clients = result;
         return this.clients;
     }
 
@@ -150,8 +165,13 @@ class ClientDirectoryManager {
             createdAt: new Date().toISOString()
         };
 
-        this.clients.push(newClient);
-        this.saveLocally(this.clients);
+        this.allClients = this.allClients ? [newClient, ...this.allClients] : [newClient];
+        this.clients = [newClient, ...this.clients];
+        this.saveLocally(this.allClients);
+
+        if (authManager.clientUsers && !authManager.clientUsers.some(c => c.id === newClient.id)) {
+            authManager.clientUsers.push(newClient);
+        }
 
         if (isFirebaseAvailable && db) {
             try {
@@ -274,6 +294,11 @@ export async function renderClientsView(container, queryVal = '') {
                                     <h3 class="gamer-name-title" title="${escapeHTML(c.name)}">${escapeHTML(c.name)}</h3>
                                     <div class="gamer-meta-row">
                                         <span class="badge badge-primary" style="font-size:0.68rem; padding:1px 6px;">${escapeHTML(c.skillLevel || 'Liga C')}</span>
+                                        ${(c.authUid || c.isAuthMigrated) ? `
+                                            <span class="badge" style="background:rgba(104,242,5,0.15); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); font-size:0.65rem; padding:1px 6px;" title="Cuenta canónica vinculada a Firebase Auth">🟢 Auth</span>
+                                        ` : `
+                                            <span class="badge" style="background:rgba(255,184,0,0.15); color:var(--color-neon-gold); border:1px solid rgba(255,184,0,0.3); font-size:0.65rem; padding:1px 6px;" title="Perfil clásico / PIN local">🟡 Clásico</span>
+                                        `}
                                         ${c.username ? `<code style="font-size:0.7rem; color:var(--piu-cyan);">@${escapeHTML(c.username)}</code>` : ''}
                                     </div>
                                 </div>
@@ -688,6 +713,23 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
                     <small style="display:block; margin-top:4px; color:var(--text-muted); font-size:0.75rem; line-height:1.3;">
                         💡 <em>Si el jugador olvidó su PIN, escribe aquí uno nuevo temporal (4 a 6 dígitos) y compárteselo para que pueda iniciar sesión.</em>
                     </small>
+
+                    <!-- Herramienta de Migración a Firebase Auth -->
+                    <div style="margin-top:12px; padding-top:10px; border-top:1px dashed rgba(255,255,255,0.1); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                        <div>
+                            <span style="font-size:0.8rem; font-weight:700; color:${(client?.authUid || client?.isAuthMigrated) ? 'var(--color-neon-lime)' : 'var(--color-neon-gold)'};">
+                                ${(client?.authUid || client?.isAuthMigrated) ? '🟢 Cuenta Firebase Auth Activa' : '🟡 Perfil Tradicional / PIN'}
+                            </span>
+                            <small style="display:block; color:var(--text-muted); font-size:0.72rem;">
+                                ${(client?.authUid || client?.isAuthMigrated) ? `UID: ${escapeHTML(client.authUid || '')}` : 'Puede vincularse a Firebase Auth sin perder sus datos'}
+                            </small>
+                        </div>
+                        ${!(client?.authUid || client?.isAuthMigrated) ? `
+                            <button type="button" class="btn btn-outline btn-xs" id="btn-migrate-single-auth" style="border-color:var(--piu-cyan); color:var(--piu-cyan); padding:4px 8px; font-size:0.75rem;">
+                                ⚡ Vincular a Auth
+                            </button>
+                        ` : ''}
+                    </div>
                 ` : `
                     <label for="cli-new-pin" style="font-weight:700; color:#fff; display:block; margin-bottom:4px;">
                         <span class="neon-arrow">◆</span> 🔑 PIN Inicial de Seguridad *
@@ -717,6 +759,25 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
     });
 
     modalEl.querySelector('#btn-cancel-cli').onclick = () => modal.close();
+
+    const migrateBtn = modalEl.querySelector('#btn-migrate-single-auth');
+    if (migrateBtn && isEdit) {
+        migrateBtn.onclick = async () => {
+            const resetPin = modalEl.querySelector('#cli-reset-pin')?.value.trim() || '1234';
+            const email = modalEl.querySelector('#cli-email')?.value.trim() || client.email;
+            try {
+                toast.info("Vinculando cliente con Firebase Auth...");
+                const res = await authManager.linkClientToFirebaseAuth(client.id, email, resetPin);
+                toast.success(`¡Cliente vinculado exitosamente a Firebase Auth!`);
+                client.authUid = res.authUid;
+                client.isAuthMigrated = true;
+                modal.close();
+                if (mainContainer) renderClientsView(mainContainer, currentClientsSearchQuery);
+            } catch (err) {
+                toast.error(err.message);
+            }
+        };
+    }
 
     modalEl.querySelector('#btn-save-cli').onclick = async () => {
         const name = modalEl.querySelector('#cli-name').value.trim();

@@ -190,6 +190,26 @@ async function loadAndRenderAnalyticsData(container, business) {
         // Obtener catálogo de máquinas del local
         const machines = store.machines.length > 0 ? store.machines : (business?.machines || []);
 
+        // Obtener catálogo de jugadores registrados
+        let allPlayers = [];
+        if (isFirebaseAvailable && db) {
+            try {
+                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                snap.forEach(d => allPlayers.push({ id: d.id, ...d.data() }));
+            } catch (e) {
+                console.warn("Error cargando jugadores para analíticas:", e);
+            }
+        }
+        if (allPlayers.length === 0) {
+            const localPlayers = localStorage.getItem('piu_registered_players_cache');
+            if (localPlayers) {
+                try { allPlayers = JSON.parse(localPlayers); } catch(e) {}
+            }
+        }
+        if (allPlayers.length === 0) {
+            allPlayers = authManager.getClientUsers() || [];
+        }
+
         // Obtener logs de auditoría inmutables del local
         let auditLogs = [];
         try {
@@ -199,7 +219,7 @@ async function loadAndRenderAnalyticsData(container, business) {
         }
 
         // Calcular Estadísticas y Métricas
-        const stats = calculateAnalyticsMetrics(filteredReservations, machines, business, filterStartDate, filterEndDate);
+        const stats = calculateAnalyticsMetrics(filteredReservations, machines, business, filterStartDate, filterEndDate, allPlayers, allReservations);
 
         // Renderizar el contenido completo
         renderAnalyticsDashboard(dynamicContent, stats, business, filteredReservations, auditLogs);
@@ -220,7 +240,7 @@ async function loadAndRenderAnalyticsData(container, business) {
     }
 }
 
-function calculateAnalyticsMetrics(reservations, machines, business, startStr, endStr) {
+function calculateAnalyticsMetrics(reservations, machines, business, startStr, endStr, allPlayers = [], allReservations = []) {
     const confirmedRes = reservations.filter(r => r.status === 'CONFIRMED' || r.status === 'COMPLETED');
     const pendingRes = reservations.filter(r => r.status === 'PENDING');
     const cancelledRes = reservations.filter(r => r.status === 'CANCELLED' || r.status === 'REJECTED');
@@ -381,6 +401,34 @@ function calculateAnalyticsMetrics(reservations, machines, business, startStr, e
         .sort((a, b) => b.spent - a.spent)
         .slice(0, 5);
 
+    // Calcular cuántos jugadores registrados han reservado alguna vez en el histórico de esta sucursal
+    let playersWithBookingsCount = 0;
+    allPlayers.forEach(p => {
+        const hasBooking = allReservations.some(r => 
+            (r.clientId && r.clientId === p.id) || 
+            (r.clientPhone && p.phone && r.clientPhone.replace(/\D/g, '') === p.phone.replace(/\D/g, ''))
+        );
+        if (hasBooking) {
+            playersWithBookingsCount++;
+        }
+    });
+
+    // Calcular cuántos jugadores registrados reservaron en el periodo seleccionado (para LTV del periodo)
+    let activePlayersInPeriod = 0;
+    allPlayers.forEach(p => {
+        const hasBookingInPeriod = confirmedRes.some(r => 
+            (r.clientId && r.clientId === p.id) || 
+            (r.clientPhone && p.phone && r.clientPhone.replace(/\D/g, '') === p.phone.replace(/\D/g, ''))
+        );
+        if (hasBookingInPeriod) {
+            activePlayersInPeriod++;
+        }
+    });
+
+    const totalRegisteredPlayers = allPlayers.length;
+    const uniquePlayers = activePlayersInPeriod > 0 ? activePlayersInPeriod : (Object.keys(clientMap).length || 1);
+    const customerLtv = Math.round(totalRevenue / uniquePlayers);
+
     return {
         confirmedCount: confirmedRes.length,
         pendingCount: pendingRes.length,
@@ -400,7 +448,10 @@ function calculateAnalyticsMetrics(reservations, machines, business, startStr, e
         machineStats,
         trendData,
         hoursDist,
-        topClients
+        topClients,
+        uniquePlayers: playersWithBookingsCount,
+        totalRegisteredPlayers,
+        customerLtv
     };
 }
 
@@ -506,6 +557,38 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                 </div>
                 <div class="kpi-subtext">
                     <span>⚠️ <strong>${stats.cancelledCount}</strong> reservaciones canceladas</span>
+                </div>
+            </div>
+
+            <!-- KPI 7: Jugadores con Reservas -->
+            <div class="analytics-kpi-card" style="--card-accent-color: #ff00ff;">
+                <div>
+                    <div class="kpi-header">
+                        <span class="kpi-label">Jugadores con Reservas</span>
+                        <div class="kpi-icon-pill" style="color:#ff00ff;">👥</div>
+                    </div>
+                    <div class="kpi-value" style="color:#ff00ff;">
+                        ${stats.uniquePlayers} <span style="font-size:0.9rem; font-weight:600; color:var(--text-muted);">/ ${stats.totalRegisteredPlayers} registrados</span>
+                    </div>
+                </div>
+                <div class="kpi-subtext">
+                    <span>👥 Clientes que han reservado alguna vez</span>
+                </div>
+            </div>
+
+            <!-- KPI 8: Gasto Promedio por Cliente -->
+            <div class="analytics-kpi-card" style="--card-accent-color: #00ffaa;">
+                <div>
+                    <div class="kpi-header">
+                        <span class="kpi-label">Gasto Promedio por Cliente</span>
+                        <div class="kpi-icon-pill" style="color:#00ffaa;">👑</div>
+                    </div>
+                    <div class="kpi-value" style="color:#00ffaa;">
+                        ${currency}${stats.customerLtv.toLocaleString()}
+                    </div>
+                </div>
+                <div class="kpi-subtext">
+                    <span>💎 Promedio facturado por jugador activo</span>
                 </div>
             </div>
 
@@ -970,6 +1053,7 @@ function renderCharts(stats, currency) {
                         backgroundColor: 'rgba(8, 140, 79, 0.7)',
                         borderColor: COLOR_EMERALD,
                         borderWidth: 1,
+                        yAxisID: 'y',
                         borderRadius: 4
                     },
                     {
@@ -978,6 +1062,7 @@ function renderCharts(stats, currency) {
                         backgroundColor: 'rgba(195, 217, 30, 0.7)',
                         borderColor: COLOR_CHARTREUSE,
                         borderWidth: 1,
+                        yAxisID: 'y1',
                         borderRadius: 4
                     }
                 ]
@@ -991,8 +1076,24 @@ function renderCharts(stats, currency) {
                         ticks: { color: '#9bb7ad', font: { family: 'Outfit', size: 11 } }
                     },
                     y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
                         grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#f0fdf4' }
+                        ticks: {
+                            color: COLOR_EMERALD,
+                            callback: value => `${currency}${value}`
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        ticks: {
+                            color: COLOR_CHARTREUSE,
+                            callback: value => `${value} hrs`
+                        }
                     }
                 },
                 plugins: {

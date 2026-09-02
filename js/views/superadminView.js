@@ -471,6 +471,9 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
     }
 
     if (tab === 'PLAYERS') {
+        const migratedCount = players.filter(p => p.authUid || p.isAuthMigrated).length;
+        const legacyCount = players.length - migratedCount;
+
         return `
             <div class="settings-card">
                 <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -481,9 +484,27 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                             <small>Base de datos unificada de jugadores registrados en la plataforma</small>
                         </div>
                     </div>
-                    <button class="btn btn-primary btn-sm glow-red" id="btn-add-global-player">
-                        <span>➕ Registrar Nuevo Jugador</span>
-                    </button>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-primary btn-sm glow-red" id="btn-add-global-player">
+                            <span>➕ Registrar Nuevo Jugador</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Barra de Estado de Migración Progresiva -->
+                <div style="background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:12px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                        <span style="font-size:0.85rem; font-weight:700; color:#fff;">📊 Salud de Cuentas:</span>
+                        <span class="badge" style="background:rgba(104,242,5,0.15); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); font-size:0.8rem; padding:3px 10px;">
+                            🟢 ${migratedCount} Con Auth Activa
+                        </span>
+                        <span class="badge" style="background:rgba(255,184,0,0.15); color:var(--color-neon-gold); border:1px solid rgba(255,184,0,0.3); font-size:0.8rem; padding:3px 10px;">
+                            🟡 ${legacyCount} Perfil Tradicional / PIN
+                        </span>
+                    </div>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">
+                        💡 Los jugadores se vinculan a Firebase Auth automáticamente al iniciar sesión o reservar.
+                    </small>
                 </div>
 
                 <div class="catalogs-table-wrapper">
@@ -491,6 +512,7 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                         <thead>
                             <tr>
                                 <th>Jugador / GamerTag</th>
+                                <th>Estado Auth</th>
                                 <th>Liga (Ligas Potosinas)</th>
                                 <th>Teléfono / WhatsApp</th>
                                 <th>Correo</th>
@@ -502,6 +524,7 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                             ${players.map(p => {
                                 const cleanPhone = (p.phone || '').replace(/\D/g, '');
                                 const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
+                                const isMigrated = Boolean(p.authUid || p.isAuthMigrated);
 
                                 return `
                                     <tr>
@@ -513,6 +536,11 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                                                     ${p.username ? `<div style="font-size:0.72rem; color:var(--text-muted);">@${p.username}</div>` : ''}
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge" style="background:${isMigrated ? 'rgba(104,242,5,0.15)' : 'rgba(255,184,0,0.15)'}; color:${isMigrated ? 'var(--color-neon-lime)' : 'var(--color-neon-gold)'}; border:1px solid ${isMigrated ? 'rgba(104,242,5,0.3)' : 'rgba(255,184,0,0.3)'}; font-size:0.7rem; padding:2px 8px;">
+                                                ${isMigrated ? '🟢 Auth Activa' : '🟡 Clásico'}
+                                            </span>
                                         </td>
                                         <td><span class="badge badge-primary">${p.skillLevel || 'Liga C'}</span></td>
                                         <td>
