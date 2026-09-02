@@ -4,10 +4,45 @@ import { modal } from './modal.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.7.1',
+        date: '02 de Septiembre de 2026',
+        badge: '🛡️ Versión Actual (Hotfixes)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🎮 Soporte Oficial de PIU ID (piugame.com)',
+                icon: '🎮',
+                items: [
+                    'Nuevo campo de PIU ID oficial con soporte para formatos con discriminador (ej. megajefelink#1234).',
+                    'Búsqueda predictiva con puntuación de máxima relevancia en Cuenta Fácil (POS), Directorio y Reservaciones.',
+                    'Insignias visuales de PIU ID en tarjetas Gamer Pass, membresía digital QR Pass y panel de Superadmin.',
+                    'Inicio de sesión flexible mediante GamerTag, PIU ID oficial o teléfono registrado.'
+                ]
+            },
+            {
+                title: '🧹 Aislamiento Estricto, Protección XSS & Purga de Seguridad',
+                icon: '🛡️',
+                items: [
+                    'Aislamiento 100% verificado en colecciones dedicadas piu_players y piu_staff_users.',
+                    'Sanitización integral con escapeHTML en todos los atributos data-id, nombres y tablas para neutralizar inyecciones de código.',
+                    'Auto-purga reactiva y botón manual 🧹 Purgar XSS para eliminar permanentemente registros residuales maliciosos.',
+                    'Sincronización atómica de caché local sin riesgo de resurrección de perfiles eliminados.'
+                ]
+            },
+            {
+                title: '⚡ Fix en Creación Atómica de Reservaciones',
+                icon: '⚙️',
+                items: [
+                    'Corrección de importación de Firebase Auth en store.js para garantizar auditoría inmutable sin excepciones.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.7.0',
         date: '01 de Septiembre de 2026',
-        badge: '🛡️ Versión Actual',
-        isCurrent: true,
+        badge: 'Estable',
+        isCurrent: false,
         highlights: [
             {
                 title: '🔒 Blindaje y Confiabilidad Financiera (Los 11 Pilares)',
@@ -209,7 +244,7 @@ export function openChangelogModal() {
 
     const footerHtml = `
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.0</small>
+            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.1</small>
             <button type="button" class="btn btn-primary" id="btn-close-changelog">
                 <span>Entendido</span>
             </button>
