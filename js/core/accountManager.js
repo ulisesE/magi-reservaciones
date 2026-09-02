@@ -706,7 +706,6 @@ class AccountManager {
                             updatedAt: nowIso
                         });
                     }
-                    }
 
                     // 3. Registrar auditoría obligatoria de la anulación
                     auditLogger.appendTransactionAudit(transaction, {
