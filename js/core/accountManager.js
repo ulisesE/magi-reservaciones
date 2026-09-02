@@ -363,8 +363,7 @@ class AccountManager {
                 await runTransaction(db, async (transaction) => {
                     const consumptionRef = doc(db, COLLECTIONS.CONSUMPTIONS, consumptionId);
 
-                    // Verificación de Idempotencia persistente en Firestore:
-                    // Si la transacción ya existe (ej: reintento de red, doble clic tardío), abortar sin duplicar cobro
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
                     const existingTx = await transaction.get(consumptionRef);
                     if (existingTx.exists()) {
                         console.warn(`[IDEMPOTENCY_PERSISTED] Transacción ${consumptionId} ya existe en Firestore. Retornando registro original sin duplicar.`);
@@ -372,52 +371,53 @@ class AccountManager {
                         return;
                     }
 
-                    // A. Escribir el documento de consumo
-                    transaction.set(consumptionRef, newRecord);
-
-                    // B. Si es un jugador registrado, leer y actualizar saldo acumulado en la misma transacción
+                    let playerRef = null;
+                    let playerDoc = null;
                     if (playerId && playerId !== 'guest_walkin') {
-                        const playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
-                        const playerDoc = await transaction.get(playerRef);
-
-                        if (playerDoc.exists()) {
-                            const playerData = playerDoc.data();
-                            const accountsMap = playerData.accounts || {};
-                            const curBizAccount = accountsMap[businessId] || { netDebt: 0, totalConsumed: 0 };
-
-                            const newConsumed = (curBizAccount.totalConsumed || 0) + totalAmount;
-                            const newDebt = paymentStatus === 'PENDING'
-                                ? (curBizAccount.netDebt || 0) + totalAmount
-                                : (curBizAccount.netDebt || 0);
-
-                            accountsMap[businessId] = {
-                                ...curBizAccount,
-                                netDebt: Math.max(0, newDebt),
-                                totalConsumed: newConsumed,
-                                hasPendingDebt: newDebt > 0,
-                                lastUpdated: nowIso
-                            };
-
-                            // C. Acreditación atómica de puntos de lealtad si fue pagado al contado
-                            let updatedLoyaltyPoints = playerData.loyaltyPoints || 0;
-                            const business = tenantManager.getBusinessById(businessId);
-                            if (business && business.loyaltyEnabled && business.loyaltyMode !== 'VISITS' && paymentStatus === 'PAID') {
-                                const ratio = Number(business.pointsRatio) || 10;
-                                const ptsEarned = Math.floor(totalAmount / ratio);
-                                if (ptsEarned > 0) {
-                                    updatedLoyaltyPoints += ptsEarned;
-                                }
-                            }
-
-                            transaction.update(playerRef, {
-                                accounts: accountsMap,
-                                loyaltyPoints: updatedLoyaltyPoints,
-                                updatedAt: nowIso
-                            });
-                        }
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
+                        playerDoc = await transaction.get(playerRef);
                     }
 
-                    // D. Inyectar auditoría inmutable en la misma transacción atómica
+                    // 2. TODAS LAS ESCRITURAS (WRITES)
+                    transaction.set(consumptionRef, newRecord);
+
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const accountsMap = playerData.accounts || {};
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, totalConsumed: 0 };
+
+                        const newConsumed = (curBizAccount.totalConsumed || 0) + totalAmount;
+                        const newDebt = paymentStatus === 'PENDING'
+                            ? (curBizAccount.netDebt || 0) + totalAmount
+                            : (curBizAccount.netDebt || 0);
+
+                        accountsMap[businessId] = {
+                            ...curBizAccount,
+                            netDebt: Math.max(0, newDebt),
+                            totalConsumed: newConsumed,
+                            hasPendingDebt: newDebt > 0,
+                            lastUpdated: nowIso
+                        };
+
+                        // Acreditación atómica de puntos de lealtad si fue pagado al contado
+                        let updatedLoyaltyPoints = playerData.loyaltyPoints || 0;
+                        const business = tenantManager.getBusinessById(businessId);
+                        if (business && business.loyaltyEnabled && business.loyaltyMode !== 'VISITS' && paymentStatus === 'PAID') {
+                            const ratio = Number(business.pointsRatio) || 10;
+                            const ptsEarned = Math.floor(totalAmount / ratio);
+                            if (ptsEarned > 0) {
+                                updatedLoyaltyPoints += ptsEarned;
+                            }
+                        }
+
+                        transaction.update(playerRef, {
+                            accounts: accountsMap,
+                            loyaltyPoints: updatedLoyaltyPoints,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    // Inyectar auditoría inmutable en la misma transacción atómica
                     auditLogger.appendTransactionAudit(transaction, {
                         businessId,
                         action: AUDIT_ACTIONS.SALE_RECORDED,
@@ -533,7 +533,7 @@ class AccountManager {
                 await runTransaction(db, async (transaction) => {
                     const paymentRef = doc(db, COLLECTIONS.CONSUMPTIONS, paymentId);
 
-                    // Verificar si este abono ya fue procesado en Firestore (anti-doble cargo persistente)
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
                     const existingPayment = await transaction.get(paymentRef);
                     if (existingPayment.exists()) {
                         console.warn(`[IDEMPOTENCY_PERSISTED] Abono ${paymentId} ya existe en Firestore. Retornando registro original.`);
@@ -541,34 +541,37 @@ class AccountManager {
                         return;
                     }
 
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (playerId && playerId !== 'guest_walkin') {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. TODAS LAS ESCRITURAS (WRITES)
                     transaction.set(paymentRef, paymentRecord);
 
-                    if (playerId && playerId !== 'guest_walkin') {
-                        const playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
-                        const playerDoc = await transaction.get(playerRef);
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const accountsMap = playerData.accounts || {};
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0 };
 
-                        if (playerDoc.exists()) {
-                            const playerData = playerDoc.data();
-                            const accountsMap = playerData.accounts || {};
-                            const curBizAccount = accountsMap[businessId] || { netDebt: 0 };
+                        const previousDebt = curBizAccount.netDebt || 0;
+                        const newDebt = Math.max(0, previousDebt - numAmount);
+                        const creditBalance = Math.max(0, numAmount - previousDebt);
 
-                            const previousDebt = curBizAccount.netDebt || 0;
-                            const newDebt = Math.max(0, previousDebt - numAmount);
-                            const creditBalance = Math.max(0, numAmount - previousDebt);
+                        accountsMap[businessId] = {
+                            ...curBizAccount,
+                            netDebt: newDebt,
+                            creditBalance: creditBalance,
+                            hasPendingDebt: newDebt > 0,
+                            lastUpdated: nowIso
+                        };
 
-                            accountsMap[businessId] = {
-                                ...curBizAccount,
-                                netDebt: newDebt,
-                                creditBalance: creditBalance,
-                                hasPendingDebt: newDebt > 0,
-                                lastUpdated: nowIso
-                            };
-
-                            transaction.update(playerRef, {
-                                accounts: accountsMap,
-                                updatedAt: nowIso
-                            });
-                        }
+                        transaction.update(playerRef, {
+                            accounts: accountsMap,
+                            updatedAt: nowIso
+                        });
                     }
 
                     auditLogger.appendTransactionAudit(transaction, {
@@ -639,6 +642,8 @@ class AccountManager {
             try {
                 await runTransaction(db, async (transaction) => {
                     const txRef = doc(db, COLLECTIONS.CONSUMPTIONS, transactionId);
+
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
                     const txDoc = await transaction.get(txRef);
 
                     if (!txDoc.exists()) {
@@ -650,7 +655,15 @@ class AccountManager {
                         throw new Error("Esta transacción ya se encuentra anulada previamente.");
                     }
 
-                    // 1. Marcar como VOIDED (Inmutable en historial)
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (playerId && playerId !== 'guest_walkin') {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. TODAS LAS ESCRITURAS (WRITES)
+                    // Marcar como VOIDED (Inmutable en historial)
                     transaction.update(txRef, {
                         status: 'VOIDED',
                         voidReason: reason.trim(),
@@ -659,44 +672,40 @@ class AccountManager {
                         updatedAt: nowIso
                     });
 
-                    // 2. Revertir impacto en la cuenta del jugador
-                    if (playerId && playerId !== 'guest_walkin') {
-                        const playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
-                        const playerDoc = await transaction.get(playerRef);
+                    // Revertir impacto en la cuenta del jugador
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const accountsMap = playerData.accounts || {};
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, totalConsumed: 0 };
+                        const amount = Number(txData.totalAmount) || 0;
 
-                        if (playerDoc.exists()) {
-                            const playerData = playerDoc.data();
-                            const accountsMap = playerData.accounts || {};
-                            const curBizAccount = accountsMap[businessId] || { netDebt: 0, totalConsumed: 0 };
-                            const amount = Number(txData.totalAmount) || 0;
+                        let newDebt = curBizAccount.netDebt || 0;
+                        let newConsumed = curBizAccount.totalConsumed || 0;
 
-                            let newDebt = curBizAccount.netDebt || 0;
-                            let newConsumed = curBizAccount.totalConsumed || 0;
-
-                            if (txData.type === 'ABONO') {
-                                // Si se anula un abono, se RESTAURA la deuda que había sido amortizada
-                                newDebt += amount;
-                            } else {
-                                // Si se anula un consumo
-                                newConsumed = Math.max(0, newConsumed - amount);
-                                if (txData.paymentStatus === 'PENDING') {
-                                    newDebt = Math.max(0, newDebt - amount);
-                                }
+                        if (txData.type === 'ABONO') {
+                            // Si se anula un abono, se RESTAURA la deuda que había sido amortizada
+                            newDebt += amount;
+                        } else {
+                            // Si se anula un consumo
+                            newConsumed = Math.max(0, newConsumed - amount);
+                            if (txData.paymentStatus === 'PENDING') {
+                                newDebt = Math.max(0, newDebt - amount);
                             }
-
-                            accountsMap[businessId] = {
-                                ...curBizAccount,
-                                netDebt: Math.max(0, newDebt),
-                                totalConsumed: newConsumed,
-                                hasPendingDebt: newDebt > 0,
-                                lastUpdated: nowIso
-                            };
-
-                            transaction.update(playerRef, {
-                                accounts: accountsMap,
-                                updatedAt: nowIso
-                            });
                         }
+
+                        accountsMap[businessId] = {
+                            ...curBizAccount,
+                            netDebt: Math.max(0, newDebt),
+                            totalConsumed: newConsumed,
+                            hasPendingDebt: newDebt > 0,
+                            lastUpdated: nowIso
+                        };
+
+                        transaction.update(playerRef, {
+                            accounts: accountsMap,
+                            updatedAt: nowIso
+                        });
+                    }
                     }
 
                     // 3. Registrar auditoría obligatoria de la anulación
