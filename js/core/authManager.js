@@ -168,6 +168,7 @@ class AuthManager {
                     } else {
                         this.currentUser = sanitizeUserSession(verifiedUser);
                         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
+                        this.syncRealtimeUsers();
                     }
                 } else {
                     // Purgar credenciales inválidas o manipuladas de LocalStorage
@@ -182,6 +183,32 @@ class AuthManager {
         }
 
         return this.currentUser;
+    }
+
+    syncRealtimeUsers() {
+        if (!isFirebaseAvailable || !db || !this.isStaff()) return;
+
+        try {
+            this.unsubscribeStaff?.();
+            this.unsubscribeStaff = onSnapshot(collection(db, COLLECTIONS.STAFF_USERS), (snapshot) => {
+                if (!snapshot.empty) {
+                    const rawLoaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    this.staffUsers = rawLoaded;
+                    localStorage.setItem('piu_staff_users_cache', JSON.stringify(rawLoaded));
+                    this.notify();
+                }
+            }, (err) => console.warn("Sincronización staff:", err.message));
+
+            this.unsubscribePlayers?.();
+            this.unsubscribePlayers = onSnapshot(collection(db, COLLECTIONS.PLAYERS), (snapshot) => {
+                const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                this.clientUsers = loaded;
+                localStorage.setItem('piu_registered_players_cache', JSON.stringify(loaded));
+                this.notify();
+            }, (err) => console.warn("Sincronización jugadores:", err.message));
+        } catch (e) {
+            console.warn("Error iniciando sincronización de usuarios:", e);
+        }
     }
 
     async fetchClientUsers() {
@@ -421,6 +448,7 @@ class AuthManager {
             details: `Inicio de sesión exitoso como ${safeSessionUser.role}: ${safeSessionUser.name} (@${safeSessionUser.username || ''})`
         });
 
+        this.syncRealtimeUsers();
         this.notify();
         return safeSessionUser;
     }
