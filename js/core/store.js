@@ -1275,8 +1275,8 @@ class Store {
                             startTime: targetStart,
                             endTime: targetEnd,
                             status: validatedStatus,
-                            clientName: resData.clientName,
-                            clientId: resData.clientId,
+                            clientName: persistedFields.clientName || resData.clientName,
+                            clientId: persistedFields.clientId !== undefined ? persistedFields.clientId : (resData.clientId || null),
                             updatedAt: nowIso
                         });
                     }
