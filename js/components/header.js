@@ -569,6 +569,13 @@ export function openLoginModal(initialTab = 'login') {
                             <input type="email" id="reg-email" class="cyber-input" placeholder="jugador@correo.com">
                         </div>
                         <div class="form-group">
+                            <label for="reg-piu-id"><span class="neon-arrow">◆</span> PIU ID (piugame.com) - Opcional</label>
+                            <input type="text" id="reg-piu-id" class="cyber-input" placeholder="Ej. megajefelink#1234">
+                        </div>
+                    </div>
+
+                    <div class="form-row grid-2">
+                        <div class="form-group">
                             <label for="reg-level"><span class="neon-arrow">◆</span> Nivel / Liga (Ligas Potosinas)</label>
                             <select id="reg-level" class="cyber-select">
                                 <option value="Liga D">Liga D</option>
@@ -580,11 +587,10 @@ export function openLoginModal(initialTab = 'login') {
                                 <option value="Liga SSS">Liga SSS</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="reg-mode"><span class="neon-arrow">◆</span> Modo Preferido</label>
-                        <input type="text" id="reg-mode" class="cyber-input" placeholder="Ej. Single Speed, Doubles, Freestyle" value="Single / Double">
+                        <div class="form-group">
+                            <label for="reg-mode"><span class="neon-arrow">◆</span> Modo Preferido</label>
+                            <input type="text" id="reg-mode" class="cyber-input" placeholder="Ej. Single Speed, Doubles, Freestyle" value="Single / Double">
+                        </div>
                     </div>
 
                     <div id="register-error" class="form-error-msg hidden"></div>
@@ -716,6 +722,7 @@ export function openLoginModal(initialTab = 'login') {
         const phone = modalEl.querySelector('#reg-phone').value.trim();
         const pin = modalEl.querySelector('#reg-pin').value.trim();
         const email = modalEl.querySelector('#reg-email').value.trim();
+        const piuGameId = modalEl.querySelector('#reg-piu-id').value.trim();
         const skillLevel = modalEl.querySelector('#reg-level').value;
         const preferredMode = modalEl.querySelector('#reg-mode').value.trim();
         const avatar = modalEl.querySelector('#reg-avatar').value;
@@ -735,7 +742,7 @@ export function openLoginModal(initialTab = 'login') {
 
         try {
             const newPlayer = await authManager.registerClient({
-                name, username, phone, pin, email, skillLevel, preferredMode, avatar
+                name, username, phone, pin, email, piuGameId, skillLevel, preferredMode, avatar
             });
             modal.close();
             toast.success(`¡Perfil de jugador creado con éxito! Bienvenido ${newPlayer.name}`);

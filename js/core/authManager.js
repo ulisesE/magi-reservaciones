@@ -260,10 +260,21 @@ class AuthManager {
                     emailSnap.forEach(d => candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.STAFF_USERS }));
                 }
 
-                // Buscar en Jugadores por username o teléfono o ID directo
+                // Buscar en Jugadores por username o teléfono o ID directo o PIU ID (piugame.com)
                 const qPlayerUser = query(collection(db, COLLECTIONS.PLAYERS), where("username", "==", uTrim));
                 const playerSnap = await getDocs(qPlayerUser);
                 playerSnap.forEach(d => candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.PLAYERS }));
+
+                // Buscar por PIU ID oficial (ej. megajefelink#1234)
+                if (uTrim.includes('#')) {
+                    const qPiuId = query(collection(db, COLLECTIONS.PLAYERS), where("piuGameId", "==", uTrim));
+                    const piuSnap = await getDocs(qPiuId);
+                    piuSnap.forEach(d => {
+                        if (!candidateUsers.some(c => c.id === d.id)) {
+                            candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.PLAYERS });
+                        }
+                    });
+                }
 
                 const termPhone = uTrim.replace(/\D/g, '');
                 if (termPhone) {
@@ -308,10 +319,11 @@ class AuthManager {
         // 2. Validar credenciales contra el hash del PIN o PIN plano legado
         for (const candidate of candidateUsers) {
             const matchesUsername = candidate.username?.toLowerCase() === uTrim || candidate.email?.toLowerCase() === uTrim;
+            const matchesPiuId = candidate.piuGameId?.toLowerCase() === uTrim || (candidate.piuGameId && candidate.piuGameId.toLowerCase().replace(/#/g, '') === uTrim.replace(/#/g, ''));
             const matchesPhone = candidate.phone && candidate.phone.replace(/\D/g, '') === uTrim.replace(/\D/g, '');
             const matchesId = candidate.id?.toLowerCase() === uTrim;
 
-            if (matchesUsername || matchesPhone || matchesId) {
+            if (matchesUsername || matchesPiuId || matchesPhone || matchesId) {
                 const storedPinOrHash = candidate.pinHash || candidate.pin;
                 const isValid = await verifyPin(pTrim, storedPinOrHash);
                 if (isValid) {
@@ -480,6 +492,7 @@ class AuthManager {
             id: newPlayerId,
             authUid: authUid,
             username: cleanUsername,
+            piuGameId: clientData.piuGameId?.trim() || '',
             pinHash: securePinHash,
             name: clientData.name.trim(),
             role: 'CLIENT',
@@ -504,23 +517,11 @@ class AuthManager {
             }
         }
 
-        // 2. Actualizar memoria y caché local completa
-        let allExistingPlayers = this.clientUsers ? [...this.clientUsers] : [];
-        try {
-            const raw = localStorage.getItem('piu_registered_players_cache');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                parsed.forEach(p => {
-                    if (!allExistingPlayers.some(e => e.id === p.id)) allExistingPlayers.push(p);
-                });
-            }
-        } catch(e) {}
-
-        if (!allExistingPlayers.some(p => p.id === newPlayer.id)) {
-            allExistingPlayers.push(newPlayer);
-        }
-        this.clientUsers = allExistingPlayers;
-        localStorage.setItem('piu_registered_players_cache', JSON.stringify(allExistingPlayers));
+        // 2. Actualizar memoria y caché local limpia
+        if (!this.clientUsers) this.clientUsers = [];
+        this.clientUsers = this.clientUsers.filter(p => p.id !== newPlayer.id);
+        this.clientUsers.push(newPlayer);
+        localStorage.setItem('piu_registered_players_cache', JSON.stringify(this.clientUsers));
 
         const safeSession = sanitizeUserSession(newPlayer);
 

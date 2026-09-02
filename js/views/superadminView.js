@@ -765,7 +765,10 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                                                 <span style="font-size:1.3rem;">${p.avatar || '🕺'}</span>
                                                 <div>
                                                     <strong style="color:#ffffff;">${escapeHTML(p.name)}</strong>
-                                                    ${p.username ? `<div style="font-size:0.72rem; color:var(--text-muted);">@${escapeHTML(p.username)}</div>` : ''}
+                                                    <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap; margin-top:2px;">
+                                                        ${p.username ? `<span style="font-size:0.72rem; color:var(--text-muted);">@${escapeHTML(p.username)}</span>` : ''}
+                                                        ${p.piuGameId ? `<span class="badge" style="font-size:0.65rem; padding:1px 4px; background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3);">🎮 ${escapeHTML(p.piuGameId)}</span>` : ''}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
@@ -999,16 +1002,16 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
 
                                 return `
                                     <tr>
-                                        <td><strong>${u.avatar || '👤'} ${u.name}</strong></td>
-                                        <td><code>${u.username}</code></td>
-                                        <td><code style="color:var(--piu-gold); font-weight:700;">${u.pin}</code></td>
+                                        <td><strong>${u.avatar || '👤'} ${escapeHTML(u.name)}</strong></td>
+                                        <td><code>${escapeHTML(u.username)}</code></td>
+                                        <td><code style="color:var(--piu-gold); font-weight:700;">${u.pin ? escapeHTML(u.pin) : '•••• (PIN Hasheado)'}</code></td>
                                         <td>
                                             <span class="badge ${isSuper ? 'badge-danger' : 'badge-warning'}">
                                                 ${isSuper ? '👑 SUPERADMIN' : '🕹️ ENCARGADO'}
                                             </span>
                                         </td>
                                         <td>
-                                            ${isSuper ? '<span class="highlight-cyan">Acceso Global</span>' : (biz ? biz.name : 'Sin asignar')}
+                                            ${isSuper ? '<span class="highlight-cyan">Acceso Global</span>' : (biz ? escapeHTML(biz.name) : 'Sin asignar')}
                                         </td>
                                         <td>
                                             <div style="display:flex; gap:6px;">

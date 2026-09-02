@@ -2,6 +2,7 @@
 // Almacén reactivo de datos (Máquinas, Reservaciones, Configuración) con sincronización Firebase y fallback LocalStorage
 import { 
     db, 
+    auth,
     isFirebaseAvailable, 
     COLLECTIONS, 
     collection, 

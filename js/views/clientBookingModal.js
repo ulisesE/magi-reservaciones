@@ -328,12 +328,15 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             const matches = freshList.filter(c => {
                 const cName = (c.name || '').toLowerCase();
                 const cUsername = (c.username || '').toLowerCase();
+                const cPiuId = (c.piuGameId || '').toLowerCase();
                 const cPhone = (c.phone || '').replace(/\D/g, '');
                 const cId = (c.id || '').toLowerCase();
 
                 return cName.includes(queryText) ||
                     cUsername.includes(queryText) ||
                     cUsername.includes(queryClean) ||
+                    cPiuId.includes(queryText) ||
+                    cPiuId.replace(/#/g, '').includes(queryClean.replace(/#/g, '')) ||
                     (queryPhone && cPhone.includes(queryPhone)) ||
                     cId.includes(queryText);
             }).slice(0, 5);
@@ -350,6 +353,7 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                         <span style="font-size:1.1rem; margin-right:6px;">${c.avatar || '🕺'}</span>
                         <strong style="color:#ffffff;">${escapeHTML(c.name)}</strong>
                         ${c.username ? `<span style="color:var(--piu-cyan); font-size:0.75rem; margin-left:6px;">@${escapeHTML(c.username)}</span>` : ''}
+                        ${c.piuGameId ? `<span class="badge" style="background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3); font-size:0.65rem; margin-left:4px; padding:1px 4px;">🎮 ${escapeHTML(c.piuGameId)}</span>` : ''}
                     </div>
                     <span style="color:var(--text-muted); font-size:0.8rem;">${escapeHTML(c.phone || '')}</span>
                 </div>

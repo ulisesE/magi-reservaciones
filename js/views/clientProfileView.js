@@ -614,13 +614,18 @@ export async function renderClientProfileView(container) {
                         <div class="form-row grid-2">
                             <div class="form-group">
                                 <label for="edit-email"><span class="neon-arrow">◆</span> Correo Electrónico</label>
-                                <input type="email" id="edit-email" class="cyber-input" value="${currentUser.email || ''}" placeholder="jugador@correo.com">
+                                <input type="email" id="edit-email" class="cyber-input" value="${escapeHTML(currentUser.email || '')}" placeholder="jugador@correo.com">
                             </div>
                             <div class="form-group">
-                                <label for="edit-pin"><span class="neon-arrow">◆</span> Cambiar PIN de Acceso (Opcional)</label>
-                                <input type="password" id="edit-pin" class="cyber-input" value="" maxlength="6" placeholder="Dejar vacío para conservar el actual">
-                                <small style="color:var(--text-muted); font-size:0.75rem;">Ingresa 4 a 6 dígitos solo si deseas cambiar tu clave de acceso.</small>
+                                <label for="edit-piu-id"><span class="neon-arrow">◆</span> PIU ID Oficial (piugame.com)</label>
+                                <input type="text" id="edit-piu-id" class="cyber-input" value="${escapeHTML(currentUser.piuGameId || '')}" placeholder="Ej. megajefelink#1234">
                             </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit-pin"><span class="neon-arrow">◆</span> Cambiar PIN de Acceso (Opcional)</label>
+                            <input type="password" id="edit-pin" class="cyber-input" value="" maxlength="6" placeholder="Dejar vacío para conservar el actual">
+                            <small style="color:var(--text-muted); font-size:0.75rem;">Ingresa 4 a 6 dígitos solo si deseas cambiar tu clave de acceso.</small>
                         </div>
 
                         <div class="form-row grid-2">
@@ -681,7 +686,8 @@ export async function renderClientProfileView(container) {
                         
                         <div style="text-align: left; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 6px; border-left: 3px solid ${currentTier.color}; border: 1px solid var(--border-color); border-left: 3px solid ${currentTier.color};">
                             <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight:700; letter-spacing:1px;">GamerTag</div>
-                            <strong style="font-size: 1.15rem; color: #ffffff;">@${currentUser.username || 'gamertag'}</strong>
+                            <strong style="font-size: 1.15rem; color: #ffffff;">@${escapeHTML(currentUser.username || 'gamertag')}</strong>
+                            ${currentUser.piuGameId ? `<div style="margin-top:2px;"><span class="badge" style="background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3); font-size:0.72rem;">🎮 ${escapeHTML(currentUser.piuGameId)}</span></div>` : ''}
                             
                             <div style="display: flex; justify-content: space-between; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
                                 <div>
@@ -740,6 +746,7 @@ export async function renderClientProfileView(container) {
         const name = container.querySelector('#edit-name').value.trim();
         const phone = container.querySelector('#edit-phone').value.trim();
         const email = container.querySelector('#edit-email').value.trim();
+        const piuGameId = container.querySelector('#edit-piu-id')?.value.trim() || '';
         const pin = container.querySelector('#edit-pin').value.trim();
         const skillLevel = container.querySelector('#edit-level').value;
         const preferredMode = container.querySelector('#edit-mode').value.trim();
@@ -752,7 +759,7 @@ export async function renderClientProfileView(container) {
         }
 
         const updatePayload = {
-            name, phone, email, skillLevel, preferredMode, notes, avatar
+            name, phone, email, piuGameId, skillLevel, preferredMode, notes, avatar
         };
 
         if (pin) {
