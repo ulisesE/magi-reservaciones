@@ -1,6 +1,18 @@
 // js/core/errorHandler.js
 // Manejador centralizado y transparente de errores de Firebase, Firestore y Conectividad
 import { toast } from '../components/toast.js';
+import { isOnline, isFirebaseAvailable, db } from '../firebaseConfig.js';
+
+/**
+ * POLÍTICA DE CONFIABILIDAD FINANCIERA MAGI:
+ * "Consulta offline: SÍ. Operación financiera offline: NO."
+ * Toda operación monetaria (ventas, abonos, liquidaciones, anulaciones, reservaciones) exige conexión activa con Firestore.
+ */
+export function assertFinancialOnline() {
+    if (!isOnline() || !isFirebaseAvailable || !db) {
+        throw new Error("No hay conexión a Internet. Las operaciones financieras y de auditoría requieren conexión activa con Firestore para garantizar la consistencia contable.");
+    }
+}
 
 export const ERROR_MAPPINGS = {
     'permission-denied': 'Acceso denegado: Las reglas de seguridad rechazaron la operación. No tienes permisos para modificar estos datos en esta sucursal.',
@@ -17,7 +29,8 @@ export const ERROR_MAPPINGS = {
     'auth/user-not-found': 'Usuario no registrado en el sistema.',
     'auth/wrong-password': 'PIN o clave incorrecta.',
     'auth/network-request-failed': 'Error de red al intentar autenticar con Firebase.',
-    'auth/too-many-requests': 'Demasiados intentos fallidos. Intenta más tarde.'
+    'auth/too-many-requests': 'Demasiados intentos fallidos. Intenta más tarde.',
+    'auth/configuration-not-found': "El proveedor 'Correo electrónico/contraseña' no está habilitado en la consola de Firebase Authentication (Authentication ➔ Sign-in method ➔ Email/Password ➔ Habilitar)."
 };
 
 /**

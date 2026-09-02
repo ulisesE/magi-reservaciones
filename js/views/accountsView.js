@@ -390,10 +390,6 @@ export async function renderAccountsView(container) {
                                     </td>
                                 </tr>
                             ` : transactions.map(tx => {
-                                const isAbono = tx.type === 'ABONO';
-                                const isPending = tx.paymentStatus === 'PENDING';
-                                const isCancelled = tx.status === 'CANCELLED';
-
                                 const dateObj = tx.createdAt ? new Date(tx.createdAt) : new Date();
                                 const formattedDate = dateObj.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
                                 const formattedTime = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });

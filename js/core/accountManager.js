@@ -20,18 +20,7 @@ import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
 import { loyaltyManager } from './loyaltyManager.js';
 import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
-import { handleAppError } from './errorHandler.js';
-
-/**
- * POLÍTICA DE CONFIABILIDAD FINANCIERA MAGI:
- * "Consulta offline: SÍ. Operación financiera offline: NO."
- * Toda operación monetaria (ventas, abonos, liquidaciones, anulaciones) exige conexión activa con Firestore.
- */
-function assertFinancialOnline() {
-    if (!isOnline() || !isFirebaseAvailable || !db) {
-        throw new Error("No hay conexión a Internet. Las operaciones monetarias requieren conexión activa con Firestore para garantizar la consistencia contable y auditoría.");
-    }
-}
+import { handleAppError, assertFinancialOnline } from './errorHandler.js';
 
 export const CONSUMPTION_TYPES = {
     JUEGO: {

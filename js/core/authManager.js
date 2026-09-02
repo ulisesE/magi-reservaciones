@@ -443,8 +443,25 @@ class AuthManager {
                 const cred = await signInWithEmailAndPassword(auth, fbEmail, fbPassword);
                 authUid = cred.user.uid;
             } catch (authErr) {
-                // Si la autenticación en Firebase Auth falla para Staff, se rechaza de forma terminal
-                if (isStaff) {
+                // Si la cuenta aún no existe en Firebase Auth pero el PIN fue verificado contra Firestore/Seed, auto-crearla en Auth
+                if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') {
+                    try {
+                        const newCred = await createUserWithEmailAndPassword(auth, fbEmail, fbPassword);
+                        authUid = newCred.user.uid;
+                    } catch (createErr) {
+                        if (createErr.code === 'auth/email-already-in-use') {
+                            try {
+                                const retryCred = await signInWithEmailAndPassword(auth, fbEmail, fbPassword);
+                                authUid = retryCred.user.uid;
+                            } catch (e) {}
+                        }
+                    }
+                }
+
+                if (!authUid && isStaff) {
+                    if (authErr.code === 'auth/configuration-not-found' || authErr.message?.includes('configuration-not-found')) {
+                        throw new Error("El proveedor 'Correo electrónico/contraseña' está desactivado en Firebase Authentication. Habilítalo en la consola de Firebase: Authentication ➔ Sign-in method ➔ Correo electrónico/contraseña ➔ Habilitar.");
+                    }
                     throw new Error(`Acceso denegado: Falló la autenticación en Firebase Auth (${authErr.code || authErr.message}).`);
                 }
             }
@@ -631,11 +648,11 @@ class AuthManager {
         }
 
         // 2. Actualizar caché local tras confirmación de Firestore
-        let cachedPlayers = this.clientUsers;
-        if (!cachedPlayers.some(p => p.id === newPlayer.id)) {
-            cachedPlayers.push(newPlayer);
-            this.clientUsers = cachedPlayers;
-            localStorage.setItem('piu_registered_players_cache', JSON.stringify(cachedPlayers));
+        const existingPlayers = this.clientUsers;
+        if (!existingPlayers.some(p => p.id === newPlayer.id)) {
+            existingPlayers.push(newPlayer);
+            this.clientUsers = existingPlayers;
+            localStorage.setItem('piu_registered_players_cache', JSON.stringify(existingPlayers));
         }
 
         const safeSession = sanitizeUserSession(newPlayer);

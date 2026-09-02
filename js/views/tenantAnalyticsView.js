@@ -746,6 +746,12 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                                     No se encontraron reservaciones en el periodo seleccionado.
                                 </td>
                             </tr>
+                        `}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- TABLA DE AUDITORÍA Y TRAZABILIDAD INMUTABLE (piu_audit_logs) -->
         <div class="analytics-table-card" style="margin-top:20px; border-left:4px solid var(--color-neon-cyan);">
             <div class="chart-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
