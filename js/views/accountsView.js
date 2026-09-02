@@ -8,6 +8,7 @@ import { accountManager, CONSUMPTION_TYPES } from '../core/accountManager.js';
 import { clientDirManager } from './clientsView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 let selectedFilterPlayerId = '';
 let selectedDateFilter = 'ALL'; // 'ALL', 'TODAY', 'WEEK', 'MONTH'
@@ -742,10 +743,10 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
         // Si el usuario escribió un término, ofrecer registrar bajo ese nombre público
         if (rawTerm) {
             html += `
-                <div class="pos-dropdown-item btn-select-custom-name" data-name="${rawTerm}" style="padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(255,184,0,0.05); cursor:pointer; display:flex; align-items:center; gap:10px; transition:background 0.15s ease;">
+                <div class="pos-dropdown-item btn-select-custom-name" data-custom-name="${escapeHTML(rawTerm)}" style="padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(255,184,0,0.05); cursor:pointer; display:flex; align-items:center; gap:10px; transition:background 0.15s ease;">
                     <span style="font-size:1.3rem;">📝</span>
                     <div>
-                        <strong style="color:var(--color-neon-gold); font-size:0.88rem; display:block;">Venta General a nombre de: "${rawTerm}"</strong>
+                        <strong style="color:var(--color-neon-gold); font-size:0.88rem; display:block;">Venta General a nombre de: "${escapeHTML(rawTerm)}"</strong>
                         <small style="color:var(--text-muted); font-size:0.75rem;">Registrar como cliente no registrado en catálogo</small>
                     </div>
                 </div>
@@ -756,13 +757,13 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
         if (matches.length > 0) {
             matches.forEach(c => {
                 html += `
-                    <div class="pos-dropdown-item btn-select-matched-client" data-id="${c.id}" data-name="${c.name}" data-username="${c.username || ''}" data-phone="${c.phone || ''}" data-avatar="${c.avatar || '🕺'}" style="padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; transition:background 0.15s ease;">
+                    <div class="pos-dropdown-item btn-select-matched-client" data-id="${c.id}" style="padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; transition:background 0.15s ease;">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <span style="font-size:1.3rem;">${c.avatar || '🕺'}</span>
                             <div>
-                                <strong style="color:#ffffff; font-size:0.9rem; display:block;">${c.name}</strong>
-                                <span style="color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${c.username || 'sin_tag'}</span>
-                                ${c.phone ? `<small style="color:var(--text-muted); font-size:0.75rem; margin-left:6px;">📱 ${c.phone}</small>` : ''}
+                                <strong style="color:#ffffff; font-size:0.9rem; display:block;">${escapeHTML(c.name)}</strong>
+                                <span style="color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${escapeHTML(c.username || 'sin_tag')}</span>
+                                ${c.phone ? `<small style="color:var(--text-muted); font-size:0.75rem; margin-left:6px;">📱 ${escapeHTML(c.phone)}</small>` : ''}
                             </div>
                         </div>
                         <span class="badge badge-outline" style="font-size:0.7rem;">Seleccionar</span>
@@ -772,17 +773,17 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
         } else if (rawTerm) {
             html += `
                 <div style="padding:10px 14px; font-size:0.8rem; color:var(--text-muted);">
-                    No se encontró coincidencia exacta con "${rawTerm}". Puedes usar la opción de venta general arriba o seleccionar de los clientes registrados:
+                    No se encontró coincidencia exacta con "${escapeHTML(rawTerm)}". Puedes usar la opción de venta general arriba o seleccionar de los clientes registrados:
                 </div>
             `;
             sortedClients.slice(0, 5).forEach(c => {
                 html += `
-                    <div class="pos-dropdown-item btn-select-matched-client" data-id="${c.id}" data-name="${c.name}" data-username="${c.username || ''}" data-phone="${c.phone || ''}" data-avatar="${c.avatar || '🕺'}" style="padding:8px 14px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; opacity:0.85;">
+                    <div class="pos-dropdown-item btn-select-matched-client" data-id="${c.id}" style="padding:8px 14px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; opacity:0.85;">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <span style="font-size:1.1rem;">${c.avatar || '🕺'}</span>
                             <div>
-                                <strong style="color:#ffffff; font-size:0.85rem; display:block;">${c.name}</strong>
-                                <span style="color:var(--color-neon-cyan); font-size:0.7rem; font-family:var(--font-mono);">@${c.username || 'sin_tag'}</span>
+                                <strong style="color:#ffffff; font-size:0.85rem; display:block;">${escapeHTML(c.name)}</strong>
+                                <span style="color:var(--color-neon-cyan); font-size:0.7rem; font-family:var(--font-mono);">@${escapeHTML(c.username || 'sin_tag')}</span>
                             </div>
                         </div>
                         <span class="badge badge-outline" style="font-size:0.65rem;">Seleccionar</span>
@@ -806,13 +807,12 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
             updateDebtBadge();
         });
 
-        clientDropdown.querySelector('.btn-select-custom-name')?.addEventListener('click', (e) => {
-            const customN = e.currentTarget.dataset.name;
+        clientDropdown.querySelector('.btn-select-custom-name')?.addEventListener('click', () => {
             currentSelectedPlayerId = 'guest_walkin';
-            currentSelectedPlayerName = customN;
+            currentSelectedPlayerName = rawTerm;
             currentSelectedPlayerUsername = '';
             currentSelectedPlayerPhone = '';
-            clientSearchInput.value = customN;
+            clientSearchInput.value = rawTerm;
             paymentStatusEl.value = 'PAID';
             clientDropdown.style.display = 'none';
             updateDebtBadge();
@@ -820,11 +820,15 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
 
         clientDropdown.querySelectorAll('.btn-select-matched-client').forEach(item => {
             item.addEventListener('click', () => {
-                currentSelectedPlayerId = item.dataset.id;
-                currentSelectedPlayerName = item.dataset.name;
-                currentSelectedPlayerUsername = item.dataset.username;
-                currentSelectedPlayerPhone = item.dataset.phone;
-                clientSearchInput.value = `${item.dataset.name} (@${item.dataset.username || 'sin_tag'})`;
+                const targetId = item.dataset.id;
+                const found = sortedClients.find(c => c.id === targetId);
+                if (found) {
+                    currentSelectedPlayerId = found.id;
+                    currentSelectedPlayerName = found.name;
+                    currentSelectedPlayerUsername = found.username || '';
+                    currentSelectedPlayerPhone = found.phone || '';
+                    clientSearchInput.value = `${found.name} (@${found.username || 'sin_tag'})`;
+                }
                 paymentStatusEl.value = 'PENDING';
                 clientDropdown.style.display = 'none';
                 updateDebtBadge();

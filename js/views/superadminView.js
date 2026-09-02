@@ -7,6 +7,7 @@ import { catalogsManager } from '../core/catalogsManager.js';
 import { clientDirManager, openClientFormModal } from './clientsView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { escapeHTML } from '../core/securityUtils.js';
 import { 
     db, 
     isFirebaseAvailable, 
@@ -532,8 +533,8 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                                             <div style="display:flex; align-items:center; gap:8px;">
                                                 <span style="font-size:1.3rem;">${p.avatar || '🕺'}</span>
                                                 <div>
-                                                    <strong style="color:#ffffff;">${p.name}</strong>
-                                                    ${p.username ? `<div style="font-size:0.72rem; color:var(--text-muted);">@${p.username}</div>` : ''}
+                                                    <strong style="color:#ffffff;">${escapeHTML(p.name)}</strong>
+                                                    ${p.username ? `<div style="font-size:0.72rem; color:var(--text-muted);">@${escapeHTML(p.username)}</div>` : ''}
                                                 </div>
                                             </div>
                                         </td>
@@ -542,17 +543,17 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                                                 ${isMigrated ? '🟢 Auth Activa' : '🟡 Clásico'}
                                             </span>
                                         </td>
-                                        <td><span class="badge badge-primary">${p.skillLevel || 'Liga C'}</span></td>
+                                        <td><span class="badge badge-primary">${escapeHTML(p.skillLevel || 'Liga C')}</span></td>
                                         <td>
-                                            <span>${p.phone || 'N/A'}</span>
+                                            <span>${escapeHTML(p.phone || 'N/A')}</span>
                                             ${cleanPhone ? `
                                                 <a href="${waLink}" target="_blank" rel="noopener noreferrer" style="margin-left:6px; color:#25D366; font-size:0.8rem; font-weight:700;">
                                                     💬 WhatsApp
                                                 </a>
                                             ` : ''}
                                         </td>
-                                        <td><span style="font-size:0.82rem; color:var(--text-muted);">${p.email || 'N/A'}</span></td>
-                                        <td><span style="font-size:0.82rem; color:var(--piu-cyan);">${p.preferredMode || 'Single / Double'}</span></td>
+                                        <td><span style="font-size:0.82rem; color:var(--text-muted);">${escapeHTML(p.email || 'N/A')}</span></td>
+                                        <td><span style="font-size:0.82rem; color:var(--piu-cyan);">${escapeHTML(p.preferredMode || 'Single / Double')}</span></td>
                                         <td>
                                             <div style="display:flex; gap:6px;">
                                                 <button class="btn btn-outline btn-xs btn-edit-global-player" data-id="${p.id}">✏️ Editar</button>

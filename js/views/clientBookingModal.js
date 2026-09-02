@@ -345,13 +345,13 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             }
 
             suggestionsDiv.innerHTML = matches.map(c => `
-                <div class="suggestion-item" data-id="${c.id}" data-username="${c.username || ''}" data-name="${c.name}" data-phone="${c.phone || ''}" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; transition: background 0.2s; color:#ffffff;">
+                <div class="suggestion-item" data-id="${c.id}" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; transition: background 0.2s; color:#ffffff;">
                     <div>
                         <span style="font-size:1.1rem; margin-right:6px;">${c.avatar || '🕺'}</span>
-                        <strong style="color:#ffffff;">${c.name}</strong>
-                        ${c.username ? `<span style="color:var(--piu-cyan); font-size:0.75rem; margin-left:6px;">@${c.username}</span>` : ''}
+                        <strong style="color:#ffffff;">${escapeHTML(c.name)}</strong>
+                        ${c.username ? `<span style="color:var(--piu-cyan); font-size:0.75rem; margin-left:6px;">@${escapeHTML(c.username)}</span>` : ''}
                     </div>
-                    <span style="color:var(--text-muted); font-size:0.8rem;">${c.phone || ''}</span>
+                    <span style="color:var(--text-muted); font-size:0.8rem;">${escapeHTML(c.phone || '')}</span>
                 </div>
             `).join('');
 
@@ -366,14 +366,18 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 });
                 item.addEventListener('click', (evt) => {
                     evt.stopPropagation();
-                    nameInput.value = item.dataset.name;
-                    phoneInput.value = item.dataset.phone;
-                    selectedClientRef = {
-                        id: item.dataset.id,
-                        username: item.dataset.username,
-                        name: item.dataset.name,
-                        phone: item.dataset.phone
-                    };
+                    const targetId = item.dataset.id;
+                    const clientObj = freshList.find(c => c.id === targetId);
+                    if (clientObj) {
+                        nameInput.value = clientObj.name;
+                        phoneInput.value = clientObj.phone || '';
+                        selectedClientRef = {
+                            id: clientObj.id,
+                            username: clientObj.username,
+                            name: clientObj.name,
+                            phone: clientObj.phone
+                        };
+                    }
                     suggestionsDiv.innerHTML = '';
                     suggestionsDiv.classList.add('hidden');
                 });

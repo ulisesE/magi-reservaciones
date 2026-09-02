@@ -253,7 +253,7 @@ export async function renderClientsView(container, queryVal = '') {
 
             <!-- Buscador -->
             <div style="display:flex; gap:10px; margin-bottom:20px; max-width:600px; flex-wrap:wrap;">
-                <input type="text" id="input-search-clients" class="cyber-input" placeholder="🔍 Buscar por nombre, GamerTag o teléfono..." value="${currentClientsSearchQuery}" style="flex:1; min-width:200px;">
+                <input type="text" id="input-search-clients" class="cyber-input" placeholder="🔍 Buscar por nombre, GamerTag o teléfono..." value="${escapeHTML(currentClientsSearchQuery)}" style="flex:1; min-width:200px;">
                 <button class="btn btn-secondary" id="btn-search-clients">Buscar</button>
                 <button class="btn btn-primary" id="btn-scan-client-qr" style="display:flex; align-items:center; gap:6px; background:var(--color-neon-lime); color:#000; font-weight:bold; border:none; box-shadow: 0 0 10px rgba(104,242,5,0.3);">
                     <span>📸 Escanear QR</span>
