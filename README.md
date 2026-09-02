@@ -4,7 +4,26 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## Funcionalidades recientes y optimizaciones (v1.6.0)
+## Funcionalidades recientes y optimizaciones (v1.7.0)
+
+### 🔒 Blindaje Financiero, Idempotencia y Transaccionalidad Atómica (Los 11 Pilares de MAGI)
+* **Transacciones Atómicas Integrales**: Toda operación monetaria (ventas, abonos, anulaciones, reservaciones) opera exclusivamente dentro de `runTransaction()` en Firestore.
+* **Autoridad del Precio en Servidor**: El cliente jamás decide el importe de una reservación; la transacción consulta directamente la máquina y tarifas del negocio en Firestore para calcular el costo verificado.
+* **Idempotencia Determinista**: Claves e IDs de transacción basados en tuplas semánticas inmutables sin `Date.now()`, previniendo dobles cobros y reservaciones duplicadas por clics concurrentes.
+* **Cero Borrado Físico Financiero**: Reemplazo de borrados por anulaciones formales (`VOIDED`) y cancelaciones soft-delete preservando la trazabilidad contable.
+* **Sincronía Atómica de Lealtad**: Acreditación y reversión de puntos y visitas calculada estrictamente a partir del estado confirmado en Firestore.
+
+### 📜 Auditoría Inmutable y Trazabilidad en Tiempo Real (`piu_audit_logs`)
+* **Bitácora Inmutable en Firestore**: Registro automático de eventos financieros, cambios de personal, precios y configuraciones críticas con actor validado contra `request.auth.uid`.
+* **Panel de Auditoría Visual**: Nueva tabla interactiva en la pestaña **Rendimiento** para visualizar cronológicamente cada acción, responsable e importe.
+
+### 👤 Soporte Perimetral para Reservaciones de Invitados (Guests)
+* **Flujo Seguro sin Cuenta**: Creación pública de solicitudes anónimas con validación perimetral estricta de esquema y estado `PENDING` obligatorio.
+* **Cierre de Calendarios**: Modificación de `piu_machine_schedules` restringida exclusivamente a Superadmin y Staff de la sucursal.
+
+---
+
+## Funcionalidades de Versiones Anteriores (v1.6.0)
 
 ### 💳 Módulo "Cuenta Fácil" & Flujo de Caja
 * **KPIs de Caja en Tiempo Real**: 💰 *Por Cobrar General* (deuda acumulada de la sala), 👥 *Clientes Deudores* (conteo de cuentas con adeudo) y 🛒 *Total Venta Fiada* (monto histórico de fiados).

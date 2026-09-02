@@ -4,10 +4,46 @@ import { modal } from './modal.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.7.0',
+        date: '01 de Septiembre de 2026',
+        badge: '🛡️ Versión Actual',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🔒 Blindaje y Confiabilidad Financiera (Los 11 Pilares)',
+                icon: '🛡️',
+                items: [
+                    'Operaciones financieras y de auditoría atómicas mediante runTransaction() en Firestore.',
+                    'Autoridad del precio en servidor: cálculo dinámico y validación de tarifas directamente en Firestore.',
+                    'Idempotencia determinista sin Date.now() para prevenir dobles cobros y reservaciones duplicadas.',
+                    'Acreditación y reversión atómica de puntos de lealtad ligada al estado confirmado del documento.',
+                    'Cero borrado físico de transacciones financieras y reservaciones (anulación formal y soft-cancel).'
+                ]
+            },
+            {
+                title: '📜 Auditoría y Trazabilidad Inmutable (piu_audit_logs)',
+                icon: '📋',
+                items: [
+                    'Bitácora inmutable de eventos financieros, cambios de personal, precios y configuraciones críticas.',
+                    'Actor anclado criptográficamente al UID de Firebase Auth.',
+                    'Nuevo panel visual de auditoría y trazabilidad en tiempo real dentro de la pestaña Rendimiento.'
+                ]
+            },
+            {
+                title: '👤 Soporte Seguro de Reservaciones para Invitados (Guests)',
+                icon: '🎟️',
+                items: [
+                    'Creación pública de solicitudes sin cuenta con validación perimetral estricta de esquema y estado PENDING obligatorio.',
+                    'Aislamiento estricto de calendarios: escritura restringida exclusivamente al personal del local.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.6.0',
         date: '01 de Septiembre de 2026',
-        badge: '🚀 Versión Actual',
-        isCurrent: true,
+        badge: 'Estable',
+        isCurrent: false,
         highlights: [
             {
                 title: '💳 Módulo y Pantalla Dedicada: Cuenta Fácil & Caja',
@@ -173,7 +209,7 @@ export function openChangelogModal() {
 
     const footerHtml = `
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.5.0</small>
+            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.0</small>
             <button type="button" class="btn btn-primary" id="btn-close-changelog">
                 <span>Entendido</span>
             </button>

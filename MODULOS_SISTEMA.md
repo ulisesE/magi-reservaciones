@@ -1,7 +1,7 @@
 # 📦 Reporte y Catálogo de Módulos del Sistema — Pump It Up Hub
 ### Especificación Técnica de Arquitectura Modular y Preparación para Feature Toggles
 
-Este documento describe el inventario exhaustivo de todos los módulos que integran la plataforma **Pump It Up Hub (v1.6.0)**, especificando su rol, alcance, dependencias de datos y el impacto operativo en caso de que sean activados o desactivados por el **Superadministrador** en la siguiente fase de desarrollo.
+Este documento describe el inventario exhaustivo de todos los módulos que integran la plataforma **Pump It Up Hub (v1.7.0)**, especificando su rol, alcance, dependencias de datos y el impacto operativo en caso de que sean activados o desactivados por el **Superadministrador** en la siguiente fase de desarrollo.
 
 ---
 

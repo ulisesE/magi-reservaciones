@@ -42,12 +42,17 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 1. NEGOCIOS Y CONFIGURACIÓN MULTI-TENANT (piu_businesses)
+    // 1. NEGOCIOS Y CONFIGURACIÓN MULTI-TENANT (piu_businesses, piu_system_settings)
     // =========================================================================
     match /piu_businesses/{businessId} {
       allow read: if true; // Directorio público de sucursales
       allow create, delete: if isSuperAdmin(); // Creación y borrado exclusivo de Superadmin
       allow update: if isManagerForBusiness(businessId); // Ajustes permitidos al Manager del local o Superadmin
+    }
+
+    match /piu_system_settings/{settingId} {
+      allow read: if true; // Configuración global del sistema (ej: desactivar cambio de local)
+      allow write: if isSuperAdmin();
     }
 
     // =========================================================================
@@ -176,21 +181,8 @@ service cloud.firestore {
     // 6. RESERVACIONES (piu_reservations) 🔒 PRIVACIDAD, FINANZAS Y SOPORTE GUEST
     // =========================================================================
     match /piu_reservations/{reservationId} {
-      // Lectura: Manager de la sucursal, el jugador dueño de la reserva o consulta individual de folio para Invitados
-      allow get: if (
-        (isAuthenticated() && (
-          isManagerForBusiness(resource.data.businessId) ||
-          isOwnerPlayer(resource.data.clientId) ||
-          isOwnerPlayer(resource.data.playerId)
-        )) ||
-        (resource.data.clientId == null || resource.data.clientId == '')
-      );
-
-      allow list: if isAuthenticated() && (
-        isSuperAdmin() ||
-        isStaffUser() ||
-        request.auth.uid != null
-      );
+      // Lectura pública para visualización de disponibilidad de slots en el calendario (Día / Semana / Mes)
+      allow read: if true;
       
       // Creación:
       // A. Manager/Staff del local (puede crear en CONFIRMED o PENDING)
