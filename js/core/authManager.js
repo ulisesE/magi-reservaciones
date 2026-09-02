@@ -309,14 +309,56 @@ class AuthManager {
         let user = null;
         let candidateUsers = [];
 
-        // 1. Buscar en caché local y semillas predeterminadas
+        // 1. Buscar en Firestore (Mandante principal) y semillas locales
+        if (isFirebaseAvailable && db) {
+            try {
+                // Buscar en Staff
+                const qStaffUser = query(collection(db, COLLECTIONS.STAFF_USERS), where("username", "==", uTrim));
+                const staffSnap = await getDocs(qStaffUser);
+                staffSnap.forEach(d => candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.STAFF_USERS }));
+
+                if (candidateUsers.length === 0) {
+                    const qStaffEmail = query(collection(db, COLLECTIONS.STAFF_USERS), where("email", "==", uTrim));
+                    const emailSnap = await getDocs(qStaffEmail);
+                    emailSnap.forEach(d => candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.STAFF_USERS }));
+                }
+
+                // Buscar en Jugadores
+                const qPlayerUser = query(collection(db, COLLECTIONS.PLAYERS), where("username", "==", uTrim));
+                const playerSnap = await getDocs(qPlayerUser);
+                playerSnap.forEach(d => candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.PLAYERS }));
+
+                const termPhone = uTrim.replace(/\D/g, '');
+                if (termPhone) {
+                    const qPhone = query(collection(db, COLLECTIONS.PLAYERS), where("phone", "==", termPhone));
+                    const phoneSnap = await getDocs(qPhone);
+                    phoneSnap.forEach(d => {
+                        if (!candidateUsers.some(c => c.id === d.id)) {
+                            candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.PLAYERS });
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn("Búsqueda online falló, usando candidatos locales:", err);
+            }
+        }
+
+        // Incorporar semillas locales y caché
         const localStaff = this.staffUsers.length > 0 ? this.staffUsers : DEFAULT_STAFF_USERS;
         const localPlayers = this.clientUsers || [];
 
-        localStaff.forEach(d => candidateUsers.push({ ...d, _coll: COLLECTIONS.STAFF_USERS }));
-        localPlayers.forEach(d => candidateUsers.push({ ...d, _coll: COLLECTIONS.PLAYERS }));
+        localStaff.forEach(d => {
+            if (!candidateUsers.some(c => c.username?.toLowerCase() === d.username?.toLowerCase())) {
+                candidateUsers.push({ ...d, _coll: COLLECTIONS.STAFF_USERS });
+            }
+        });
+        localPlayers.forEach(d => {
+            if (!candidateUsers.some(c => c.id === d.id)) {
+                candidateUsers.push({ ...d, _coll: COLLECTIONS.PLAYERS });
+            }
+        });
 
-        // 2. Validar credenciales contra el hash del PIN
+        // 2. Validar credenciales contra el hash del PIN o PIN plano legado
         for (const candidate of candidateUsers) {
             const matchesUsername = candidate.username?.toLowerCase() === uTrim || candidate.email?.toLowerCase() === uTrim;
             const matchesPhone = candidate.phone && candidate.phone.replace(/\D/g, '') === uTrim.replace(/\D/g, '');
@@ -396,7 +438,7 @@ class AuthManager {
                         };
                     } else {
                         // Migración controlada de cuentas semilla legacy (usr_xxx) a authUid
-                        const legacyDocId = (user.id && user.id !== authUid && user.id.startsWith('usr_')) ? user.id : null;
+                        const legacyDocId = (user.id && user.id !== authUid) ? user.id : null;
                         if (legacyDocId) {
                             const legacySnap = await getDoc(doc(db, COLLECTIONS.STAFF_USERS, legacyDocId));
                             if (legacySnap.exists()) {
@@ -408,6 +450,12 @@ class AuthManager {
                                     role: legacyData.role,
                                     businessId: legacyData.businessId || null
                                 };
+                                // Asegurar que el PIN quede hasheado de forma segura y sin texto plano
+                                if (!user.pinHash) {
+                                    user.pinHash = await hashPin(pTrim);
+                                }
+                                delete user.pin;
+
                                 await setDoc(doc(db, COLLECTIONS.STAFF_USERS, authUid), user, { merge: true });
                                 try {
                                     await deleteDoc(doc(db, COLLECTIONS.STAFF_USERS, legacyDocId));
@@ -425,6 +473,18 @@ class AuthManager {
                 }
             } else if (authUid) {
                 user.authUid = authUid;
+                // Migración progresiva y silenciosa para jugadores de versiones anteriores
+                if (db && user.id) {
+                    try {
+                        const playerUpdate = { authUid: authUid };
+                        if (!user.pinHash) {
+                            playerUpdate.pinHash = await hashPin(pTrim);
+                        }
+                        await updateDoc(doc(db, COLLECTIONS.PLAYERS, user.id), playerUpdate);
+                    } catch (e) {
+                        console.warn("Actualización progresiva de jugador:", e);
+                    }
+                }
             }
         }
 

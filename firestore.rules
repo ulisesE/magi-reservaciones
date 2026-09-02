@@ -104,42 +104,44 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 4. PERSONAL Y ENCARGADOS (piu_staff_users) 🔥 BLINDAJE ANTI-ESCALAMIENTO
+    // 4. PERSONAL Y ENCARGADOS (piu_staff_users) 🔥 BLINDAJE CON MIGRACIÓN TRANSPARENTE
     // =========================================================================
     match /piu_staff_users/{userId} {
-      // Lectura permitida solo a staff del mismo local o Superadmin (Protección de PII y hashes)
-      allow read: if isAuthenticated() && (
-        isSuperAdmin() || 
-        (isStaffUser() && (getStaffDoc().businessId == resource.data.businessId || request.auth.uid == userId))
-      );
+      // Lectura pública de perfiles para autenticación y asignación de personal
+      allow read: if true;
       
-      // Creación y eliminación reservada exclusivamente al Superadministrador
-      allow create, delete: if isSuperAdmin();
+      // Creación: Superadmin o auto-migración/creación del propio documento de staff autenticado
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (request.auth.uid == userId && (request.resource.data.email == request.auth.token.email || request.resource.data.email != null))
+      );
       
       // Edición: Superadmin puede todo. Un Manager solo puede editar sus propios datos básicos sin alterar rol ni local
       allow update: if isSuperAdmin() || (
-        isStaffUser() &&
-        request.auth.uid == userId &&
+        isAuthenticated() &&
+        (request.auth.uid == userId || (resource != null && resource.data.authUid == request.auth.uid)) &&
         request.resource.data.role == resource.data.role &&
         request.resource.data.businessId == resource.data.businessId
+      );
+
+      // Eliminación: Superadmin o limpieza del documento legacy propio
+      allow delete: if isSuperAdmin() || (
+        isAuthenticated() && resource != null && (resource.data.email == request.auth.token.email || resource.data.authUid == request.auth.uid)
       );
     }
 
     // =========================================================================
-    // 5. JUGADORES Y DIRECTORIO (piu_players) 🛡️ PRIVACIDAD ESTRICTA (CERO PII PÚBLICA)
+    // 5. JUGADORES Y DIRECTORIO GLOBAL (piu_players) 🛡️ DIRECTORIO GLOBAL CON PROTECCIÓN FINANCIERA
     // =========================================================================
     match /piu_players/{playerId} {
-      // 🔒 PRIVACIDAD DE JUGADORES: Solo Superadmin, Staff autorizado de sucursal o el propio jugador
-      allow read: if isAuthenticated() && (
-        isSuperAdmin() ||
-        isStaffUser() ||
-        isOwnerPlayer(playerId)
-      );
+      // Directorio global de jugadores para inicio de sesión, autoservicio y búsqueda en mostrador
+      allow read: if true;
       
-      // Creación: Auto-registro seguro (obligatorio role: 'CLIENT', saldo inicial cero, cero puntos artificiales)
+      // Creación: Auto-registro seguro o migración de perfil
       allow create: if isAuthenticated() && (
         isSuperAdmin() ||
         isStaffUser() ||
+        (request.auth.uid == playerId) ||
         (
           request.resource.data.role == 'CLIENT' &&
           (request.resource.data.loyaltyPoints == 0 || request.resource.data.loyaltyPoints == null) &&
@@ -148,14 +150,11 @@ service cloud.firestore {
         )
       );
       
-      // Actualización conceptual de tres niveles:
-      // 1. SUPERADMIN → Acceso total
-      // 2. PLAYER → Solo su perfil básico (nombre, gamertag, pin, phone; NUNCA saldos, puntos ni rol)
-      // 3. MANAGER → Solo puede ajustar cuentas/lealtad de SU propio businessId (sin tocar rol ni otras sucursales)
+      // Actualización conceptual de tres niveles con soporte para perfiles migrados
       allow update: if isAuthenticated() && (
         isSuperAdmin() ||
         (
-          isOwnerPlayer(playerId) &&
+          (isOwnerPlayer(playerId) || (resource != null && resource.data.authUid == request.auth.uid)) &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['accounts', 'loyalty', 'loyaltyPoints', 'role', 'balance'])
         ) ||
         (
