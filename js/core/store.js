@@ -430,11 +430,11 @@ class Store {
         let loaded = [];
         if (isFirebaseAvailable && db) {
             try {
-                // Cargar hasta 150 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
+                // Cargar hasta 250 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
                 const q = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
                     where("businessId", "==", bizId),
-                    limit(150)
+                    limit(250)
                 );
                 const snap = await getDocs(q);
                 snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
@@ -442,15 +442,38 @@ class Store {
                 console.warn("Error cargando bandeja de reservas de Firestore, usando local:", err);
             }
         }
+
+        // Fusionar con reservaciones en memoria local
+        if (this.reservations && this.reservations.length > 0) {
+            this.reservations.forEach(r => {
+                if (r.businessId === bizId && !loaded.some(item => item.id === r.id)) {
+                    loaded.push(r);
+                }
+            });
+        }
         
-        if (loaded.length === 0) {
-            loaded = [...this.reservations];
+        // Fusionar con caché de LocalStorage
+        try {
+            const localData = localStorage.getItem(`piu_reservations_${bizId}`);
+            if (localData) {
+                const parsed = JSON.parse(localData);
+                parsed.forEach(r => {
+                    if (!loaded.some(item => item.id === r.id)) {
+                        loaded.push(r);
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn("Error fusionando localStorage en bandeja:", e);
         }
 
         // Asegurar que las pendientes del listener en tiempo real estén incluidas
         if (this.pendingReservations && this.pendingReservations.length > 0) {
             this.pendingReservations.forEach(p => {
-                if (!loaded.some(item => item.id === p.id)) {
+                const existingIdx = loaded.findIndex(item => item.id === p.id);
+                if (existingIdx !== -1) {
+                    loaded[existingIdx] = p;
+                } else {
                     loaded.push(p);
                 }
             });
@@ -639,7 +662,7 @@ class Store {
         this.processedReservationKeys.add(finalIdempotencyKey);
         setTimeout(() => this.processedReservationKeys.delete(finalIdempotencyKey), 10000);
 
-        const newReservationId = bookingData.id || `res_${finalIdempotencyKey}`;
+        const newReservationId = bookingData.id || ('res_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
         const nowIso = new Date().toISOString();
 
         const newReservation = {
@@ -674,22 +697,37 @@ class Store {
         if (isFirebaseAvailable && db) {
             try {
                 await runTransaction(db, async (transaction) => {
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
                     const resRef = doc(db, COLLECTIONS.RESERVATIONS, newReservation.id);
                     const existingRes = await transaction.get(resRef);
                     if (existingRes.exists()) {
-                        console.warn(`[IDEMPOTENCY] Reservación ${newReservation.id} ya existe. Retornando registro original.`);
-                        resultingReservation = { id: existingRes.id, ...existingRes.data() };
-                        return;
+                        const existingData = existingRes.data();
+                        if (existingData.status !== 'CANCELLED' && existingData.status !== 'REJECTED') {
+                            console.warn(`[IDEMPOTENCY] Reservación ${newReservation.id} ya existe activa. Retornando registro original.`);
+                            resultingReservation = { id: existingRes.id, ...existingData };
+                            return;
+                        }
                     }
 
-                    // 🔒 AUTORIDAD DEL PRECIO EN SERVIDOR:
-                    // Validar y calcular precio directamente con datos de Firestore
                     const machineRef = doc(db, COLLECTIONS.MACHINES, newReservation.machineId);
                     const machineDoc = await transaction.get(machineRef);
-                    const verifiedMachine = machineDoc.exists() ? machineDoc.data() : this.getMachineById(newReservation.machineId);
 
                     const businessRef = doc(db, COLLECTIONS.BUSINESSES, newReservation.businessId);
                     const businessDoc = await transaction.get(businessRef);
+
+                    const scheduleKey = `${newReservation.businessId}_${newReservation.machineId}_${newReservation.date}`;
+                    const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
+                    const scheduleDoc = await transaction.get(scheduleRef);
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (newReservation.clientId) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, newReservation.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. VALIDACIONES Y CÁLCULOS
+                    const verifiedMachine = machineDoc.exists() ? machineDoc.data() : this.getMachineById(newReservation.machineId);
                     const verifiedBusiness = businessDoc.exists() ? businessDoc.data() : (this.currentBusiness || {});
 
                     const verifiedTotalCost = calculateBookingCost(
@@ -700,15 +738,9 @@ class Store {
                     );
                     newReservation.totalCost = verifiedTotalCost;
 
-                    // 🔒 BLOQUEO ATÓMICO CONCURRENTE DEL DÍA / MÁQUINA (ANTI-RACE CONDITION)
-                    const scheduleKey = `${newReservation.businessId}_${newReservation.machineId}_${newReservation.date}`;
-                    const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
-                    const scheduleDoc = await transaction.get(scheduleRef);
                     const currentSlots = scheduleDoc.exists() ? (scheduleDoc.data().slots || []) : [];
-
                     const { openingTime, closingTime } = getBusinessHoursForDate(verifiedBusiness, newReservation.date);
 
-                    // Validar solapamiento directamente dentro de la transacción atómica
                     const overlappingSlot = currentSlots.find(slot => 
                         slot.resId !== newReservation.id &&
                         slot.status !== 'REJECTED' &&
@@ -720,7 +752,7 @@ class Store {
                         throw new Error(`Conflicto de horario: La máquina ya fue reservada por ${overlappingSlot.clientName || 'otro usuario'} (${overlappingSlot.startTime} - ${overlappingSlot.endTime})`);
                     }
 
-                    // Si es confirmada directamente por el Staff, registrar slot en el calendario
+                    // 3. TODAS LAS ESCRITURAS (WRITES)
                     if (isStaff || newReservation.status === 'CONFIRMED') {
                         const updatedSlots = currentSlots.filter(s => s.resId !== newReservation.id);
                         updatedSlots.push({
@@ -745,24 +777,20 @@ class Store {
                     // A. Escribir documento de reservación
                     transaction.set(resRef, newReservation);
 
-                    // B. Si es confirmada y el jugador tiene cuenta, acreditar puntos atómicamente
-                    if (newReservation.status === 'CONFIRMED' && newReservation.clientId && verifiedBusiness?.loyaltyEnabled) {
-                        const playerRef = doc(db, COLLECTIONS.PLAYERS, newReservation.clientId);
-                        const playerDoc = await transaction.get(playerRef);
-                        if (playerDoc.exists()) {
-                            const playerData = playerDoc.data();
-                            const loyaltyMap = playerData.loyalty || {};
-                            const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
-                            const isVisitsMode = verifiedBusiness.loyaltyMode === 'VISITS';
-                            const pts = isVisitsMode ? 1 : Math.floor(newReservation.totalCost / (Number(verifiedBusiness.pointsRatio) || 10));
-                            if (pts > 0 || isVisitsMode) {
-                                const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? 0 : pts);
-                                const nextVisits = (bizLoyalty.visits || 0) + (isVisitsMode ? pts : 1);
-                                const valForTier = isVisitsMode ? nextVisits : nextPoints;
-                                const nextTier = loyaltyManager.calculateTier(valForTier, verifiedBusiness.loyaltyMode || 'POINTS').name;
-                                loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
-                                transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
-                            }
+                    // B. Acreditar puntos si es confirmada
+                    if (newReservation.status === 'CONFIRMED' && playerDoc && playerDoc.exists() && playerRef && verifiedBusiness?.loyaltyEnabled) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const isVisitsMode = verifiedBusiness.loyaltyMode === 'VISITS';
+                        const pts = isVisitsMode ? 1 : Math.floor(newReservation.totalCost / (Number(verifiedBusiness.pointsRatio) || 10));
+                        if (pts > 0 || isVisitsMode) {
+                            const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? 0 : pts);
+                            const nextVisits = (bizLoyalty.visits || 0) + (isVisitsMode ? pts : 1);
+                            const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                            const nextTier = loyaltyManager.calculateTier(valForTier, verifiedBusiness.loyaltyMode || 'POINTS').name;
+                            loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                            transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                         }
                     }
 
@@ -838,6 +866,7 @@ class Store {
         if (isFirebaseAvailable && db) {
             try {
                 await runTransaction(db, async (transaction) => {
+                    // 1. Lecturas iniciales (READS)
                     const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
                     const resDoc = await transaction.get(resRef);
                     if (!resDoc.exists()) throw new Error("Reservación no encontrada en Firestore.");
@@ -849,11 +878,18 @@ class Store {
                     }
 
                     const wasConfirmed = resData.status === 'CONFIRMED';
-
-                    // Liberar slot en calendario usando datos autoritativos de Firestore exclusivamente
                     const scheduleKey = `${resData.businessId}_${resData.machineId}_${resData.date}`;
                     const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
                     const scheduleDoc = await transaction.get(scheduleRef);
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (wasConfirmed && resData.clientId && this.currentBusiness?.loyaltyEnabled) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. Escrituras (WRITES)
                     if (scheduleDoc.exists()) {
                         const slots = (scheduleDoc.data().slots || []).map(s => 
                             s.resId === reservationId ? { ...s, status: 'CANCELLED', updatedAt: nowIso } : s
@@ -867,25 +903,21 @@ class Store {
                         updatedAt: nowIso
                     });
 
-                    // Revertir puntos de lealtad atómicamente si estaba confirmada
-                    if (wasConfirmed && resData.clientId && this.currentBusiness?.loyaltyEnabled) {
-                        const playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
-                        const playerDoc = await transaction.get(playerRef);
-                        if (playerDoc.exists()) {
-                            const playerData = playerDoc.data();
-                            const loyaltyMap = playerData.loyalty || {};
-                            const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
-                            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-                            const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
+                    // Revertir puntos de lealtad si estaba confirmada
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+                        const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
 
-                            const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? 0 : pts));
-                            const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - (isVisitsMode ? pts : 1));
-                            const valForTier = isVisitsMode ? nextVisits : nextPoints;
-                            const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
+                        const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? 0 : pts));
+                        const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - (isVisitsMode ? pts : 1));
+                        const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                        const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
 
-                            loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
-                            transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
-                        }
+                        loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                        transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                     }
 
                     // Inyectar auditoría atómica
@@ -926,12 +958,13 @@ class Store {
         if (isFirebaseAvailable && db) {
             try {
                 await runTransaction(db, async (transaction) => {
+                    // 1. TODAS LAS LECTURAS (READS) ANTES DE CUALQUIER ESCRITURA
                     const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
                     const resDoc = await transaction.get(resRef);
                     if (!resDoc.exists()) throw new Error("Reservación no encontrada en Firestore.");
 
                     const resData = resDoc.data();
-                    // 🛡️ PREVENCIÓN ANTI-DOBLE APROBACIÓN: Si ya estaba aprobada, no re-aprobar ni re-acreditar puntos
+                    // 🛡️ PREVENCIÓN ANTI-DOBLE APROBACIÓN
                     if (resData.status === 'CONFIRMED') {
                         console.warn(`[IDEMPOTENCY] Reservación ${reservationId} ya está aprobada previamente.`);
                         return;
@@ -944,8 +977,17 @@ class Store {
                     const scheduleKey = `${resData.businessId}_${resData.machineId}_${resData.date}`;
                     const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
                     const scheduleDoc = await transaction.get(scheduleRef);
-                    const currentSlots = scheduleDoc.exists() ? (scheduleDoc.data().slots || []) : [];
 
+                    // Lectura previa del jugador para puntos de lealtad
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (resData.clientId && this.currentBusiness?.loyaltyEnabled) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. VALIDACIONES Y CÁLCULOS
+                    const currentSlots = scheduleDoc.exists() ? (scheduleDoc.data().slots || []) : [];
                     const business = tenantManager.getActiveBusiness();
                     const { openingTime, closingTime } = getBusinessHoursForDate(business, resData.date);
 
@@ -975,6 +1017,7 @@ class Store {
                         });
                     }
 
+                    // 3. TODAS LAS ESCRITURAS (WRITES) DESPUÉS DE LAS LECTURAS
                     transaction.set(scheduleRef, { slots: updatedSlots, updatedAt: nowIso }, { merge: true });
 
                     transaction.update(resRef, {
@@ -984,24 +1027,20 @@ class Store {
                     });
 
                     // Acreditar puntos de lealtad atómicamente solo una vez
-                    if (resData.clientId && this.currentBusiness?.loyaltyEnabled) {
-                        const playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
-                        const playerDoc = await transaction.get(playerRef);
-                        if (playerDoc.exists()) {
-                            const playerData = playerDoc.data();
-                            const loyaltyMap = playerData.loyalty || {};
-                            const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
-                            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-                            const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+                        const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
 
-                            const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? 0 : pts);
-                            const nextVisits = (bizLoyalty.visits || 0) + (isVisitsMode ? pts : 1);
-                            const valForTier = isVisitsMode ? nextVisits : nextPoints;
-                            const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
+                        const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? 0 : pts);
+                        const nextVisits = (bizLoyalty.visits || 0) + (isVisitsMode ? pts : 1);
+                        const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                        const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
 
-                            loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
-                            transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
-                        }
+                        loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                        transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                     }
 
                     // Inyectar auditoría atómica
@@ -1122,24 +1161,54 @@ class Store {
         if (isFirebaseAvailable && db) {
             try {
                 await runTransaction(db, async (transaction) => {
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
                     const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
                     const resDoc = await transaction.get(resRef);
                     if (!resDoc.exists()) throw new Error("Reservación no encontrada.");
 
                     const resData = resDoc.data();
-                    if (resData.status === 'CANCELLED' || resData.status === 'REJECTED') {
-                        throw new Error(`No se puede modificar una reservación en estado: ${resData.status}`);
+                    const isStaffUser = authManager.isStaff();
+
+                    if ((resData.status === 'CANCELLED' || resData.status === 'REJECTED') && !isStaffUser) {
+                        throw new Error(`Solo un encargado o administrador puede reactivar una reservación en estado: ${resData.status}`);
                     }
 
-                    // 🛡️ VALIDACIÓN ESTRICTA DE TRANSICIONES DE ESTADO:
-                    // Impide que peticiones arbitrarias del cliente salten estados no permitidos
-                    let validatedStatus = resData.status;
+                    const machineRef = doc(db, COLLECTIONS.MACHINES, targetMachine);
+                    const machineDoc = await transaction.get(machineRef);
+
+                    const businessRef = doc(db, COLLECTIONS.BUSINESSES, resData.businessId);
+                    const businessDoc = await transaction.get(businessRef);
+
+                    const oldMachine = resData.machineId;
+                    const oldDate = resData.date;
+                    let oldScheduleDoc = null;
+                    let oldScheduleRef = null;
+                    if (oldMachine !== targetMachine || oldDate !== targetDate) {
+                        const oldScheduleKey = `${resData.businessId}_${oldMachine}_${oldDate}`;
+                        oldScheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, oldScheduleKey);
+                        oldScheduleDoc = await transaction.get(oldScheduleRef);
+                    }
+
+                    const targetScheduleKey = `${resData.businessId}_${targetMachine}_${targetDate}`;
+                    const targetScheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, targetScheduleKey);
+                    const targetScheduleDoc = await transaction.get(targetScheduleRef);
+
+                    const wasConfirmed = resData.status === 'CONFIRMED';
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (resData.clientId) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. VALIDACIONES Y CÁLCULOS
+                    let validatedStatus = updatedFields.status || (resData.status === 'CANCELLED' || resData.status === 'REJECTED' ? 'CONFIRMED' : resData.status);
                     if (updatedFields.status && updatedFields.status !== resData.status) {
                         const allowedTransitions = {
                             'PENDING': ['CONFIRMED', 'REJECTED', 'CANCELLED'],
-                            'CONFIRMED': ['CANCELLED'],
-                            'REJECTED': [],
-                            'CANCELLED': []
+                            'CONFIRMED': ['CANCELLED', 'CONFIRMED'],
+                            'REJECTED': isStaffUser ? ['CONFIRMED', 'PENDING'] : [],
+                            'CANCELLED': isStaffUser ? ['CONFIRMED', 'PENDING'] : []
                         };
                         const validNext = allowedTransitions[resData.status] || [];
                         if (!validNext.includes(updatedFields.status)) {
@@ -1148,16 +1217,8 @@ class Store {
                         validatedStatus = updatedFields.status;
                     }
 
-                    const wasConfirmed = resData.status === 'CONFIRMED';
                     const oldCostInDb = resData.totalCost || 0;
-
-                    // 🔒 AUTORIDAD DEL PRECIO EN SERVIDOR DENTRO DE LA TRANSACCIÓN
-                    const machineRef = doc(db, COLLECTIONS.MACHINES, targetMachine);
-                    const machineDoc = await transaction.get(machineRef);
                     const verifiedMachine = machineDoc.exists() ? machineDoc.data() : this.getMachineById(targetMachine);
-
-                    const businessRef = doc(db, COLLECTIONS.BUSINESSES, resData.businessId);
-                    const businessDoc = await transaction.get(businessRef);
                     const verifiedBusiness = businessDoc.exists() ? businessDoc.data() : (this.currentBusiness || {});
 
                     const verifiedNewTotalCost = calculateBookingCost(
@@ -1166,6 +1227,8 @@ class Store {
                         verifiedMachine,
                         verifiedBusiness
                     );
+
+                    const isReactivating = (resData.status === 'CANCELLED' || resData.status === 'REJECTED') && (validatedStatus === 'CONFIRMED' || validatedStatus === 'PENDING');
 
                     const persistedFields = {
                         ...updatedFields,
@@ -1177,29 +1240,14 @@ class Store {
                         playersMode: targetPlayersMode,
                         totalCost: verifiedNewTotalCost,
                         status: validatedStatus,
+                        cancellationReason: isReactivating ? '' : (updatedFields.cancellationReason ?? resData.cancellationReason ?? ''),
+                        cancelledAt: isReactivating ? null : (updatedFields.cancelledAt ?? resData.cancelledAt ?? null),
+                        cancelledBy: isReactivating ? null : (updatedFields.cancelledBy ?? resData.cancelledBy ?? null),
+                        rejectionReason: isReactivating ? '' : (updatedFields.rejectionReason ?? resData.rejectionReason ?? ''),
                         updatedAt: nowIso
                     };
 
-                    const oldMachine = resData.machineId;
-                    const oldDate = resData.date;
-
-                    // 🧹 ELIMINAR SLOT VIEJO SI CAMBIÓ MÁQUINA O FECHA (EVITA BLOQUEO FANTASMA)
-                    if (oldMachine !== targetMachine || oldDate !== targetDate) {
-                        const oldScheduleKey = `${resData.businessId}_${oldMachine}_${oldDate}`;
-                        const oldScheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, oldScheduleKey);
-                        const oldScheduleDoc = await transaction.get(oldScheduleRef);
-                        if (oldScheduleDoc.exists()) {
-                            const cleanedOldSlots = (oldScheduleDoc.data().slots || []).filter(s => s.resId !== reservationId);
-                            transaction.set(oldScheduleRef, { slots: cleanedOldSlots, updatedAt: nowIso }, { merge: true });
-                        }
-                    }
-
-                    // Validar conflicto en nuevo slot de calendario
-                    const targetScheduleKey = `${resData.businessId}_${targetMachine}_${targetDate}`;
-                    const targetScheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, targetScheduleKey);
-                    const targetScheduleDoc = await transaction.get(targetScheduleRef);
                     const currentSlots = targetScheduleDoc.exists() ? (targetScheduleDoc.data().slots || []) : [];
-
                     const { openingTime, closingTime } = getBusinessHoursForDate(verifiedBusiness, targetDate);
 
                     const overlapping = currentSlots.find(slot => 
@@ -1213,52 +1261,63 @@ class Store {
                         throw new Error(`Conflicto de horario en fecha/máquina destino con ${overlapping.clientName || 'otra reserva'} (${overlapping.startTime} - ${overlapping.endTime})`);
                     }
 
-                    // Actualizar slots en destino
+                    // 3. TODAS LAS ESCRITURAS (WRITES)
+                    if (oldScheduleRef && oldScheduleDoc && oldScheduleDoc.exists()) {
+                        const cleanedOldSlots = (oldScheduleDoc.data().slots || []).filter(s => s.resId !== reservationId);
+                        transaction.set(oldScheduleRef, { slots: cleanedOldSlots, updatedAt: nowIso }, { merge: true });
+                    }
+
                     const filteredSlots = currentSlots.filter(s => s.resId !== reservationId);
-                    filteredSlots.push({
-                        resId: reservationId,
-                        startTime: targetStart,
-                        endTime: targetEnd,
-                        status: persistedFields.status,
-                        clientName: resData.clientName,
-                        clientId: resData.clientId,
-                        updatedAt: nowIso
-                    });
+                    if (validatedStatus !== 'CANCELLED' && validatedStatus !== 'REJECTED') {
+                        filteredSlots.push({
+                            resId: reservationId,
+                            startTime: targetStart,
+                            endTime: targetEnd,
+                            status: validatedStatus,
+                            clientName: resData.clientName,
+                            clientId: resData.clientId,
+                            updatedAt: nowIso
+                        });
+                    }
                     transaction.set(targetScheduleRef, { slots: filteredSlots, updatedAt: nowIso }, { merge: true });
 
                     transaction.update(resRef, persistedFields);
 
-                    // Ajustar delta de puntos de lealtad si el costo cambió y estaba confirmada
-                    if (wasConfirmed && resData.clientId && verifiedBusiness?.loyaltyEnabled) {
+                    // Ajustar delta de puntos de lealtad si aplica
+                    if (playerDoc && playerDoc.exists() && playerRef && verifiedBusiness?.loyaltyEnabled) {
                         const isVisitsMode = verifiedBusiness.loyaltyMode === 'VISITS';
-                        if (!isVisitsMode) {
-                            const ratio = Number(verifiedBusiness.pointsRatio) || 10;
+                        const ratio = Number(verifiedBusiness.pointsRatio) || 10;
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness?.id || resData.businessId] || { points: 0, visits: 0, tier: 'Bronce' };
+
+                        if (isReactivating && validatedStatus === 'CONFIRMED') {
+                            const pts = isVisitsMode ? 1 : Math.floor(verifiedNewTotalCost / ratio);
+                            const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? 0 : pts);
+                            const nextVisits = (bizLoyalty.visits || 0) + (isVisitsMode ? pts : 1);
+                            const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                            const nextTier = loyaltyManager.calculateTier(valForTier, verifiedBusiness.loyaltyMode || 'POINTS').name;
+                            loyaltyMap[this.currentBusiness?.id || resData.businessId] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                            transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
+                        } else if (wasConfirmed && validatedStatus === 'CONFIRMED' && !isVisitsMode) {
                             const oldPts = Math.floor(oldCostInDb / ratio);
                             const newPts = Math.floor(verifiedNewTotalCost / ratio);
                             const diff = newPts - oldPts;
                             if (diff !== 0) {
-                                const playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
-                                const playerDoc = await transaction.get(playerRef);
-                                if (playerDoc.exists()) {
-                                    const playerData = playerDoc.data();
-                                    const loyaltyMap = playerData.loyalty || {};
-                                    const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
-                                    const nextPoints = Math.max(0, (bizLoyalty.points || 0) + diff);
-                                    const nextTier = loyaltyManager.calculateTier(nextPoints, 'POINTS').name;
-                                    loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, tier: nextTier };
-                                    transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
-                                }
+                                const nextPoints = Math.max(0, (bizLoyalty.points || 0) + diff);
+                                const nextTier = loyaltyManager.calculateTier(nextPoints, 'POINTS').name;
+                                loyaltyMap[this.currentBusiness?.id || resData.businessId] = { ...bizLoyalty, points: nextPoints, tier: nextTier };
+                                transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                             }
                         }
                     }
 
-                    // Inyectar auditoría atómica de modificación
                     auditLogger.appendTransactionAudit(transaction, {
                         businessId: resData.businessId,
-                        action: AUDIT_ACTIONS.RESERVATION_MODIFIED,
+                        action: isReactivating ? AUDIT_ACTIONS.RESERVATION_CREATED : AUDIT_ACTIONS.RESERVATION_MODIFIED,
                         target: { type: 'RESERVATION', id: reservationId, name: resData.clientName || 'Jugador' },
                         financialData: { amount: verifiedNewTotalCost },
-                        details: `Modificada reservación de ${resData.clientName} para ${persistedFields.date} (${persistedFields.startTime} - ${persistedFields.endTime}). Nuevo Total: $${verifiedNewTotalCost}`
+                        details: `${isReactivating ? 'Reactivada' : 'Modificada'} reservación de ${resData.clientName} para ${persistedFields.date} (${persistedFields.startTime} - ${persistedFields.endTime}). Nuevo Total: $${verifiedNewTotalCost}`
                     });
 
                     Object.assign(res, persistedFields);
@@ -1295,6 +1354,7 @@ class Store {
         if (isFirebaseAvailable && db) {
             try { 
                 await runTransaction(db, async (transaction) => {
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
                     const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
                     const resDoc = await transaction.get(resRef);
                     if (!resDoc.exists()) throw new Error("Reservación no encontrada.");
@@ -1305,10 +1365,18 @@ class Store {
                     }
                     const wasConfirmed = resData.status === 'CONFIRMED';
 
-                    // Liberar slot en calendario
                     const scheduleKey = `${resData.businessId}_${resData.machineId}_${resData.date}`;
                     const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
                     const scheduleDoc = await transaction.get(scheduleRef);
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (wasConfirmed && resData.clientId && this.currentBusiness?.loyaltyEnabled) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. TODAS LAS ESCRITURAS (WRITES)
                     if (scheduleDoc.exists()) {
                         const slots = (scheduleDoc.data().slots || []).map(s => 
                             s.resId === reservationId ? { ...s, status: 'CANCELLED', updatedAt: nowIso } : s
@@ -1316,7 +1384,6 @@ class Store {
                         transaction.set(scheduleRef, { slots, updatedAt: nowIso }, { merge: true });
                     }
 
-                    // En vez de deleteDoc(), marcar como CANCELLED preservando histórico
                     transaction.update(resRef, {
                         status: 'CANCELLED',
                         cancellationReason: reason.trim(),
@@ -1325,28 +1392,22 @@ class Store {
                         updatedAt: nowIso
                     });
 
-                    // Revertir puntos de lealtad atómicamente si estaba confirmada
-                    if (wasConfirmed && resData.clientId && this.currentBusiness?.loyaltyEnabled) {
-                        const playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
-                        const playerDoc = await transaction.get(playerRef);
-                        if (playerDoc.exists()) {
-                            const playerData = playerDoc.data();
-                            const loyaltyMap = playerData.loyalty || {};
-                            const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
-                            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-                            const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+                        const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
 
-                            const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? 0 : pts));
-                            const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - (isVisitsMode ? pts : 1));
-                            const valForTier = isVisitsMode ? nextVisits : nextPoints;
-                            const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
+                        const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? 0 : pts));
+                        const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - (isVisitsMode ? pts : 1));
+                        const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                        const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
 
-                            loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
-                            transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
-                        }
+                        loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                        transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                     }
 
-                    // Inyectar auditoría atómica
                     auditLogger.appendTransactionAudit(transaction, {
                         businessId: resData.businessId,
                         action: AUDIT_ACTIONS.RESERVATION_CANCELLED,

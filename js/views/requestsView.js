@@ -31,6 +31,7 @@ export function renderRequestsView(container) {
         const pendingCount = allReservations.filter(r => r.status === 'PENDING').length;
         const confirmedCount = allReservations.filter(r => r.status === 'CONFIRMED').length;
         const rejectedCount = allReservations.filter(r => r.status === 'REJECTED').length;
+        const cancelledCount = allReservations.filter(r => r.status === 'CANCELLED').length;
 
         container.innerHTML = `
             <div class="requests-view-wrapper animate-fade-in">
@@ -38,7 +39,7 @@ export function renderRequestsView(container) {
                 <div class="view-header-bar">
                     <div class="header-left">
                         <h2 class="friendly-date-title">📥 Bandeja de Solicitudes y Reservaciones</h2>
-                        <p class="subtitle-text">Gestiona, aprueba, rechaza o reprograma las solicitudes de tus clientes.</p>
+                        <p class="subtitle-text">Gestiona, aprueba, rechaza, cancela o reprograma las solicitudes de tus clientes.</p>
                     </div>
                 </div>
 
@@ -51,6 +52,10 @@ export function renderRequestsView(container) {
                     <button class="filter-tab ${activeFilter === 'CONFIRMED' ? 'active' : ''}" data-filter="CONFIRMED">
                         <span>✅ Confirmadas</span>
                         <span class="filter-pill pill-success">${confirmedCount}</span>
+                    </button>
+                    <button class="filter-tab ${activeFilter === 'CANCELLED' ? 'active' : ''}" data-filter="CANCELLED">
+                        <span>🚫 Canceladas</span>
+                        <span class="filter-pill pill-secondary">${cancelledCount}</span>
                     </button>
                     <button class="filter-tab ${activeFilter === 'REJECTED' ? 'active' : ''}" data-filter="REJECTED">
                         <span>❌ Rechazadas</span>
@@ -125,6 +130,7 @@ export function renderRequestsView(container) {
             let filtered = allReservations;
             if (activeFilter === 'PENDING') filtered = allReservations.filter(r => r.status === 'PENDING');
             else if (activeFilter === 'CONFIRMED') filtered = allReservations.filter(r => r.status === 'CONFIRMED');
+            else if (activeFilter === 'CANCELLED') filtered = allReservations.filter(r => r.status === 'CANCELLED');
             else if (activeFilter === 'REJECTED') filtered = allReservations.filter(r => r.status === 'REJECTED');
 
             if (searchQuery) {
@@ -166,13 +172,28 @@ export function renderRequestsView(container) {
             if (!tbody) return;
 
             if (pageReservations.length === 0) {
+                let emptyMessage = 'No se encontraron reservaciones con los criterios seleccionados.';
+                if (activeFilter === 'PENDING' && confirmedCount > 0) {
+                    emptyMessage = `No hay solicitudes pendientes por autorizar. Hay <strong style="color:var(--color-neon-lime);">${confirmedCount} reservación(es) confirmada(s)</strong> agendadas.`;
+                }
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="6" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 24px;">
-                            No se encontraron reservaciones con los criterios seleccionados.
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px 16px;">
+                            <div style="font-size: 1.5rem; margin-bottom: 8px;">📭</div>
+                            <div>${emptyMessage}</div>
+                            ${activeFilter === 'PENDING' && confirmedCount > 0 ? `
+                                <button type="button" class="btn btn-outline btn-sm btn-switch-to-all" style="margin-top:12px; font-size:0.8rem;">
+                                    📋 Ver todas las reservaciones (${allReservations.length})
+                                </button>
+                            ` : ''}
                         </td>
                     </tr>
                 `;
+                tbody.querySelector('.btn-switch-to-all')?.addEventListener('click', () => {
+                    activeFilter = 'ALL';
+                    currentPage = 1;
+                    renderRequestsView(container);
+                });
                 return;
             }
 

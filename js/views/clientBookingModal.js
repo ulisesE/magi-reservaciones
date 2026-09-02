@@ -422,8 +422,8 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             const enteredName = nameInput.value.trim();
             const enteredPhone = phoneInput.value.trim();
 
-            let targetClientId = selectedClientRef?.id || null;
-            let targetClientUsername = selectedClientRef?.username || null;
+            let targetClientId = selectedClientRef?.id || (isClientUser && currentUser ? currentUser.id : null);
+            let targetClientUsername = selectedClientRef?.username || (isClientUser && currentUser ? currentUser.username : null);
 
             if (!targetClientId && isStaff) {
                 const freshList = getFreshClients();
@@ -454,6 +454,10 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             });
 
             modal.close();
+
+            if (booking && booking.date) {
+                store.setSelectedDate(booking.date);
+            }
 
             if (isStaff) {
                 toast.success(`Reservación asignada exitosamente para ${booking.clientName}`);

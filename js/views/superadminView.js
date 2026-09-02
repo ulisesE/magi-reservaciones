@@ -17,8 +17,14 @@ import {
     setDoc, 
     doc 
 } from '../firebaseConfig.js';
+import { formatFriendlyDate, format12Hour } from '../core/timeUtils.js';
+import { showReservationTicket } from './clientBookingModal.js';
+import { openModifyModal } from './requestsView.js';
 
-let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'PLAYERS', 'CABINETS', 'VERSIONS', 'MACHINES', 'STAFF'
+let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'RESERVATIONS', 'PLAYERS', 'CABINETS', 'VERSIONS', 'MACHINES', 'STAFF'
+let resSearchQuery = '';
+let resFilterBiz = '';
+let resFilterStatus = 'ALL';
 
 export async function renderSuperadminView(container) {
     const businesses = tenantManager.getAllBusinesses();
@@ -29,6 +35,17 @@ export async function renderSuperadminView(container) {
     const players = await clientDirManager.loadClients();
     const totalBusinesses = businesses.length;
 
+    let globalReservations = [];
+    if (isFirebaseAvailable && db) {
+        try {
+            const snap = await getDocs(collection(db, COLLECTIONS.RESERVATIONS));
+            snap.forEach(d => globalReservations.push({ id: d.id, ...d.data() }));
+        } catch(e) {
+            console.warn("Error cargando reservaciones globales:", e);
+        }
+    }
+    globalReservations.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+
     container.innerHTML = `
         <div class="superadmin-view-wrapper animate-fade-in">
             <!-- Header Global -->
@@ -38,7 +55,7 @@ export async function renderSuperadminView(container) {
                         <span style="font-size:1.8rem;">👑</span>
                         <h2 class="friendly-date-title">Consola Global de Super Administrador</h2>
                     </div>
-                    <p class="subtitle-text">Administración completa de todos los locales, jugadores globales, modelos de gabinete, versiones de software y personal.</p>
+                    <p class="subtitle-text">Administración completa de todos los locales, jugadores globales, modelos de gabinete, versiones de software, reservaciones y personal.</p>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                     <button class="btn btn-outline" id="btn-export-backup" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);" title="Descargar copia de seguridad en JSON">
@@ -62,6 +79,9 @@ export async function renderSuperadminView(container) {
                 <button class="filter-tab ${activeSuperTab === 'BUSINESSES' ? 'active' : ''}" data-tab="BUSINESSES">
                     <span>🏢 Locales (${totalBusinesses})</span>
                 </button>
+                <button class="filter-tab ${activeSuperTab === 'RESERVATIONS' ? 'active' : ''}" data-tab="RESERVATIONS">
+                    <span>📋 Auditoría de Reservas (${globalReservations.length})</span>
+                </button>
                 <button class="filter-tab ${activeSuperTab === 'PLAYERS' ? 'active' : ''}" data-tab="PLAYERS">
                     <span>🕺 Clientes / Jugadores (${players.length})</span>
                 </button>
@@ -81,7 +101,7 @@ export async function renderSuperadminView(container) {
 
             <!-- Contenido Dinámico de la Pestaña -->
             <div id="superadmin-tab-content">
-                ${renderTabContent(activeSuperTab, businesses, staffUsers, managers, cabinetModels, gameVersions, players)}
+                ${renderTabContent(activeSuperTab, businesses, staffUsers, managers, cabinetModels, gameVersions, players, globalReservations)}
             </div>
         </div>
     `;
@@ -339,31 +359,242 @@ export async function renderSuperadminView(container) {
     // ==========================================
     // Eventos de Versiones de Software (Global)
     // ==========================================
-    container.querySelector('#btn-add-global-version')?.addEventListener('click', () => {
-        openGameVersionModal(null, container);
+    // Eventos de Auditoría de Reservaciones Global
+    // ==========================================
+    container.querySelector('#super-search-res')?.addEventListener('input', (e) => {
+        resSearchQuery = e.target.value.toLowerCase().trim();
+        renderSuperadminView(container);
     });
 
-    container.querySelectorAll('.btn-edit-global-ver').forEach(btn => {
+    container.querySelector('#super-filter-biz')?.addEventListener('change', (e) => {
+        resFilterBiz = e.target.value;
+        renderSuperadminView(container);
+    });
+
+    container.querySelectorAll('.super-res-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const ver = catalogsManager.getGameVersions().find(v => v.id === id);
-            if (ver) openGameVersionModal(ver, container);
+            resFilterStatus = btn.dataset.status;
+            renderSuperadminView(container);
         });
     });
 
-    container.querySelectorAll('.btn-delete-global-ver').forEach(btn => {
+    container.querySelectorAll('.btn-view-ticket-super').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const res = globalReservations.find(r => r.id === id);
+            if (res) showReservationTicket(res);
+        });
+    });
+
+    container.querySelectorAll('.btn-approve-res-super').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
-            if (confirm("¿Eliminar esta versión del catálogo global?")) {
-                await catalogsManager.deleteGameVersion(id);
-                toast.info("Versión eliminada.");
+            try {
+                await store.approveReservation(id);
+                toast.success("Reservación aprobada.");
                 renderSuperadminView(container);
+            } catch (err) {
+                toast.error(err.message);
+            }
+        });
+    });
+
+    container.querySelectorAll('.btn-edit-res-super').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const res = globalReservations.find(r => r.id === id);
+            if (res) {
+                openModifyModal(res, container);
+            }
+        });
+    });
+
+    container.querySelectorAll('.btn-del-res-super').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            if (confirm("¿Estás seguro de cancelar / anular esta reservación?")) {
+                try {
+                    await store.deleteReservation(id, 'Cancelada por Super Administrador');
+                    toast.info("Reservación cancelada.");
+                    renderSuperadminView(container);
+                } catch (err) {
+                    toast.error(err.message);
+                }
             }
         });
     });
 }
 
-function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, gameVersions, players) {
+function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, gameVersions, players, globalReservations = []) {
+    if (tab === 'RESERVATIONS') {
+        const confirmedCount = globalReservations.filter(r => r.status === 'CONFIRMED').length;
+        const pendingCount = globalReservations.filter(r => r.status === 'PENDING').length;
+        const cancelledCount = globalReservations.filter(r => r.status === 'CANCELLED').length;
+        const rejectedCount = globalReservations.filter(r => r.status === 'REJECTED').length;
+
+        let filtered = globalReservations;
+        if (resFilterBiz) {
+            filtered = filtered.filter(r => r.businessId === resFilterBiz);
+        }
+        if (resFilterStatus !== 'ALL') {
+            filtered = filtered.filter(r => r.status === resFilterStatus);
+        }
+        if (resSearchQuery) {
+            filtered = filtered.filter(r => 
+                (r.clientName && r.clientName.toLowerCase().includes(resSearchQuery)) ||
+                (r.clientUsername && r.clientUsername.toLowerCase().includes(resSearchQuery)) ||
+                (r.clientPhone && r.clientPhone.includes(resSearchQuery)) ||
+                (r.id && r.id.toLowerCase().includes(resSearchQuery)) ||
+                (r.cancellationReason && r.cancellationReason.toLowerCase().includes(resSearchQuery)) ||
+                (r.rejectionReason && r.rejectionReason.toLowerCase().includes(resSearchQuery))
+            );
+        }
+
+        return `
+            <div class="settings-card">
+                <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div class="title-with-icon">
+                        <span class="t-icon">📋</span>
+                        <div>
+                            <h3>Auditoría y Registro Global de Reservaciones</h3>
+                            <small>Historial inmutable de reservaciones confirmadas, pendientes, canceladas y rechazadas de todos los locales</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Métricas de Estado Global -->
+                <div style="display:flex; gap:10px; margin: 16px 0; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'ALL' ? 'active' : ''}" data-status="ALL" style="border-color:var(--border-color);">
+                        📋 Todas (${globalReservations.length})
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'CONFIRMED' ? 'active' : ''}" data-status="CONFIRMED" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);">
+                        ✅ Confirmadas (${confirmedCount})
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'PENDING' ? 'active' : ''}" data-status="PENDING" style="border-color:var(--color-neon-gold); color:var(--color-neon-gold);">
+                        ⏳ Pendientes (${pendingCount})
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'CANCELLED' ? 'active' : ''}" data-status="CANCELLED" style="border-color:var(--color-neon-red); color:var(--color-neon-red);">
+                        🚫 Canceladas (${cancelledCount})
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'REJECTED' ? 'active' : ''}" data-status="REJECTED" style="border-color:#ff4444; color:#ff8888;">
+                        ❌ Rechazadas (${rejectedCount})
+                    </button>
+                </div>
+
+                <!-- Filtros y Búsqueda -->
+                <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; background:var(--bg-dark-800); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+                    <div style="flex:2; min-width:220px;">
+                        <input type="text" id="super-search-res" class="cyber-input" placeholder="🔍 Buscar por cliente, GamerTag, teléfono, folio o motivo..." value="${escapeHTML(resSearchQuery)}" style="padding:8px 12px;">
+                    </div>
+                    <div style="flex:1; min-width:180px;">
+                        <select id="super-filter-biz" class="cyber-select" style="padding:8px 12px;">
+                            <option value="">🏢 Todos los Locales</option>
+                            ${businesses.map(b => `<option value="${b.id}" ${b.id === resFilterBiz ? 'selected' : ''}>${escapeHTML(b.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div style="color:var(--text-muted); font-size:0.85rem;">
+                        Mostrando: <strong style="color:var(--color-neon-lime);">${filtered.length}</strong> de <strong style="color:#ffffff;">${globalReservations.length}</strong>
+                    </div>
+                </div>
+
+                <div class="catalogs-table-wrapper" style="overflow-x:auto;">
+                    <table class="catalogs-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:0.85rem;">
+                        <thead>
+                            <tr style="border-bottom:2px solid var(--border-color); background:rgba(0,0,0,0.4); color:var(--text-muted);">
+                                <th style="padding:10px;">Folio / Estado</th>
+                                <th style="padding:10px;">Local / Sucursal</th>
+                                <th style="padding:10px;">Jugador / Cliente</th>
+                                <th style="padding:10px;">Fecha / Horario</th>
+                                <th style="padding:10px;">Monto</th>
+                                <th style="padding:10px;">Detalles / Auditoría</th>
+                                <th style="padding:10px; text-align:right;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filtered.length === 0 ? `
+                                <tr>
+                                    <td colspan="7" style="text-align:center; padding:32px; color:var(--text-muted); font-style:italic;">
+                                        No se encontraron reservaciones con los filtros seleccionados.
+                                    </td>
+                                </tr>
+                            ` : filtered.map(r => {
+                                const biz = businesses.find(b => b.id === r.businessId);
+                                const isConfirmed = r.status === 'CONFIRMED';
+                                const isPending = r.status === 'PENDING';
+                                const isCancelled = r.status === 'CANCELLED';
+                                const isRejected = r.status === 'REJECTED';
+
+                                let badgeClass = 'badge-warning';
+                                let badgeText = 'Pendiente';
+                                if (isConfirmed) {
+                                    badgeClass = 'badge-success';
+                                    badgeText = 'Confirmada';
+                                } else if (isCancelled) {
+                                    badgeClass = 'badge-danger';
+                                    badgeText = '🚫 Cancelada';
+                                } else if (isRejected) {
+                                    badgeClass = 'badge-danger';
+                                    badgeText = '❌ Rechazada';
+                                }
+
+                                return `
+                                    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                        <td style="padding:10px; white-space:nowrap;">
+                                            <div style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted);">${r.id}</div>
+                                            <span class="badge ${badgeClass}" style="font-size:0.7rem; padding:2px 6px;">${badgeText}</span>
+                                        </td>
+                                        <td style="padding:10px;">
+                                            <strong style="color:var(--piu-cyan);">${biz ? escapeHTML(biz.name) : (r.businessId || 'N/A')}</strong>
+                                        </td>
+                                        <td style="padding:10px;">
+                                            <strong style="color:#ffffff;">${escapeHTML(r.clientName || 'Sin Nombre')}</strong>
+                                            ${r.clientUsername ? `<div style="font-size:0.75rem; color:var(--text-muted);">@${escapeHTML(r.clientUsername)}</div>` : ''}
+                                            ${r.clientPhone ? `<div style="font-size:0.72rem; color:var(--color-neon-lime);">${escapeHTML(r.clientPhone)}</div>` : ''}
+                                        </td>
+                                        <td style="padding:10px; white-space:nowrap;">
+                                            <div>${formatFriendlyDate(r.date)}</div>
+                                            <div style="font-size:0.8rem; color:var(--piu-cyan); font-family:var(--font-mono);">${format12Hour(r.startTime)} - ${format12Hour(r.endTime)}</div>
+                                        </td>
+                                        <td style="padding:10px; font-weight:700; font-family:var(--font-mono); color:var(--color-chartreuse);">
+                                            $${r.totalCost || 0}
+                                        </td>
+                                        <td style="padding:10px; font-size:0.78rem;">
+                                            ${isCancelled ? `
+                                                <div style="color:var(--color-neon-red);"><strong>Motivo:</strong> ${escapeHTML(r.cancellationReason || 'Cancelada')}</div>
+                                                <div style="color:var(--text-muted); font-size:0.72rem;">Por: ${escapeHTML(r.cancelledBy || 'Encargado')} • ${r.cancelledAt ? new Date(r.cancelledAt).toLocaleString() : ''}</div>
+                                            ` : ''}
+                                            ${isRejected ? `
+                                                <div style="color:#ff8888;"><strong>Motivo:</strong> ${escapeHTML(r.rejectionReason || 'Rechazada')}</div>
+                                            ` : ''}
+                                            ${r.adminNotes ? `<div style="color:var(--text-muted); font-style:italic;">Nota: ${escapeHTML(r.adminNotes)}</div>` : ''}
+                                        </td>
+                                        <td style="padding:10px; text-align:right; white-space:nowrap;">
+                                            <div style="display:flex; gap:6px; justify-content:flex-end;">
+                                                <button type="button" class="btn btn-outline btn-xs btn-view-ticket-super" data-id="${r.id}" title="Ver Comprobante">
+                                                    🎟️ Ticket
+                                                </button>
+                                                ${isPending ? `
+                                                    <button type="button" class="btn btn-success btn-xs btn-approve-res-super" data-id="${r.id}">
+                                                        ✔️ Aprobar
+                                                    </button>
+                                                ` : ''}
+                                                <button type="button" class="btn btn-outline btn-xs btn-edit-res-super" data-id="${r.id}" title="${(isCancelled || isRejected) ? '⚡ Revivir / Reprogramar Reservación' : '✏️ Modificar / Reprogramar'}">
+                                                    ${(isCancelled || isRejected) ? '⚡ Revivir' : '✏️'}
+                                                </button>
+                                                <button type="button" class="btn btn-danger btn-xs btn-del-res-super" data-id="${r.id}" title="Anular o soft-cancel">
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
     if (tab === 'BUSINESSES') {
         return `
             <!-- Configuración Global (Solo Superadmin) -->
