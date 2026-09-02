@@ -14,6 +14,7 @@ import {
 } from '../firebaseConfig.js';
 import { formatDateKey } from '../core/timeUtils.js';
 import { toast } from '../components/toast.js';
+import { auditLogger } from '../core/auditLogger.js';
 
 // Estado local de la vista
 let currentPreset = 'THIS_MONTH'; // 'TODAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_30_DAYS', 'ALL', 'CUSTOM'
@@ -189,11 +190,19 @@ async function loadAndRenderAnalyticsData(container, business) {
         // Obtener catálogo de máquinas del local
         const machines = store.machines.length > 0 ? store.machines : (business?.machines || []);
 
+        // Obtener logs de auditoría inmutables del local
+        let auditLogs = [];
+        try {
+            auditLogs = await auditLogger.getLogs(bizId, { maxResults: 50 });
+        } catch (e) {
+            console.warn("No se pudieron cargar logs de auditoría:", e);
+        }
+
         // Calcular Estadísticas y Métricas
         const stats = calculateAnalyticsMetrics(filteredReservations, machines, business, filterStartDate, filterEndDate);
 
         // Renderizar el contenido completo
-        renderAnalyticsDashboard(dynamicContent, stats, business, filteredReservations);
+        renderAnalyticsDashboard(dynamicContent, stats, business, filteredReservations, auditLogs);
 
     } catch (error) {
         console.error("Error cargando analítica:", error);
@@ -395,7 +404,7 @@ function calculateAnalyticsMetrics(reservations, machines, business, startStr, e
     };
 }
 
-function renderAnalyticsDashboard(container, stats, business, filteredReservations) {
+function renderAnalyticsDashboard(container, stats, business, filteredReservations, auditLogs = []) {
     const currency = business?.currencySymbol || '$';
     const currencyCode = business?.currency || 'MXN';
 
@@ -735,6 +744,74 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                             <tr>
                                 <td colspan="5" style="text-align:center; color:var(--text-muted); padding:30px;">
                                     No se encontraron reservaciones en el periodo seleccionado.
+                                </td>
+                            </tr>
+        <!-- TABLA DE AUDITORÍA Y TRAZABILIDAD INMUTABLE (piu_audit_logs) -->
+        <div class="analytics-table-card" style="margin-top:20px; border-left:4px solid var(--color-neon-cyan);">
+            <div class="chart-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <h3 class="chart-title" style="display:flex; align-items:center; gap:8px;">
+                    <span>🛡️ Auditoría y Trazabilidad Financiera Inmutable</span>
+                    <span class="badge badge-outline" style="font-size:0.7rem; font-family:var(--font-mono); color:var(--color-neon-lime);">🔒 Inmutable</span>
+                </h3>
+                <small style="color:var(--text-muted); font-size:0.75rem;">${auditLogs.length} eventos registrados en Firestore</small>
+            </div>
+            <div style="overflow-x:auto; max-height:420px; overflow-y:auto;">
+                <table class="cyber-analytics-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha y Hora</th>
+                            <th>Responsable</th>
+                            <th>Acción</th>
+                            <th>Detalle / Concepto</th>
+                            <th style="text-align:right;">Importe</th>
+                            <th style="text-align:center;">Seguridad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${auditLogs.length > 0 ? auditLogs.map(l => {
+                            const dateObj = new Date(l.createdAt);
+                            const formattedDate = dateObj.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+                            const formattedTime = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                            
+                            let actionBadge = `<span class="badge badge-dark">${l.action}</span>`;
+                            if (l.action === 'SALE_RECORDED') {
+                                actionBadge = `<span class="badge badge-primary">🛒 VENTA</span>`;
+                            } else if (l.action === 'PAYMENT_RECORDED' || l.action === 'DEBT_LIQUIDATED') {
+                                actionBadge = `<span class="badge badge-success">💵 ABONO</span>`;
+                            } else if (l.action === 'TRANSACTION_VOIDED') {
+                                actionBadge = `<span class="badge badge-danger">🚫 ANULACIÓN</span>`;
+                            } else if (l.action.includes('PRODUCT') || l.action.includes('PRICE')) {
+                                actionBadge = `<span class="badge badge-warning">🏷️ CATÁLOGO</span>`;
+                            } else if (l.action.includes('STAFF')) {
+                                actionBadge = `<span class="badge badge-info">👤 STAFF</span>`;
+                            }
+
+                            return `
+                                <tr>
+                                    <td style="font-family:var(--font-mono); font-size:0.8rem;">
+                                        <strong style="color:#ffffff;">${formattedDate}</strong>
+                                        <small style="display:block; color:var(--text-muted);">${formattedTime}</small>
+                                    </td>
+                                    <td>
+                                        <strong style="color:#ffffff; font-size:0.85rem;">${l.actor?.name || 'Sistema'}</strong>
+                                        <small style="display:block; color:var(--color-neon-cyan); font-size:0.72rem;">${l.actor?.role || 'STAFF'}</small>
+                                    </td>
+                                    <td>${actionBadge}</td>
+                                    <td style="font-size:0.85rem; color:#ffffff; max-width:320px;">${l.details || 'Operación registrada'}</td>
+                                    <td style="text-align:right; font-family:var(--font-mono); font-weight:700; color:${l.financialData?.amount ? 'var(--color-neon-lime)' : 'var(--text-muted)'};">
+                                        ${l.financialData?.amount ? `${currency}${Number(l.financialData.amount).toFixed(2)}` : '-'}
+                                    </td>
+                                    <td style="text-align:center;">
+                                        <span class="badge badge-outline" style="font-size:0.65rem; color:var(--color-neon-lime);" title="Registro criptográficamente inmutable">
+                                            🔒 Inmutable
+                                        </span>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('') : `
+                            <tr>
+                                <td colspan="6" style="text-align:center; color:var(--text-muted); padding:30px;">
+                                    Sin registros de auditoría recientes en esta sucursal.
                                 </td>
                             </tr>
                         `}

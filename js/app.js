@@ -22,6 +22,7 @@ import { renderClientProfileView } from './views/clientProfileView.js';
 import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
 import { openChangelogModal } from './components/changelogModal.js';
 import { isFirebaseAvailable } from './firebaseConfig.js';
+import './core/financialTests.js';
 
 class App {
     constructor() {

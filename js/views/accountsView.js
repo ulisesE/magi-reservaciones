@@ -398,8 +398,12 @@ export async function renderAccountsView(container) {
                                 const formattedDate = dateObj.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
                                 const formattedTime = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 
+                                const isCancelled = tx.status === 'CANCELLED' || tx.status === 'VOIDED';
+                                const isAbono = tx.type === 'ABONO' || tx.type === 'PAGO';
+                                const isPending = tx.type === 'CONSUMO' && tx.paymentStatus === 'PENDING';
+
                                 return `
-                                    <tr style="${isCancelled ? 'opacity:0.4; text-decoration:line-through;' : ''}">
+                                    <tr style="${isCancelled ? 'opacity:0.45; text-decoration:line-through; background:rgba(255,46,126,0.03);' : ''}">
                                         <td style="font-size:0.82rem; font-family:var(--font-mono);">
                                             <strong style="color:#ffffff;">${formattedDate}</strong>
                                             <small style="display:block; color:var(--text-muted);">${formattedTime}</small>
@@ -416,14 +420,15 @@ export async function renderAccountsView(container) {
                                                     <span>${tx.concept || 'Consumo en sala'}</span>
                                                 `}
                                             </div>
-                                            ${tx.notes ? `<small style="color:var(--text-muted); font-size:0.75rem;">Nota: ${tx.notes}</small>` : ''}
+                                            ${tx.voidReason ? `<small style="color:var(--color-neon-pink); font-size:0.75rem; display:block;">Motivo anulación: ${tx.voidReason} (por ${tx.voidedBy || 'Encargado'})</small>` : ''}
+                                            ${tx.notes && !tx.voidReason ? `<small style="color:var(--text-muted); font-size:0.75rem;">Nota: ${tx.notes}</small>` : ''}
                                         </td>
                                         <td style="text-align:right; font-family:var(--font-mono); font-weight:900; font-size:1rem; color:${isAbono ? 'var(--color-neon-lime)' : isPending ? 'var(--color-neon-pink)' : '#ffffff'};">
                                             ${isAbono ? '+' : ''}${currency}${Number(tx.totalAmount).toFixed(2)}
                                         </td>
                                         <td style="text-align:center;">
                                             ${isCancelled ? `
-                                                <span class="badge badge-danger">ANULADO</span>
+                                                <span class="badge badge-danger" title="Motivo: ${tx.voidReason || 'Anulada'}">🚫 ANULADA</span>
                                             ` : isAbono ? `
                                                 <span class="badge badge-success">ABONO</span>
                                             ` : isPending ? `
@@ -442,8 +447,8 @@ export async function renderAccountsView(container) {
                                                     </button>
                                                 ` : ''}
                                                 ${!isCancelled ? `
-                                                    <button class="btn btn-danger btn-xs btn-cancel-tx" data-tx-id="${tx.id}" data-player-id="${tx.playerId || ''}" title="Anular movimiento">
-                                                        <span>🗑️</span>
+                                                    <button class="btn btn-danger btn-xs btn-void-tx" data-tx-id="${tx.id}" data-player-id="${tx.playerId || ''}" title="Anular transacción (inmutable en auditoría)">
+                                                        <span>🚫 Anular</span>
                                                     </button>
                                                 ` : ''}
                                             </div>
@@ -525,18 +530,27 @@ export async function renderAccountsView(container) {
         });
     });
 
-    container.querySelectorAll('.btn-cancel-tx').forEach(btn => {
+    container.querySelectorAll('.btn-void-tx').forEach(btn => {
         btn.addEventListener('click', async () => {
             const txId = btn.dataset.txId;
             const playerId = btn.dataset.playerId;
-            if (confirm("⚠️ ¿Estás seguro de ELIMINAR PERMANENTEMENTE esta transacción de la base de datos? Se borrará de Firestore y se recalculará el saldo.")) {
-                try {
-                    await accountManager.deleteTransaction(business.id, playerId, txId);
-                    toast.success("Transacción eliminada de la base de datos.");
-                    renderAccountsView(container);
-                } catch (e) {
-                    toast.error(e.message);
-                }
+            const reason = prompt("⚠️ Ingresa el motivo obligatorio para anular esta transacción (se registrará en la auditoría inmutable):");
+            if (reason === null) return;
+            if (!reason.trim()) {
+                toast.error("Se requiere un motivo para anular la transacción.");
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.innerHTML = "<span>⏳ Anulando...</span>";
+                await accountManager.voidTransaction(business.id, playerId, txId, { reason: reason.trim() });
+                toast.success("Transacción anulada correctamente y saldo recalculado.");
+                renderAccountsView(container);
+            } catch (e) {
+                toast.error(e.message);
+                btn.disabled = false;
+                btn.innerHTML = "<span>🚫 Anular</span>";
             }
         });
     });
@@ -999,8 +1013,11 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
 
     modalEl.querySelector('#btn-cancel-pos').onclick = () => modal.close();
 
-    // Enviar venta
-    modalEl.querySelector('#btn-submit-pos').onclick = async () => {
+    // Enviar venta con protección contra doble clic e idempotencia
+    const submitBtn = modalEl.querySelector('#btn-submit-pos');
+    const modalIdempotencyKey = `pos_${business.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    submitBtn.onclick = async () => {
         const paymentStatus = modalEl.querySelector('#pos-payment-status').value;
         const paymentMethod = modalEl.querySelector('#pos-payment-method').value;
         const customC = modalEl.querySelector('#custom-concept-input')?.value.trim();
@@ -1022,6 +1039,11 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
             finalPlayerName = clientSearchInput.value.trim();
         }
 
+        // Bloqueo reactivo de interfaz contra dobles envíos
+        submitBtn.disabled = true;
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span>⏳ Procesando venta atómica...</span>';
+
         try {
             await accountManager.recordSale({
                 businessId: business.id,
@@ -1033,7 +1055,8 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
                 customConcept: customC,
                 customPrice: customP,
                 paymentStatus,
-                paymentMethod
+                paymentMethod,
+                idempotencyKey: modalIdempotencyKey
             });
 
             toast.success(`Venta / Consumo registrado a nombre de "${finalPlayerName}".`);
@@ -1041,6 +1064,8 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
             renderAccountsView(mainContainer);
         } catch (e) {
             toast.error(e.message);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
         }
     };
 }
@@ -1102,7 +1127,10 @@ async function openPaymentModal(business, playerId, mainContainer) {
 
     modalEl.querySelector('#btn-cancel-pay').onclick = () => modal.close();
 
-    modalEl.querySelector('#btn-save-pay').onclick = async () => {
+    const savePayBtn = modalEl.querySelector('#btn-save-pay');
+    const payIdempotencyKey = `pay_${business.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    savePayBtn.onclick = async () => {
         const amount = parseFloat(modalEl.querySelector('#pay-amount').value) || 0;
         const paymentMethod = modalEl.querySelector('#pay-method').value;
         const notes = modalEl.querySelector('#pay-notes').value.trim();
@@ -1112,6 +1140,10 @@ async function openPaymentModal(business, playerId, mainContainer) {
             return;
         }
 
+        savePayBtn.disabled = true;
+        const origPayText = savePayBtn.innerHTML;
+        savePayBtn.innerHTML = '<span>⏳ Registrando abono...</span>';
+
         try {
             await accountManager.recordPayment({
                 businessId: business.id,
@@ -1120,7 +1152,8 @@ async function openPaymentModal(business, playerId, mainContainer) {
                 playerUsername: client.username,
                 amount,
                 paymentMethod,
-                notes: notes || 'Abono / Liquidación de saldo'
+                notes: notes || 'Abono / Liquidación de saldo',
+                idempotencyKey: payIdempotencyKey
             });
 
             toast.success(`Abono de ${currency}${amount.toFixed(2)} registrado exitosamente.`);
@@ -1128,6 +1161,8 @@ async function openPaymentModal(business, playerId, mainContainer) {
             renderAccountsView(mainContainer);
         } catch (e) {
             toast.error(e.message);
+            savePayBtn.disabled = false;
+            savePayBtn.innerHTML = origPayText;
         }
     };
 }

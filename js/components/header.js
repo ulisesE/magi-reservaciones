@@ -103,8 +103,14 @@ export function renderHeader(container) {
                     </div>
                 </div>
 
-                <!-- Control de Acceso y Acciones -->
-                <div class="header-actions" style="display:flex; align-items:center; gap:14px;">
+                <!-- Control de Acceso, Red y Acciones -->
+                <div class="header-actions" style="display:flex; align-items:center; gap:12px;">
+                    <!-- Indicador de Conexión de Red -->
+                    <div id="header-network-status" class="network-status-badge ${navigator.onLine ? 'online' : 'offline'}" style="display:flex; align-items:center; gap:5px; font-size:0.72rem; padding:3px 8px; border-radius:12px; background:${navigator.onLine ? 'rgba(104,242,5,0.1)' : 'rgba(255,184,0,0.15)'}; border:1px solid ${navigator.onLine ? 'rgba(104,242,5,0.3)' : 'rgba(255,184,0,0.4)'}; color:${navigator.onLine ? 'var(--color-neon-lime)' : 'var(--color-neon-gold)'}; font-weight:700;" title="${navigator.onLine ? 'Conectado a Firestore' : 'Modo Sin Conexión'}">
+                        <span style="font-size:0.6rem;">${navigator.onLine ? '🟢' : '🟡'}</span>
+                        <span class="network-status-text">${navigator.onLine ? 'En Línea' : 'Offline'}</span>
+                    </div>
+
                     <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
                         <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
                     </button>

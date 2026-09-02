@@ -16,6 +16,7 @@ import {
     query,
     where 
 } from '../firebaseConfig.js';
+import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
 
 const TENANTS_STORAGE_KEY = 'piu_system_tenants_v1';
 const ACTIVE_TENANT_STORAGE_KEY = 'piu_active_tenant_id_v1';
@@ -493,6 +494,14 @@ class TenantManager {
                     throw new Error('La configuración cambió en otro dispositivo. Recarga la página antes de volver a guardar.');
                 }
                 transaction.update(businessRef, persistedFields);
+
+                // Inyectar auditoría de configuración en la misma transacción atómica
+                auditLogger.appendTransactionAudit(transaction, {
+                    businessId,
+                    action: AUDIT_ACTIONS.BUSINESS_SETTINGS_UPDATED,
+                    target: { type: 'BUSINESS', id: businessId, name: this.businesses[index].name },
+                    details: `Actualizada configuración de sucursal: ${this.businesses[index].name} (v${persistedFields.version})`
+                });
             });
         }
 
@@ -503,6 +512,7 @@ class TenantManager {
 
         this.saveLocally(this.businesses);
         syncMetadataToServer(this.businesses);
+
         this.notify();
         return this.businesses[index];
     }

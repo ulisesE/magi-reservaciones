@@ -2,75 +2,346 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Reglas de seguridad para el namespace 'piu_' (Pump It Up Hub)
+    // =========================================================================
+    // FUNCIONES AUXILIARES DE AUTORIZACIÓN Y ROLES (MAGI SECURITY ENGINE)
+    // =========================================================================
     
-    // 1. Negocios, Máquinas, Reglas operativas y Versiones de Juego (Públicos de lectura, protegidos de escritura)
-    match /piu_businesses/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true; // Para desarrollo / restringir en prod con auth
+    function isAuthenticated() {
+      return request.auth != null;
     }
-    match /piu_machines/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    function isStaffUser() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/piu_staff_users/$(request.auth.uid));
     }
-    match /piu_operating_rules/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    function getStaffDoc() {
+      return get(/databases/$(database)/documents/piu_staff_users/$(request.auth.uid)).data;
     }
-    match /piu_game_versions/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    // 👑 Superadministrador con privilegios globales en todas las sucursales
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        (isStaffUser() && getStaffDoc().role == 'SUPERADMIN')
+        || (request.auth.token.role == 'SUPERADMIN')
+      );
     }
-    match /piu_cabinet_models/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    // 🕹️ Encargado de sucursal con aislamiento estricto por businessId
+    function isManagerForBusiness(bizId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        (isStaffUser() && 
+         getStaffDoc().role == 'MANAGER' && 
+         (bizId != null && getStaffDoc().businessId == bizId))
+      );
     }
-    match /piu_machine_features/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    // 🎮 Jugador propietario del perfil / reservación
+    function isOwnerPlayer(playerId) {
+      return isAuthenticated() && (request.auth.uid == playerId);
     }
 
-    // 2. Personal y Encargados (Datos sensibles con PINs hasheados)
+    // =========================================================================
+    // 1. NEGOCIOS Y CONFIGURACIÓN MULTI-TENANT (piu_businesses)
+    // =========================================================================
+    match /piu_businesses/{businessId} {
+      allow read: if true; // Directorio público de sucursales
+      allow create, delete: if isSuperAdmin(); // Creación y borrado exclusivo de Superadmin
+      allow update: if isManagerForBusiness(businessId); // Ajustes permitidos al Manager del local o Superadmin
+    }
+
+    // =========================================================================
+    // 2. MÁQUINAS, REGLAS OPERATIVAS Y CARACTERÍSTICAS (Aislamiento por Local)
+    // =========================================================================
+    match /piu_machines/{machineId} {
+      allow read: if true;
+      allow create: if isManagerForBusiness(request.resource.data.businessId);
+      // Actualización y Transferencia permitida al Superadmin o al Encargado del local de origen
+      allow update: if isSuperAdmin() || isManagerForBusiness(resource.data.businessId);
+      allow delete: if isManagerForBusiness(resource.data.businessId);
+    }
+    
+    match /piu_operating_rules/{ruleId} {
+      allow read: if true;
+      allow create: if isManagerForBusiness(request.resource.data.businessId);
+      allow update: if isManagerForBusiness(resource.data.businessId) && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if isManagerForBusiness(resource.data.businessId);
+    }
+    
+    match /piu_machine_features/{featureId} {
+      allow read: if true;
+      allow create: if isManagerForBusiness(request.resource.data.businessId);
+      allow update: if isManagerForBusiness(resource.data.businessId) && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if isManagerForBusiness(resource.data.businessId);
+    }
+
+    // Catálogos Globales Maestros (Modelos de Gabinete y Versiones del Juego)
+    match /piu_game_versions/{versionId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    
+    match /piu_cabinet_models/{modelId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // =========================================================================
+    // 3. CATÁLOGO DE PRODUCTOS Y PRECIOS POR SUCURSAL (piu_products)
+    // =========================================================================
+    match /piu_products/{productId} {
+      allow read: if true;
+      allow create: if isManagerForBusiness(request.resource.data.businessId) && request.resource.data.price >= 0;
+      allow update: if isManagerForBusiness(resource.data.businessId) 
+        && request.resource.data.businessId == resource.data.businessId 
+        && request.resource.data.price >= 0;
+      allow delete: if isManagerForBusiness(resource.data.businessId);
+    }
+
+    // =========================================================================
+    // 4. PERSONAL Y ENCARGADOS (piu_staff_users) 🔥 BLINDAJE ANTI-ESCALAMIENTO
+    // =========================================================================
     match /piu_staff_users/{userId} {
-      allow read: if true;
-      allow write: if true;
+      // Lectura permitida solo a staff del mismo local o Superadmin (Protección de PII y hashes)
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() || 
+        (isStaffUser() && (getStaffDoc().businessId == resource.data.businessId || request.auth.uid == userId))
+      );
+      
+      // Creación y eliminación reservada exclusivamente al Superadministrador
+      allow create, delete: if isSuperAdmin();
+      
+      // Edición: Superadmin puede todo. Un Manager solo puede editar sus propios datos básicos sin alterar rol ni local
+      allow update: if isSuperAdmin() || (
+        isStaffUser() &&
+        request.auth.uid == userId &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.businessId == resource.data.businessId
+      );
     }
 
-    // 3. Jugadores (piu_players)
+    // =========================================================================
+    // 5. JUGADORES Y DIRECTORIO (piu_players) 🛡️ PRIVACIDAD ESTRICTA (CERO PII PÚBLICA)
+    // =========================================================================
     match /piu_players/{playerId} {
-      allow read: if true;
-      allow write: if true;
+      // 🔒 PRIVACIDAD DE JUGADORES: Solo Superadmin, Staff autorizado de sucursal o el propio jugador
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        isStaffUser() ||
+        isOwnerPlayer(playerId)
+      );
+      
+      // Creación: Auto-registro seguro (obligatorio role: 'CLIENT', saldo inicial cero, cero puntos artificiales)
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        isStaffUser() ||
+        (
+          request.resource.data.role == 'CLIENT' &&
+          (request.resource.data.loyaltyPoints == 0 || request.resource.data.loyaltyPoints == null) &&
+          (request.resource.data.loyalty == {} || request.resource.data.loyalty == null) &&
+          (request.resource.data.accounts == {} || request.resource.data.accounts == null)
+        )
+      );
+      
+      // Actualización conceptual de tres niveles:
+      // 1. SUPERADMIN → Acceso total
+      // 2. PLAYER → Solo su perfil básico (nombre, gamertag, pin, phone; NUNCA saldos, puntos ni rol)
+      // 3. MANAGER → Solo puede ajustar cuentas/lealtad de SU propio businessId (sin tocar rol ni otras sucursales)
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (
+          isOwnerPlayer(playerId) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['accounts', 'loyalty', 'loyaltyPoints', 'role', 'balance'])
+        ) ||
+        (
+          isStaffUser() &&
+          getStaffDoc().role == 'MANAGER' &&
+          getStaffDoc().businessId != null &&
+          request.resource.data.role == resource.data.role &&
+          (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['accounts']) ||
+            request.resource.data.accounts.diff(resource.data.accounts).affectedKeys().hasOnly([getStaffDoc().businessId])
+          ) &&
+          (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['loyalty']) ||
+            request.resource.data.loyalty.diff(resource.data.loyalty).affectedKeys().hasOnly([getStaffDoc().businessId])
+          )
+        )
+      );
+      
+      allow delete: if isSuperAdmin();
     }
 
-    // 4. Reservaciones, Consumos y Cuentas (piu_reservations, piu_consumptions)
+    // =========================================================================
+    // 6. RESERVACIONES (piu_reservations) 🔒 PRIVACIDAD, FINANZAS Y SOPORTE GUEST
+    // =========================================================================
     match /piu_reservations/{reservationId} {
-      allow read: if true;
-      allow create, update: if true;
-      allow delete: if true;
-    }
-    
-    match /piu_consumptions/{consumptionId} {
-      allow read: if true;
-      allow create, update: if true;
-      allow delete: if true;
+      // Lectura: Manager de la sucursal, el jugador dueño de la reserva o consulta individual de folio para Invitados
+      allow get: if (
+        (isAuthenticated() && (
+          isManagerForBusiness(resource.data.businessId) ||
+          isOwnerPlayer(resource.data.clientId) ||
+          isOwnerPlayer(resource.data.playerId)
+        )) ||
+        (resource.data.clientId == null || resource.data.clientId == '')
+      );
+
+      allow list: if isAuthenticated() && (
+        isSuperAdmin() ||
+        isStaffUser() ||
+        request.auth.uid != null
+      );
+      
+      // Creación:
+      // A. Manager/Staff del local (puede crear en CONFIRMED o PENDING)
+      // B. Jugador registrado autenticado (solo PENDING, con clientId == request.auth.uid)
+      // C. Invitado / Guest público (sin login, estrictamente PENDING y con esquema validado)
+      allow create: if 
+        (isAuthenticated() && isManagerForBusiness(request.resource.data.businessId) && request.resource.data.totalCost >= 0)
+        ||
+        (
+          isAuthenticated() &&
+          (isOwnerPlayer(request.resource.data.clientId) || isOwnerPlayer(request.resource.data.playerId)) && 
+          request.resource.data.status == 'PENDING' &&
+          request.resource.data.totalCost >= 0 &&
+          request.resource.data.businessId is string &&
+          request.resource.data.machineId is string &&
+          request.resource.data.date is string &&
+          request.resource.data.startTime is string &&
+          request.resource.data.endTime is string
+        )
+        ||
+        (
+          // 👤 INVITADO PÚBLICO (GUEST): Reservación segura sin cuenta (estrictamente PENDING)
+          request.auth == null &&
+          request.resource.data.status == 'PENDING' &&
+          (request.resource.data.clientId == null || request.resource.data.clientId == '') &&
+          (request.resource.data.clientUsername == null || request.resource.data.clientUsername == '') &&
+          request.resource.data.clientName is string && request.resource.data.clientName.size() >= 2 &&
+          request.resource.data.businessId is string && request.resource.data.businessId.size() > 0 &&
+          request.resource.data.machineId is string && request.resource.data.machineId.size() > 0 &&
+          request.resource.data.date is string &&
+          request.resource.data.startTime is string &&
+          request.resource.data.endTime is string &&
+          request.resource.data.totalCost is number && request.resource.data.totalCost >= 0
+        );
+      
+      // Actualización: Manager de la sucursal o el jugador cancelando su propia reserva pendiente
+      allow update: if isAuthenticated() && (
+        (
+          isManagerForBusiness(resource.data.businessId) && 
+          request.resource.data.businessId == resource.data.businessId &&
+          request.resource.data.totalCost >= 0
+        ) ||
+        (
+          (isOwnerPlayer(resource.data.clientId) || isOwnerPlayer(resource.data.playerId)) && 
+          request.resource.data.status == 'CANCELLED' && 
+          resource.data.status == 'PENDING' &&
+          request.resource.data.businessId == resource.data.businessId &&
+          request.resource.data.totalCost == resource.data.totalCost
+        )
+      );
+      
+      allow delete: if isSuperAdmin();
     }
 
-    // 5. Recompensas y Canjes
+    // =========================================================================
+    // 6b. CALENDARIOS Y BLOQUEO DE SLOTS (piu_machine_schedules) 🔒 EXCLUSIVO STAFF
+    // =========================================================================
+    match /piu_machine_schedules/{scheduleId} {
+      // Lectura pública para visualización de disponibilidad (Día / Semana / Mes)
+      allow read: if true;
+      
+      // 🛡️ ESCRITURA ESTRICTA: Solo Superadmin o Personal/Manager de la sucursal respectiva
+      allow write: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (request.resource.data.businessId != null && isManagerForBusiness(request.resource.data.businessId)) ||
+        (isStaffUser() && getStaffDoc().businessId == request.resource.data.businessId)
+      );
+    }
+
+    // =========================================================================
+    // 7. OPERACIONES MONETARIAS Y CONSUMOS (piu_consumptions) 💰
+    // REGLAS FINANCIERAS: CERO BORRADO, AISLAMIENTO POR LOCAL E INMUTABILIDAD
+    // =========================================================================
+    match /piu_consumptions/{consumptionId} {
+      // Lectura: Manager de la sucursal o el jugador que realizó el consumo
+      allow read: if isAuthenticated() && (
+        isManagerForBusiness(resource.data.businessId) ||
+        isOwnerPlayer(resource.data.playerId)
+      );
+      
+      // Creación: Únicamente el Manager asignado a la sucursal con montos válidos
+      allow create: if isAuthenticated() && 
+        isManagerForBusiness(request.resource.data.businessId) &&
+        request.resource.data.totalAmount >= 0 &&
+        request.resource.data.status in ['ACTIVE', 'PENDING', 'PAID'];
+      
+      // Actualización: Solo Manager de la sucursal. PROHIBIDO alterar negocio, jugador, importe histórico o eliminar motivo de anulación
+      allow update: if isAuthenticated() &&
+        isManagerForBusiness(resource.data.businessId) &&
+        request.resource.data.businessId == resource.data.businessId &&
+        request.resource.data.totalAmount == resource.data.totalAmount &&
+        request.resource.data.playerId == resource.data.playerId &&
+        request.resource.data.status in ['ACTIVE', 'VOIDED', 'CANCELLED', 'PAID'] &&
+        (request.resource.data.status == 'VOIDED' ? request.resource.data.voidReason != null : true);
+      
+      // 🚫 INMUTABILIDAD FINANCIERA: Prohibido estrictamente borrar ventas o abonos
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // 8. PROGRAMA DE LEALTAD Y RECOMPENSAS (piu_loyalty_rewards, piu_redemptions)
+    // =========================================================================
     match /piu_loyalty_rewards/{rewardId} {
       allow read: if true;
-      allow write: if true;
-    }
-    match /piu_redemptions/{redemptionId} {
-      allow read: if true;
-      allow create, update: if true;
-      allow delete: if true;
+      allow create: if isManagerForBusiness(request.resource.data.businessId);
+      allow update: if isManagerForBusiness(resource.data.businessId) && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if isManagerForBusiness(resource.data.businessId);
     }
 
-    // 6. Auditoría
+    match /piu_redemptions/{redemptionId} {
+      allow read: if isAuthenticated() && (
+        isManagerForBusiness(resource.data.businessId) ||
+        isOwnerPlayer(resource.data.playerId)
+      );
+      // Solo el Manager autorizado de la sucursal puede procesar canjes de premios en mostrador
+      allow create: if isAuthenticated() && (
+        isManagerForBusiness(request.resource.data.businessId)
+      );
+      allow update: if isManagerForBusiness(resource.data.businessId) && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if false; // Los canjes de recompensas son inmutables
+    }
+
+    // =========================================================================
+    // 9. AUDITORÍA OBLIGATORIA (piu_audit_logs) 🛡️ VALIDACIÓN DE ESQUEMA E INMUTABILIDAD
+    // =========================================================================
     match /piu_audit_logs/{logId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if false; // Los logs de auditoría son inmutables
+      // Lectura: Superadmin global o Manager de su respectiva sucursal
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() || 
+        (isStaffUser() && getStaffDoc().businessId == resource.data.businessId)
+      );
+      
+      // Creación: Solo Manager de la sucursal correspondiente o Superadmin, con actor vinculado al usuario autenticado (request.auth.uid)
+      allow create: if isAuthenticated() && (
+        isManagerForBusiness(request.resource.data.businessId) &&
+        request.resource.data.action in [
+          'SALE_RECORDED', 'PAYMENT_RECORDED', 'DEBT_LIQUIDATED', 'TRANSACTION_VOIDED',
+          'POINTS_ADJUSTED', 'REWARD_REDEEMED', 'PRODUCT_CREATED', 'PRODUCT_UPDATED',
+          'PRODUCT_DELETED', 'PRICE_CHANGED', 'STAFF_LOGIN', 'STAFF_LOGOUT',
+          'STAFF_CREATED', 'STAFF_UPDATED', 'STAFF_DELETED', 'CLIENT_LOGIN', 'CLIENT_LOGOUT',
+          'MACHINE_CREATED', 'MACHINE_UPDATED', 'MACHINE_DELETED',
+          'RESERVATION_CREATED', 'RESERVATION_CLOSED', 'RESERVATION_MODIFIED', 'RESERVATION_CANCELLED',
+          'BUSINESS_SETTINGS_UPDATED'
+        ] &&
+        request.resource.data.actor.id != null &&
+        (request.resource.data.actor.id == request.auth.uid || isSuperAdmin()) &&
+        request.resource.data.createdAt != null
+      );
+      
+      // 🔒 INMUTABILIDAD TOTAL: Nadie puede editar ni borrar un registro de auditoría
+      allow update, delete: if false;
     }
   }
 }

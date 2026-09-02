@@ -3,6 +3,14 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-analytics.js";
 import { 
+    getAuth, 
+    signInAnonymously, 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword, 
+    signOut, 
+    onAuthStateChanged 
+} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
+import { 
     getFirestore, 
     collection, 
     addDoc, 
@@ -16,6 +24,7 @@ import {
     setDoc, 
     getDoc,
     runTransaction,
+    writeBatch,
     serverTimestamp,
     orderBy,
     limit,
@@ -36,12 +45,14 @@ const firebaseConfig = {
 // Inicializar instancia de Firebase
 let app = null;
 let db = null;
+let auth = null;
 let analytics = null;
 let isFirebaseAvailable = false;
 
 try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    auth = getAuth(app);
     try {
         analytics = getAnalytics(app);
         console.log("📈 Firebase Analytics inicializado");
@@ -49,7 +60,7 @@ try {
         console.warn("⚠️ No se pudo inicializar Firebase Analytics:", analyticsError);
     }
     isFirebaseAvailable = true;
-    console.log("⚡ Firebase conectado exitosamente al proyecto: test-89a00");
+    console.log("⚡ Firebase y Auth conectados exitosamente al proyecto: test-89a00");
 } catch (error) {
     console.warn("⚠️ No se pudo inicializar Firebase, operando en modo LocalStorage:", error);
 }
@@ -86,14 +97,26 @@ export const COLLECTIONS = {
     REDEMPTIONS: `${FIRESTORE_PREFIX}_redemptions`,
     PLAYER_ACCOUNTS: `${FIRESTORE_PREFIX}_player_accounts`,
     CONSUMPTIONS: `${FIRESTORE_PREFIX}_consumptions`,
-    PRODUCTS: `${FIRESTORE_PREFIX}_products`
+    PRODUCTS: `${FIRESTORE_PREFIX}_products`,
+    REWARDS: `${FIRESTORE_PREFIX}_rewards`,
+    MACHINE_SCHEDULES: `${FIRESTORE_PREFIX}_machine_schedules`
 };
+
+export function isOnline() {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+}
 
 export { 
     app, 
     db, 
+    auth,
     analytics,
     isFirebaseAvailable,
+    signInAnonymously,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
     collection, 
     addDoc, 
     doc, 
@@ -106,6 +129,7 @@ export {
     setDoc, 
     getDoc,
     runTransaction,
+    writeBatch,
     serverTimestamp,
     orderBy,
     limit,
