@@ -1567,6 +1567,16 @@ function openBusinessModulesModal(business, container) {
                                 </small>
                             </div>
                         </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-versus" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.versus !== false ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">⚔️ Arena Versus & Retas PVP</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Matchmaking de rivales, negociación de horarios/locales y rankings competitivos por Liga Potosina.
+                                </small>
+                            </div>
+                        </label>
                     </div>
                 </div>
 
@@ -1668,7 +1678,7 @@ function openBusinessModulesModal(business, container) {
         setAllCheckboxes({
             accounts: true, clients: true, loyalty: true, requests: true,
             analytics: true, business: true, catalogs: true, calendarWeek: true,
-            calendarMonth: true, machines: true, myProfile: true
+            calendarMonth: true, machines: true, myProfile: true, versus: true
         });
         toast.info("Preset aplicado: Todas las funciones activadas.");
     });
@@ -1677,7 +1687,7 @@ function openBusinessModulesModal(business, container) {
         setAllCheckboxes({
             accounts: false, clients: true, loyalty: false, requests: true,
             analytics: false, business: false, catalogs: false, calendarWeek: true,
-            calendarMonth: false, machines: true, myProfile: false
+            calendarMonth: false, machines: true, myProfile: false, versus: true
         });
         toast.info("Preset aplicado: Modo Básico Arcade.");
     });
@@ -1686,7 +1696,7 @@ function openBusinessModulesModal(business, container) {
         setAllCheckboxes({
             accounts: false, clients: true, loyalty: true, requests: true,
             analytics: true, business: true, catalogs: true, calendarWeek: true,
-            calendarMonth: true, machines: true, myProfile: true
+            calendarMonth: true, machines: true, myProfile: true, versus: true
         });
         toast.info("Preset aplicado: Modo Estricto (Sin Cuenta Fácil).");
     });
@@ -1701,6 +1711,7 @@ function openBusinessModulesModal(business, container) {
             clients: modalEl.querySelector('#mod-clients')?.checked ?? true,
             loyalty: modalEl.querySelector('#mod-loyalty')?.checked ?? true,
             myProfile: modalEl.querySelector('#mod-myProfile')?.checked ?? true,
+            versus: modalEl.querySelector('#mod-versus')?.checked ?? true,
             calendarWeek: modalEl.querySelector('#mod-calendarWeek')?.checked ?? true,
             calendarMonth: modalEl.querySelector('#mod-calendarMonth')?.checked ?? true,
             machines: modalEl.querySelector('#mod-machines')?.checked ?? true,

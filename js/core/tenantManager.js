@@ -33,7 +33,8 @@ export const DEFAULT_BUSINESS_MODULES = {
     calendarWeek: true, // Vista Semanal
     calendarMonth: true,// Vista Mensual
     machines: true,     // Ficha de Máquinas
-    myProfile: true     // Portal Mi Perfil (Gamer Pass)
+    myProfile: true,    // Portal Mi Perfil (Gamer Pass)
+    versus: true        // Retas PVP & Arena Matchmaking
 };
 
 // Negocios iniciales predeterminados (Seed data)
@@ -625,7 +626,8 @@ class TenantManager {
             calendarWeek: rawModules.calendarWeek !== false,
             calendarMonth: rawModules.calendarMonth !== false,
             machines: rawModules.machines !== false,
-            myProfile: rawModules.myProfile !== false
+            myProfile: rawModules.myProfile !== false,
+            versus: rawModules.versus !== false
         };
     }
 
@@ -652,6 +654,7 @@ class TenantManager {
         if (key === 'month' || key === 'calendarmonth') return modules.calendarMonth !== false;
         if (key === 'machines' || key === 'maquinas') return modules.machines !== false;
         if (key === 'myprofile' || key === 'profile' || key === 'perfil') return modules.myProfile !== false;
+        if (key === 'versus' || key === 'retas' || key === 'matchmaking') return modules.versus !== false;
 
         if (moduleId in modules) {
             return modules[moduleId] !== false;

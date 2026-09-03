@@ -33,6 +33,7 @@ export function renderHeader(container) {
     const showMonth = isSuperAdmin || tenantManager.isModuleEnabled('calendarMonth', business);
     const showMachines = isSuperAdmin || tenantManager.isModuleEnabled('machines', business);
     const showMyProfile = isSuperAdmin || tenantManager.isModuleEnabled('myProfile', business);
+    const showVersus = isSuperAdmin || tenantManager.isModuleEnabled('versus', business);
 
     // Si estamos en la pantalla de bienvenida (sin local seleccionado)
     if (!isLocalSelected && !isSuperAdmin) {
@@ -252,6 +253,13 @@ export function renderHeader(container) {
                             <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES">
                                 <span class="tab-icon">🕹️</span>
                                 <span class="tab-text">Máquinas</span>
+                            </button>
+                        ` : ''}
+
+                        ${showVersus ? `
+                            <button class="nav-tab ${currentView === 'VERSUS' ? 'active' : ''}" data-view="VERSUS" title="Arena Versus y Retas PVP">
+                                <span class="tab-icon">⚔️</span>
+                                <span class="tab-text">Retas</span>
                             </button>
                         ` : ''}
 

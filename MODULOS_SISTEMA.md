@@ -21,7 +21,8 @@ Este documento describe el inventario exhaustivo de todos los módulos que integ
 | **10** | `ANALYTICS` | `ANALYTICS` | Rendimiento & Comisiones | 📈 | Encargado (Staff) | Activo | `piu_bookings`, `piu_machines` |
 | **11** | `BUSINESS` | `BUSINESS` | Ajustes de Sucursal | ⚙️ | Encargado (Staff) | Activo | `piu_businesses` |
 | **12** | `CATALOGS` | `CATALOGS` | Catálogos & Productos | 🛍️ | Encargado (Staff) | Activo | `piu_products`, `piu_cabinet_models` |
-| **13** | `SUPERADMIN` | `SUPERADMIN` | Consola Global Superadmin | 👑 | Superadministrador | Exclusivo Superadmin | Todas las colecciones |
+| **13** | `VERSUS` | `VERSUS` | Arena Versus & Retas PVP | ⚔️ | Todos (Público / Jugadores) | Activo | `piu_challenges` |
+| **14** | `SUPERADMIN` | `SUPERADMIN` | Consola Global Superadmin | 👑 | Superadministrador | Exclusivo Superadmin | Todas las colecciones |
 
 ---
 
@@ -90,7 +91,13 @@ Este documento describe el inventario exhaustivo de todos los módulos que integ
 * **Colecciones**: `piu_products`, `piu_cabinet_models`, `piu_software_versions`
 * **Impacto si se Desactiva**: Oculta la edición de productos; la terminal POS solo usaría conceptos manuales.
 
-### 13. 👑 Consola Global Superadmin (`SUPERADMIN`)
+### 13. ⚔️ Arena Versus, Matchmaking & Retas PVP (`VERSUS`)
+* **Propósito**: Matchmaking entre jugadores, búsqueda de rivales por **Liga Potosina** (Liga SSS a D), negociación de horarios/locales (mismo local 2P, duelo remoto o libre), bandeja de retos entrantes/salientes, captura de resultados y tabla clasificatoria (Leaderboard).
+* **Archivos Involucrados**: [`js/core/challengeManager.js`](file:///c:/Proyectos/Magi-Swit/Magi-reservaciones/js/core/challengeManager.js), [`js/views/versusView.js`](file:///c:/Proyectos/Magi-Swit/Magi-reservaciones/js/views/versusView.js)
+* **Colecciones**: `piu_challenges`, `piu_players`, `piu_reservations`
+* **Impacto si se Desactiva**: Se oculta la pestaña de Retas para los clientes y la sucursal opera en modo arcade tradicional.
+
+### 14. 👑 Consola Global Superadmin (`SUPERADMIN`)
 * **Propósito**: Panel maestro omnisciente para dar de alta/baja sucursales en cascada, crear cuentas de encargados, respaldos JSON globales y mantenimiento de la red.
 * **Archivos Involucrados**: [`js/views/superadminView.js`](file:///c:/Proyectos/Magi-Swit/Magi-reservaciones/js/views/superadminView.js)
 * **Restricción**: Módulo inviolable; solo accesible con rol `SUPERADMIN` (PIN maestro).
@@ -120,7 +127,8 @@ A partir de la versión **v1.7.2**, el **Superadministrador** cuenta con control
     "calendarWeek": true,
     "calendarMonth": true,
     "machines": true,
-    "myProfile": true
+    "myProfile": true,
+    "versus": true
   }
 }
 ```

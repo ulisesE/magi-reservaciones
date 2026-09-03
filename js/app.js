@@ -20,6 +20,7 @@ import { renderBusinessView } from './views/businessView.js';
 import { renderSuperadminView } from './views/superadminView.js';
 import { renderClientProfileView } from './views/clientProfileView.js';
 import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
+import { renderVersusView } from './views/versusView.js';
 import { openChangelogModal } from './components/changelogModal.js';
 import { isFirebaseAvailable } from './firebaseConfig.js';
 import './core/financialTests.js';
@@ -169,6 +170,9 @@ class App {
                     break;
                 case 'MY_PROFILE':
                     renderClientProfileView(this.mainContent);
+                    break;
+                case 'VERSUS':
+                    renderVersusView(this.mainContent);
                     break;
                 case 'SUPERADMIN':
                     renderSuperadminView(this.mainContent);
