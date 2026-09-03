@@ -1,5 +1,6 @@
 // js/core/navShortcutsManager.js
 // Gestor de Accesos Directos Personalizados para la Barra de Staff (v1.6.0)
+import { tenantManager } from './tenantManager.js';
 
 export const STAFF_MODULES = [
     {
@@ -74,17 +75,21 @@ class NavShortcutsManager {
     }
 
     /**
-     * Retorna la lista completa de módulos disponibles según permisos
+     * Retorna la lista completa de módulos disponibles según permisos y Feature Toggles del local
      */
-    getAvailableModules(isSuperAdmin = false) {
-        return STAFF_MODULES.filter(m => !m.requiresSuperAdmin || isSuperAdmin);
+    getAvailableModules(isSuperAdmin = false, business = null) {
+        return STAFF_MODULES.filter(m => {
+            if (m.requiresSuperAdmin && !isSuperAdmin) return false;
+            if (!isSuperAdmin && !tenantManager.isModuleEnabled(m.id, business)) return false;
+            return true;
+        });
     }
 
     /**
      * Obtiene los IDs de los módulos anclados en la barra fija del staff
      */
-    getPinnedShortcuts(userId = 'default', isSuperAdmin = false) {
-        const available = this.getAvailableModules(isSuperAdmin);
+    getPinnedShortcuts(userId = 'default', isSuperAdmin = false, business = null) {
+        const available = this.getAvailableModules(isSuperAdmin, business);
         const availableIds = new Set(available.map(m => m.id));
 
         try {

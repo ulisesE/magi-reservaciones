@@ -244,6 +244,10 @@ export async function renderClientProfileView(container) {
                                 <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas Jugadas</span>
                                 <strong style="font-size:1.3rem; color:#ffffff;">${totalHours}h</strong>
                             </div>
+                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid rgba(255,0,85,0.3); text-align:center; cursor:pointer;" id="btn-profile-pvp-stat" title="Ver Arena Versus">
+                                <span style="font-size:0.75rem; color:var(--color-neon-pink); display:block; font-weight:bold;">⚔️ Récord PVP</span>
+                                <strong style="font-size:1.3rem; color:#ffffff;">${currentUser.versusStats?.wins || 0}V - ${currentUser.versusStats?.losses || 0}D</strong>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -262,6 +266,9 @@ export async function renderClientProfileView(container) {
                         <span>🎁 Lealtad y Premios</span>
                     </button>
                 ` : ''}
+                <button class="btn btn-sm btn-outline" id="btn-profile-versus" style="flex:1; max-width:180px; border-color:var(--color-neon-pink); color:var(--color-neon-pink); font-weight:bold;" title="Ir a la Arena Versus y Retas">
+                    <span>⚔️ Arena Versus</span>
+                </button>
                 <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-edit-profile" style="flex:1; max-width:200px;">
                     <span>⚙️ Administrar Perfil</span>
                 </button>
@@ -728,6 +735,14 @@ export async function renderClientProfileView(container) {
             const activeSection = container.querySelector(`#${targetTab}`);
             if (activeSection) activeSection.classList.remove('hidden');
         });
+    });
+
+    // Evento para ir a Arena Versus
+    container.querySelector('#btn-profile-pvp-stat')?.addEventListener('click', () => {
+        store.setCurrentView('VERSUS');
+    });
+    container.querySelector('#btn-profile-versus')?.addEventListener('click', () => {
+        store.setCurrentView('VERSUS');
     });
 
     // Selector de avatar
