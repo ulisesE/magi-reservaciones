@@ -332,7 +332,9 @@ function renderMyChallengesTab(contentEl, userChallenges, currentUser, allBusine
                 const modeInfo = CHALLENGE_MODES[chal.mode] || CHALLENGE_MODES.SAME_LOCAL;
 
                 let statusBadge = '';
-                if (chal.status === CHALLENGE_STATUS.ACCEPTED) {
+                if (chal.staffRejectionReason) {
+                    statusBadge = `<span class="badge badge-danger pulse-glow" style="font-size:0.75rem;">⚠️ Rechazada por Encargado</span>`;
+                } else if (chal.status === CHALLENGE_STATUS.ACCEPTED) {
                     statusBadge = `<span class="badge badge-warning pulse-glow" style="font-size:0.75rem;">⏳ Reta Agendada • Pendiente de Aprobación</span>`;
                 } else if (isMyTurn) {
                     statusBadge = `<span class="badge badge-warning pulse-glow" style="font-size:0.75rem;">⏳ ¡Es tu turno de responder!</span>`;
@@ -341,7 +343,7 @@ function renderMyChallengesTab(contentEl, userChallenges, currentUser, allBusine
                 }
 
                 return `
-                    <div class="settings-card animate-fade-in" style="padding:20px; background:var(--bg-dark-800); border:1px solid rgba(255,255,255,0.1); border-left:4px solid ${chal.status === CHALLENGE_STATUS.ACCEPTED ? 'var(--color-neon-gold)' : 'var(--color-neon-pink)'};">
+                    <div class="settings-card animate-fade-in" style="padding:20px; background:var(--bg-dark-800); border:1px solid rgba(255,255,255,0.1); border-left:4px solid ${chal.staffRejectionReason ? '#FF5252' : (chal.status === CHALLENGE_STATUS.ACCEPTED ? 'var(--color-neon-gold)' : 'var(--color-neon-pink)')};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
                             <div style="display:flex; gap:14px; align-items:center;">
                                 <div style="font-size:2.2rem; width:52px; height:52px; display:flex; align-items:center; justify-content:center; background:var(--bg-dark-700); border-radius:var(--radius-md); border:1px solid var(--border-color);">
@@ -397,6 +399,13 @@ function renderMyChallengesTab(contentEl, userChallenges, currentUser, allBusine
                             </div>
                         ` : ''}
 
+                        ${chal.staffRejectionReason ? `
+                            <div style="font-size:0.85rem; color:#FF5252; background:rgba(255,82,82,0.12); padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:14px; border-left:4px solid #FF5252;">
+                                ⚠️ <strong>Aviso de Sucursal:</strong> La reservación fue cancelada/rechazada por el encargado: <em>"${escapeHTML(chal.staffRejectionReason)}"</em>.<br>
+                                Por favor propón un nuevo horario o sucursal con el botón de abajo.
+                            </div>
+                        ` : ''}
+
                         <!-- Botones de Acción -->
                         <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
                             ${chal.status === CHALLENGE_STATUS.ACCEPTED ? `
@@ -405,6 +414,12 @@ function renderMyChallengesTab(contentEl, userChallenges, currentUser, allBusine
                                 </button>
                                 <button class="btn btn-primary btn-sm btn-report-result glow-red" data-challenge-id="${chal.id}">
                                     <span>🏆 Capturar Resultado Final</span>
+                                </button>
+                            ` : ''}
+
+                            ${(chal.status === CHALLENGE_STATUS.COUNTER_OFFERED && chal.staffRejectionReason) ? `
+                                <button class="btn btn-primary btn-sm btn-counter-offer glow-red" data-challenge-id="${chal.id}">
+                                    <span>🔄 Proponer Nuevo Horario / Local</span>
                                 </button>
                             ` : ''}
 

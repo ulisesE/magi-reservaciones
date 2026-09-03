@@ -868,6 +868,45 @@ class ChallengeManager {
     }
 
     /**
+     * Se invoca cuando una reservación asociada a un reto es rechazada o eliminada/cancelada por un encargado o superadmin.
+     */
+    async handleReservationRejectedOrCancelled(challengeId, reason = 'Cancelada por encargado') {
+        const challenge = await this.getChallengeById(challengeId);
+        if (!challenge) return;
+
+        const nowIso = new Date().toISOString();
+        const historyEntry = {
+            action: 'STAFF_REJECTED',
+            actorId: 'STAFF',
+            actorName: 'Encargado de Sucursal',
+            notes: reason || 'Reservación no disponible en sucursal',
+            createdAt: nowIso
+        };
+
+        const rawUpdatedData = {
+            status: CHALLENGE_STATUS.COUNTER_OFFERED,
+            staffRejectionReason: reason || 'Horario o máquina no disponible',
+            reservationIds: [],
+            turn: challenge.challenger?.id || challenge.opponent?.id || '',
+            history: [...(challenge.history || []), historyEntry],
+            updatedAt: nowIso
+        };
+
+        const updatedData = cleanFirestorePayload(rawUpdatedData);
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await updateDoc(doc(db, COLLECTIONS.CHALLENGES, challengeId), updatedData);
+            } catch (err) {
+                console.warn("Error actualizando reto tras cancelación de reserva:", err);
+            }
+        }
+
+        this.updateLocalChallenge(challengeId, updatedData);
+        this.notify();
+    }
+
+    /**
      * Acepta el reto y dispara automáticamente la creación de reservaciones correspondientes.
      */
     async acceptChallenge(challengeId, actorUser, { mode = null, businessIdB = null, businessNameB = '' } = {}) {

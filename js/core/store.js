@@ -1171,6 +1171,15 @@ class Store {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
 
+        if (res.isVersusMatch && res.challengeId) {
+            try {
+                const { challengeManager } = await import('./challengeManager.js');
+                await challengeManager.handleReservationRejectedOrCancelled(res.challengeId, reason || 'Rechazada por encargado');
+            } catch (e) {
+                console.warn("Error notificando rechazo a challengeManager:", e);
+            }
+        }
+
         this.notify();
         return res;
     }
@@ -1492,6 +1501,15 @@ class Store {
         }
         if (this.currentBusiness?.id) {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
+        }
+
+        if (res.isVersusMatch && res.challengeId) {
+            try {
+                const { challengeManager } = await import('./challengeManager.js');
+                await challengeManager.handleReservationRejectedOrCancelled(res.challengeId, reason || 'Cancelada por encargado');
+            } catch (e) {
+                console.warn("Error notificando cancelación a challengeManager:", e);
+            }
         }
 
         this.notify();
