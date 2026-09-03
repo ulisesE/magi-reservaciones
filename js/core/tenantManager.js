@@ -22,6 +22,20 @@ const TENANTS_STORAGE_KEY = 'piu_system_tenants_v1';
 const ACTIVE_TENANT_STORAGE_KEY = 'piu_active_tenant_id_v1';
 const SESSION_LOCKED_KEY = 'piu_session_local_locked_v1';
 
+export const DEFAULT_BUSINESS_MODULES = {
+    accounts: true,      // Cuenta Fácil (POS & Fiados)
+    clients: true,       // Directorio de Jugadores
+    loyalty: true,       // Programa de Lealtad y Recompensas
+    requests: true,      // Bandeja de Solicitudes
+    analytics: true,    // Rendimiento y Analítica
+    business: true,     // Ajustes de Sucursal por Encargado
+    catalogs: true,     // Catálogos en Sala & Productos
+    calendarWeek: true, // Vista Semanal
+    calendarMonth: true,// Vista Mensual
+    machines: true,     // Ficha de Máquinas
+    myProfile: true     // Portal Mi Perfil (Gamer Pass)
+};
+
 // Negocios iniciales predeterminados (Seed data)
 export const DEFAULT_BUSINESSES = [
     {
@@ -52,6 +66,9 @@ export const DEFAULT_BUSINESSES = [
         rules: '1. Uso obligatorio de tenis deportivos limpios.\n2. No pisar las barras de soporte con las suelas descalzas.\n3. Tolerancia de espera de 10 minutos antes de liberar la máquina.',
         wifiNetwork: 'PumpZone_Clientes',
         wifiPassword: 'StepManiaPhoenix',
+        isActive: true,
+        status: 'ACTIVE',
+        enabledModules: { ...DEFAULT_BUSINESS_MODULES },
         operatingHours: {
             0: { open: '15:00', close: '04:00', closed: false }, // Domingo: 3 PM - 4 AM Lunes
             1: { open: '11:00', close: '22:00', closed: false }, // Lunes
@@ -107,6 +124,9 @@ export const DEFAULT_BUSINESSES = [
         rules: '1. Respetar el tiempo asignado de máquina.\n2. Cuidar los paneles acrílicos y sensores.\n3. Bebidas y alimentos sólo en el área de descanso.',
         wifiNetwork: 'Galaxy_Gaming_Free',
         wifiPassword: 'GalaxyPump2024',
+        isActive: true,
+        status: 'ACTIVE',
+        enabledModules: { ...DEFAULT_BUSINESS_MODULES },
         createdAt: new Date().toISOString()
     }
 ];
@@ -440,6 +460,9 @@ class TenantManager {
             rules: businessData.rules?.trim() || '',
             wifiNetwork: businessData.wifiNetwork?.trim() || '',
             wifiPassword: businessData.wifiPassword?.trim() || '',
+            isActive: businessData.isActive !== false,
+            status: businessData.status || (businessData.isActive === false ? 'INACTIVE' : 'ACTIVE'),
+            enabledModules: this.normalizeModules(businessData.enabledModules),
             operatingHours: (() => {
                 const oh = {};
                 for (let i = 0; i < 7; i++) {
@@ -582,6 +605,91 @@ class TenantManager {
         }
 
         return true;
+    }
+
+    /**
+     * Normaliza el objeto de módulos habilitados asegurando compatibilidad total (default true).
+     */
+    normalizeModules(rawModules) {
+        if (!rawModules || typeof rawModules !== 'object') {
+            return { ...DEFAULT_BUSINESS_MODULES };
+        }
+        return {
+            accounts: rawModules.accounts !== false,
+            clients: rawModules.clients !== false,
+            loyalty: rawModules.loyalty !== false,
+            requests: rawModules.requests !== false,
+            analytics: rawModules.analytics !== false,
+            business: rawModules.business !== false,
+            catalogs: rawModules.catalogs !== false,
+            calendarWeek: rawModules.calendarWeek !== false,
+            calendarMonth: rawModules.calendarMonth !== false,
+            machines: rawModules.machines !== false,
+            myProfile: rawModules.myProfile !== false
+        };
+    }
+
+    /**
+     * Valida si un módulo o vista específica está habilitada para el negocio activo o especificado.
+     * Retorna true por defecto si no está restringido o el local no existe.
+     */
+    isModuleEnabled(moduleId, business = null) {
+        if (!moduleId) return true;
+        const biz = business || this.getActiveBusiness();
+        if (!biz) return true;
+
+        const modules = this.normalizeModules(biz.enabledModules);
+        const key = String(moduleId).toLowerCase().replace(/[^a-z]/g, '');
+
+        if (key === 'accounts' || key === 'pos') return modules.accounts !== false;
+        if (key === 'clients' || key === 'players') return modules.clients !== false;
+        if (key === 'loyalty' || key === 'rewards') return modules.loyalty !== false;
+        if (key === 'requests' || key === 'solicitudes') return modules.requests !== false;
+        if (key === 'analytics' || key === 'rendimiento') return modules.analytics !== false;
+        if (key === 'business' || key === 'settings' || key === 'ajustes') return modules.business !== false;
+        if (key === 'catalogs' || key === 'products' || key === 'catalogos') return modules.catalogs !== false;
+        if (key === 'week' || key === 'calendarweek') return modules.calendarWeek !== false;
+        if (key === 'month' || key === 'calendarmonth') return modules.calendarMonth !== false;
+        if (key === 'machines' || key === 'maquinas') return modules.machines !== false;
+        if (key === 'myprofile' || key === 'profile' || key === 'perfil') return modules.myProfile !== false;
+
+        if (moduleId in modules) {
+            return modules[moduleId] !== false;
+        }
+        return true;
+    }
+
+    /**
+     * Valida si el local está operativo (Activo).
+     */
+    isBusinessActive(business = null) {
+        const biz = business || this.getActiveBusiness();
+        if (!biz) return true;
+        return biz.isActive !== false && biz.status !== 'INACTIVE';
+    }
+
+    /**
+     * Activa o Pausa una sucursal (Operación Superadmin).
+     */
+    async toggleBusinessStatus(businessId, isActive) {
+        const biz = this.businesses.find(b => b.id === businessId);
+        if (!biz) return null;
+        return await this.updateBusiness(businessId, {
+            isActive: !!isActive,
+            status: isActive ? 'ACTIVE' : 'INACTIVE'
+        });
+    }
+
+    /**
+     * Actualiza la matriz de Feature Toggles de una sucursal (Operación Superadmin).
+     */
+    async updateBusinessModules(businessId, modulesObj) {
+        const biz = this.businesses.find(b => b.id === businessId);
+        if (!biz) return null;
+        const normalized = this.normalizeModules(modulesObj);
+        return await this.updateBusiness(businessId, {
+            enabledModules: normalized
+        });
     }
 
     async updateGlobalConfig(configData) {

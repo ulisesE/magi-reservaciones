@@ -97,27 +97,41 @@ Este documento describe el inventario exhaustivo de todos los módulos que integ
 
 ---
 
-## 🔮 3. Propuesta de Arquitectura para la Siguiente Fase (Feature Toggles)
+---
 
-Para que en la siguiente fase el Superadministrador pueda encender o apagar módulos por sucursal desde la Consola Global, se propone el siguiente esquema:
+## 🎛️ 3. Arquitectura Implementada de Feature Toggles & Control de Estado (v1.7.2)
+
+A partir de la versión **v1.7.2**, el **Superadministrador** cuenta con control total en tiempo real para activar o desactivar módulos por sucursal y pausar o reactivar locales completos desde la Consola Global.
 
 ### Estructura en Firestore (`piu_businesses/{businessId}`)
 ```json
 {
-  "name": "SKY GAMES",
+  "name": "Pump Zone Centro",
+  "isActive": true,
+  "status": "ACTIVE",
   "enabledModules": {
     "accounts": true,
+    "clients": true,
     "loyalty": true,
-    "commission": true,
+    "requests": true,
     "analytics": true,
-    "products": true,
+    "business": true,
+    "catalogs": true,
     "calendarWeek": true,
-    "calendarMonth": true
+    "calendarMonth": true,
+    "machines": true,
+    "myProfile": true
   }
 }
 ```
 
-### Mecanismo de Control en UI:
-1. **Guardia de Navegación (`App.js`)**: Si un usuario intenta acceder a una vista cuyo módulo está desactivado para ese local, se redirige automáticamente a `DAY` con una notificación de advertencia.
-2. **Filtrado Dinámico en Header (`header.js`)**: Los módulos desactivados no se listan en los accesos directos de staff ni en los menús desplegables.
-3. **Consola del Superadministrador**: Se agregará una matriz de interruptores (Toggles Neón) en la tarjeta de cada sucursal para activar/desactivar módulos en tiempo real.
+### Mecanismo de Control y Guardias:
+1. **Guardia de Estado Operativo de Sucursal (`js/app.js`)**: Si un local está pausado (`isActive: false`), los clientes y visitantes visualizan una pantalla arcade informativa indicando que la sucursal está en mantenimiento o en pausa, impidiendo nuevas reservas o pedidos.
+2. **Guardia de Navegación por Módulo (`js/app.js`)**: Si un usuario regular intenta navegar a una vista deshabilitada para esa sucursal, el enrutador lo redirige fluidamente a la vista principal disponible (`HOME` o `DAY`).
+3. **Filtrado Reactivo en Barra de Navegación (`js/components/header.js`)**: Los menús desplegables y las pestañas principales se adaptan dinámicamente según los módulos encendidos en el local.
+4. **Filtrado en Barra de Staff (`js/core/navShortcutsManager.js`)**: Los accesos directos configurables para el personal solo ofrecen módulos habilitados para esa sucursal.
+5. **Consola del Superadministrador (`js/views/superadminView.js`)**:
+   - Botón directo para alternar estado 🟢 Activo / ⏸️ En Pausa por local.
+   - Modal de configuración `🎛️ Funciones` con interruptores categorizados y perfiles rápidos (Presets: *Modo Completo*, *Básico Arcade* y *Modo Estricto*).
+6. **100% Retrocompatible (Safe Defaults)**: Si una sucursal existente no posee `enabledModules` o `isActive`, los métodos `tenantManager.isModuleEnabled()` y `tenantManager.isBusinessActive()` retornan `true` de manera automática y segura.
+

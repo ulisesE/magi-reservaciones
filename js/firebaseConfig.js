@@ -99,7 +99,8 @@ export const COLLECTIONS = {
     CONSUMPTIONS: `${FIRESTORE_PREFIX}_consumptions`,
     PRODUCTS: `${FIRESTORE_PREFIX}_products`,
     REWARDS: `${FIRESTORE_PREFIX}_rewards`,
-    MACHINE_SCHEDULES: `${FIRESTORE_PREFIX}_machine_schedules`
+    MACHINE_SCHEDULES: `${FIRESTORE_PREFIX}_machine_schedules`,
+    CHALLENGES: `${FIRESTORE_PREFIX}_challenges`
 };
 
 export function isOnline() {

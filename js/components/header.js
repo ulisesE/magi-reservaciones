@@ -21,11 +21,18 @@ export function renderHeader(container) {
     const currentView = store.currentView;
 
     const userId = currentUser ? (currentUser.id || currentUser.username || 'staff') : 'default';
-    const availableStaffModules = isStaff ? navShortcutsManager.getAvailableModules(isSuperAdmin) : [];
-    const pinnedShortcutIds = isStaff ? navShortcutsManager.getPinnedShortcuts(userId, isSuperAdmin) : [];
+    const availableStaffModules = isStaff ? navShortcutsManager.getAvailableModules(isSuperAdmin, business) : [];
+    const pinnedShortcutIds = isStaff ? navShortcutsManager.getPinnedShortcuts(userId, isSuperAdmin, business) : [];
 
     const pinnedModules = availableStaffModules.filter(m => pinnedShortcutIds.includes(m.id));
     const unpinnedModules = availableStaffModules.filter(m => !pinnedShortcutIds.includes(m.id));
+
+    // Flags de visibilidad por Feature Toggles del local activo (Superadmin siempre ve todo)
+    const showHome = isSuperAdmin || tenantManager.isModuleEnabled('HOME', business);
+    const showWeek = isSuperAdmin || tenantManager.isModuleEnabled('calendarWeek', business);
+    const showMonth = isSuperAdmin || tenantManager.isModuleEnabled('calendarMonth', business);
+    const showMachines = isSuperAdmin || tenantManager.isModuleEnabled('machines', business);
+    const showMyProfile = isSuperAdmin || tenantManager.isModuleEnabled('myProfile', business);
 
     // Si estamos en la pantalla de bienvenida (sin local seleccionado)
     if (!isLocalSelected && !isSuperAdmin) {
@@ -40,7 +47,7 @@ export function renderHeader(container) {
                             </div>
                             <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                                 <span>Plataforma Modular de Reservaciones</span>
-                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.1">v1.7.1</button>
+                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.2">v1.7.2</button>
                             </div>
                         </div>
                     </div>
@@ -98,7 +105,7 @@ export function renderHeader(container) {
                         </div>
                         <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                             <span>${business?.city || 'Arcade'}</span>
-                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.1">v1.7.1</button>
+                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.2">v1.7.2</button>
                         </div>
                     </div>
                 </div>
@@ -148,13 +155,15 @@ export function renderHeader(container) {
                                     </div>
                                 </div>
 
-                                <button class="dropdown-item" data-view="MY_PROFILE">
-                                    <span class="item-icon">👤</span>
-                                    <div class="item-info">
-                                        <strong>${isClientUser ? 'Mi Perfil & Pase Digital' : 'Mi Cuenta'}</strong>
-                                        <small>Ver estadísticas y reservaciones</small>
-                                    </div>
-                                </button>
+                                ${showMyProfile ? `
+                                    <button class="dropdown-item" data-view="MY_PROFILE">
+                                        <span class="item-icon">👤</span>
+                                        <div class="item-info">
+                                            <strong>${isClientUser ? 'Mi Perfil & Pase Digital' : 'Mi Cuenta'}</strong>
+                                            <small>Ver estadísticas y reservaciones</small>
+                                        </div>
+                                    </button>
+                                ` : ''}
 
                                 ${isStaff ? `
                                     <button class="dropdown-item btn-customize-shortcuts" type="button">
@@ -169,7 +178,7 @@ export function renderHeader(container) {
                                 <button class="dropdown-item btn-open-changelog-header" type="button">
                                     <span class="item-icon">📜</span>
                                     <div class="item-info">
-                                        <strong>Novedades (v1.7.1)</strong>
+                                        <strong>Novedades (v1.7.2)</strong>
                                         <small>Ver registro de cambios</small>
                                     </div>
                                 </button>
@@ -197,10 +206,12 @@ export function renderHeader(container) {
             <div class="header-nav-row">
                 <nav class="view-nav-tabs">
                     <div class="nav-cluster">
-                        <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME" title="Inicio">
-                            <span class="tab-icon">🏠</span>
-                            <span class="tab-text">Inicio</span>
-                        </button>
+                        ${showHome ? `
+                            <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME" title="Inicio">
+                                <span class="tab-icon">🏠</span>
+                                <span class="tab-text">Inicio</span>
+                            </button>
+                        ` : ''}
 
                         <div class="nav-dropdown-wrapper">
                             <button class="nav-tab nav-dropdown-btn ${['DAY', 'WEEK', 'MONTH'].includes(currentView) ? 'active' : ''}" type="button" title="Vistas de Calendario y Horarios">
@@ -216,29 +227,35 @@ export function renderHeader(container) {
                                         <small>Cuadrícula de slots por máquina</small>
                                     </div>
                                 </button>
-                                <button class="dropdown-item ${currentView === 'WEEK' ? 'active' : ''}" data-view="WEEK">
-                                    <span class="item-icon">📊</span>
-                                    <div class="item-info">
-                                        <strong>Vista Semana</strong>
-                                        <small>Disponibilidad y afluencia 7 días</small>
-                                    </div>
-                                </button>
-                                <button class="dropdown-item ${currentView === 'MONTH' ? 'active' : ''}" data-view="MONTH">
-                                    <span class="item-icon">🗓️</span>
-                                    <div class="item-info">
-                                        <strong>Vista Mes</strong>
-                                        <small>Calendario mensual global</small>
-                                    </div>
-                                </button>
+                                ${showWeek ? `
+                                    <button class="dropdown-item ${currentView === 'WEEK' ? 'active' : ''}" data-view="WEEK">
+                                        <span class="item-icon">📊</span>
+                                        <div class="item-info">
+                                            <strong>Vista Semana</strong>
+                                            <small>Disponibilidad y afluencia 7 días</small>
+                                        </div>
+                                    </button>
+                                ` : ''}
+                                ${showMonth ? `
+                                    <button class="dropdown-item ${currentView === 'MONTH' ? 'active' : ''}" data-view="MONTH">
+                                        <span class="item-icon">🗓️</span>
+                                        <div class="item-info">
+                                            <strong>Vista Mes</strong>
+                                            <small>Calendario mensual global</small>
+                                        </div>
+                                    </button>
+                                ` : ''}
                             </div>
                         </div>
 
-                        <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES">
-                            <span class="tab-icon">🕹️</span>
-                            <span class="tab-text">Máquinas</span>
-                        </button>
+                        ${showMachines ? `
+                            <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES">
+                                <span class="tab-icon">🕹️</span>
+                                <span class="tab-text">Máquinas</span>
+                            </button>
+                        ` : ''}
 
-                        ${currentUser ? `
+                        ${(currentUser && showMyProfile) ? `
                             <button class="nav-tab ${currentView === 'MY_PROFILE' ? 'active' : ''}" data-view="MY_PROFILE">
                                 <span class="tab-icon">👤</span>
                                 <span class="tab-text">${isClientUser ? 'Mi Perfil' : 'Mi Cuenta'}</span>

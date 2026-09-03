@@ -6,6 +6,39 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.7.2] - 2026-09-03
+
+### 🚀 Nuevas Características
+- **Módulo de Control de Funciones por Sucursal (Feature Toggles)**:
+  - Consola central para que el **Superadministrador** pueda activar o desactivar módulos específicos de forma granular para cada sucursal desde la Consola Global (`js/views/superadminView.js`).
+  - Módulos configurables de forma independiente:
+    - 💳 **Cuenta Fácil (POS & Fiados)** (`ACCOUNTS`)
+    - 👥 **Directorio de Jugadores** (`CLIENTS`)
+    - 🎁 **Programa de Lealtad & Recompensas** (`LOYALTY`)
+    - 📥 **Bandeja de Solicitudes** (`REQUESTS`)
+    - 📈 **Rendimiento & Analítica** (`ANALYTICS`)
+    - ⚙️ **Ajustes de Sucursal por Encargado** (`BUSINESS`)
+    - 🛍️ **Catálogos en Sala & Productos** (`CATALOGS`)
+    - 📊 **Vista Semanal de Calendario** (`WEEK`)
+    - 🗓️ **Vista Mensual de Calendario** (`MONTH`)
+    - 🕹️ **Ficha Técnica de Máquinas** (`MACHINES`)
+    - 👤 **Portal Mi Perfil de Jugador** (`MY_PROFILE`)
+  - **Perfiles Rápidos (Presets)**:
+    - ⚡ *Modo Completo* (Todas las funciones encendidas).
+    - 🕹️ *Básico Arcade* (Solo reservaciones, catálogo de máquinas y directorio).
+    - 🔒 *Modo Estricto* (Sin cuenta fácil/fiados).
+- **Control de Estado Operativo de Sucursal (Activo / En Pausa)**:
+  - Botón de alternancia de estado (🟢 Activo / ⏸️ En Pausa) por sucursal en la Consola Global.
+  - **Pantalla Arcade Protectora (`js/app.js`)**: Si una sucursal está en pausa, los clientes y visitantes visualizan una pantalla amigable de mantenimiento/pausa, bloqueando nuevas reservaciones y compras.
+  - **Bypass Superadmin**: Los administradores globales conservan acceso permanente para entrar y reactivar cualquier sucursal.
+- **Router Guards & Adaptación Dinámica de UI**:
+  - El enrutador (`js/app.js`) y la barra superior (`js/components/header.js`) filtran y redirigen automáticamente si un usuario no autorizado intenta acceder a un módulo desactivado.
+  - La personalización de accesos directos de staff (`js/core/navShortcutsManager.js`) solo ofrece módulos activos en la sucursal.
+- **100% Retrocompatible (Safe Defaults)**:
+  - Las sucursales existentes sin campos de configuración previos mantienen todas sus funciones activas de forma transparente sin interrupción de servicio.
+
+---
+
 ## [1.6.0] - 2026-09-01
 
 ### 🚀 Nuevas Características

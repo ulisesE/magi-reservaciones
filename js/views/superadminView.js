@@ -134,6 +134,33 @@ export async function renderSuperadminView(container) {
         });
     });
 
+    // Alternar Estado Operativo de Sucursal (Activo / En Pausa)
+    container.querySelectorAll('.btn-toggle-biz-status').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const bizId = btn.dataset.id;
+            const isCurrentlyActive = btn.dataset.active === 'true';
+            const newActive = !isCurrentlyActive;
+            try {
+                await tenantManager.toggleBusinessStatus(bizId, newActive);
+                toast.success(`Sucursal ${newActive ? 'activada 🟢' : 'pausada ⏸️'}.`);
+                renderSuperadminView(container);
+            } catch (e) {
+                toast.error(e.message);
+            }
+        });
+    });
+
+    // Abrir Modal de Feature Toggles / Módulos por Sucursal
+    container.querySelectorAll('.btn-biz-modules').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const bizId = btn.dataset.id;
+            const biz = tenantManager.getAllBusinesses().find(b => b.id === bizId);
+            if (biz) {
+                openBusinessModulesModal(biz, container);
+            }
+        });
+    });
+
     // Registrar nuevo negocio
     container.querySelector('#btn-add-global-biz')?.addEventListener('click', () => {
         openCreateBusinessModal(container);
@@ -638,28 +665,41 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                         <thead>
                             <tr>
                                 <th>Local / Negocio</th>
+                                <th>Estado Operativo</th>
                                 <th>Ubicación</th>
                                 <th>Horarios</th>
                                 <th>Encargado Asignado</th>
                                 <th>Enlace Directo para Clientes</th>
-                                <th>Acciones</th>
+                                <th>Acciones & Módulos</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${businesses.map(b => {
                                 const assignedManager = managers.find(m => m.businessId === b.id);
                                 const clientUrl = `${window.location.origin}/local/${b.id}`;
+                                const isBizActive = b.isActive !== false && b.status !== 'INACTIVE';
+                                const modules = tenantManager.normalizeModules(b.enabledModules);
+                                const enabledCount = Object.values(modules).filter(Boolean).length;
+                                const totalModulesCount = Object.keys(modules).length;
 
                                 return `
-                                    <tr>
+                                    <tr style="${!isBizActive ? 'opacity:0.75; background:rgba(255,184,0,0.03);' : ''}">
                                         <td>
                                             <div style="display:flex; align-items:center; gap:8px;">
                                                 <span style="font-size:1.4rem;">${b.logoIcon || '🕹️'}</span>
                                                 <div>
-                                                    <strong style="color:#ffffff;">${b.name}</strong>
+                                                    <div style="display:flex; align-items:center; gap:6px;">
+                                                        <strong style="color:#ffffff;">${b.name}</strong>
+                                                        ${!isBizActive ? '<span class="badge badge-warning" style="font-size:0.65rem;">⏸️ PAUSADO</span>' : ''}
+                                                    </div>
                                                     <div style="font-size:0.72rem; color:var(--text-muted);">${b.id}</div>
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-xs ${isBizActive ? 'btn-success' : 'btn-outline'} btn-toggle-biz-status" data-id="${b.id}" data-active="${isBizActive}" title="Haz clic para ${isBizActive ? 'pausar' : 'activar'} este local">
+                                                ${isBizActive ? '🟢 Activo' : '⏸️ En Pausa'}
+                                            </button>
                                         </td>
                                         <td>${b.city}</td>
                                         <td><span class="badge badge-dark">${b.openingTime} - ${b.closingTime}</span></td>
@@ -674,20 +714,23 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                                         </td>
                                         <td>
                                             <div style="display:flex; align-items:center; gap:6px;">
-                                                <input type="text" readonly value="${clientUrl}" class="cyber-input" style="font-size:0.75rem; padding:4px 8px; max-width:190px; background:var(--bg-dark-800);">
+                                                <input type="text" readonly value="${clientUrl}" class="cyber-input" style="font-size:0.75rem; padding:4px 8px; max-width:180px; background:var(--bg-dark-800);">
                                                 <button class="btn btn-outline btn-xs btn-copy-link" data-url="${clientUrl}" title="Copiar enlace del cliente">
                                                     📋 Copiar
                                                 </button>
                                             </div>
                                         </td>
                                         <td>
-                                            <div style="display:flex; gap:6px;">
-                                                <button class="btn btn-primary btn-xs btn-enter-biz glow-red" data-id="${b.id}">
+                                            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                                <button class="btn btn-outline btn-xs btn-biz-modules" data-id="${b.id}" style="border-color:var(--piu-cyan); color:var(--piu-cyan);" title="Configurar módulos y funciones habilitadas">
+                                                    🎛️ Funciones (${enabledCount}/${totalModulesCount})
+                                                </button>
+                                                <button class="btn btn-primary btn-xs btn-enter-biz glow-red" data-id="${b.id}" title="Ingresar a la vista de esta sucursal">
                                                     ⚡ Entrar
                                                 </button>
                                                 ${businesses.length > 1 ? `
                                                     <button class="btn btn-danger btn-xs btn-delete-biz-cascade" data-id="${b.id}" title="Eliminar local y todos sus datos en cascada">
-                                                        🗑️ Eliminar
+                                                        🗑️
                                                     </button>
                                                 ` : ''}
                                             </div>
@@ -1401,6 +1444,277 @@ function openCreateBusinessModal(container) {
             renderSuperadminView(container);
         } catch (e) {
             toast.error(e.message);
+        }
+    };
+}
+
+/**
+ * Modal de Control de Funciones y Módulos (Feature Toggles) por Sucursal
+ */
+function openBusinessModulesModal(business, container) {
+    const modules = tenantManager.normalizeModules(business.enabledModules);
+    const isBizActive = business.isActive !== false && business.status !== 'INACTIVE';
+
+    const contentHtml = `
+        <div style="display:flex; flex-direction:column; gap:16px;">
+            <!-- Encabezado de la Sucursal -->
+            <div style="background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:14px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:1.8rem;">${business.logoIcon || '🕹️'}</span>
+                    <div>
+                        <strong style="color:#ffffff; font-size:1.1rem; display:block;">${escapeHTML(business.name)}</strong>
+                        <small style="color:var(--text-muted); font-size:0.75rem;">ID: ${business.id} • ${escapeHTML(business.city)}</small>
+                    </div>
+                </div>
+                <div>
+                    <span class="badge ${isBizActive ? 'badge-success' : 'badge-warning'}" style="font-size:0.8rem; padding:4px 10px;">
+                        ${isBizActive ? '🟢 SUCURSAL ACTIVA' : '⏸️ SUCURSAL PAUSADA'}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Barra de Presets Rápidos -->
+            <div style="background:var(--bg-dark-900); border:1px dashed var(--border-color); border-radius:var(--radius-md); padding:10px 14px;">
+                <div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px; letter-spacing:1px;">
+                    ⚡ Perfiles Preconfigurados (Presets):
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline btn-xs" id="preset-all" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);">
+                        ⚡ Modo Completo (Todo Activo)
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" id="preset-basic" style="border-color:var(--piu-cyan); color:var(--piu-cyan);">
+                        🕹️ Básico Arcade (Reservas + Ficha)
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" id="preset-nofiad" style="border-color:var(--color-neon-gold); color:var(--color-neon-gold);">
+                        🔒 Estricto (Sin Cuenta Fácil / Fiados)
+                    </button>
+                </div>
+            </div>
+
+            <form id="form-biz-modules" class="cyber-form" style="display:flex; flex-direction:column; gap:18px;">
+                <!-- GRUPO 1: OPERACIÓN, CAJA Y MOSTRADOR -->
+                <div>
+                    <div style="font-size:0.82rem; font-weight:800; color:var(--piu-cyan); text-transform:uppercase; letter-spacing:1.5px; border-bottom:1px solid rgba(0,229,255,0.2); padding-bottom:4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span>💰</span> OPERACIÓN, CAJA Y MOSTRADOR
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-accounts" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.accounts ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <strong style="color:#ffffff; font-size:0.9rem;">💳 Cuenta Fácil & Caja Rápida (POS)</strong>
+                                </div>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Terminal de cobro en mostrador, cuentas corrientes por cobrar (fiado), abonos y desglose de caja.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-catalogs" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.catalogs ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">🛍️ Catálogos en Sala & Productos</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Inventario de snacks, refrescos, fichas y accesorios a la venta para cobro rápido.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-requests" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.requests ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">📥 Bandeja de Solicitudes</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Bandeja de entrada para que el encargado apruebe, modifique o rechace reservaciones de clientes.
+                                </small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- GRUPO 2: COMUNIDAD, LEALTAD Y CLIENTES -->
+                <div>
+                    <div style="font-size:0.82rem; font-weight:800; color:var(--color-neon-lime); text-transform:uppercase; letter-spacing:1.5px; border-bottom:1px solid rgba(104,242,5,0.2); padding-bottom:4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span>👥</span> COMUNIDAD, LEALTAD Y CLIENTES
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-clients" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.clients ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">👥 Directorio de Jugadores</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Listado de jugadores registrados, búsqueda predictiva por PIU ID y escáner de credencial QR.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-loyalty" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.loyalty ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">🎁 Programa de Lealtad y Recompensas</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Tiers de lealtad (Bronce, Plata, Oro, Platino), acumulación de puntos por visita y canje de premios.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-myProfile" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.myProfile ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">👤 Portal Mi Perfil (Gamer Pass)</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Portal de autogestión para que los jugadores consulten su tarjeta QR, historial y saldo personal.
+                                </small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- GRUPO 3: VISTAS Y CALENDARIOS -->
+                <div>
+                    <div style="font-size:0.82rem; font-weight:800; color:var(--color-neon-gold); text-transform:uppercase; letter-spacing:1.5px; border-bottom:1px solid rgba(255,184,0,0.2); padding-bottom:4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span>📅</span> VISTAS DE CALENDARIO Y MÁQUINAS
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-calendarWeek" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.calendarWeek ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">📊 Vista Semanal</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Cuadrícula de ocupación para consultar la disponibilidad de los próximos 7 días.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-calendarMonth" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.calendarMonth ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">🗓️ Vista Mensual</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Calendario mensual con contador de turnos y eventos por fecha.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-machines" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.machines ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">🕹️ Ficha Técnica de Máquinas</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Catálogo público con las especificaciones de gabinetes, versiones y estado de sensores FSR.
+                                </small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- GRUPO 4: ADMINISTRACIÓN LOCAL & REPORTES -->
+                <div>
+                    <div style="font-size:0.82rem; font-weight:800; color:var(--color-neon-purple); text-transform:uppercase; letter-spacing:1.5px; border-bottom:1px solid rgba(157,78,221,0.2); padding-bottom:4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span>⚙️</span> ADMINISTRACIÓN LOCAL & REPORTES
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-analytics" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.analytics ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">📈 Rendimiento & Métricas Financieras</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Métricas de ingresos, horas jugadas, ocupación, gráficas Chart.js y comisiones a socios.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-business" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.business ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">⚙️ Ajustes de Sucursal (Por Encargado)</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Permite al personal de mostrador editar horarios de apertura, porcentaje de anticipo y reglas locales.
+                                </small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </form>
+        </div>
+    `;
+
+    const footerHtml = `
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <button type="button" class="btn btn-secondary" id="btn-cancel-mod">Cancelar</button>
+            <button type="button" class="btn btn-primary glow-red" id="btn-save-mod">
+                💾 Guardar Configuración de Funciones
+            </button>
+        </div>
+    `;
+
+    const modalEl = modal.open({
+        title: `Configurar Funciones: ${business.name}`,
+        icon: '🎛️',
+        contentHtml,
+        footerHtml,
+        maxWidth: '680px'
+    });
+
+    // Eventos de Presets
+    const setAllCheckboxes = (valMap) => {
+        for (const [key, isChecked] of Object.entries(valMap)) {
+            const cb = modalEl.querySelector(`#mod-${key}`);
+            if (cb) cb.checked = isChecked;
+        }
+    };
+
+    modalEl.querySelector('#preset-all')?.addEventListener('click', () => {
+        setAllCheckboxes({
+            accounts: true, clients: true, loyalty: true, requests: true,
+            analytics: true, business: true, catalogs: true, calendarWeek: true,
+            calendarMonth: true, machines: true, myProfile: true
+        });
+        toast.info("Preset aplicado: Todas las funciones activadas.");
+    });
+
+    modalEl.querySelector('#preset-basic')?.addEventListener('click', () => {
+        setAllCheckboxes({
+            accounts: false, clients: true, loyalty: false, requests: true,
+            analytics: false, business: false, catalogs: false, calendarWeek: true,
+            calendarMonth: false, machines: true, myProfile: false
+        });
+        toast.info("Preset aplicado: Modo Básico Arcade.");
+    });
+
+    modalEl.querySelector('#preset-nofiad')?.addEventListener('click', () => {
+        setAllCheckboxes({
+            accounts: false, clients: true, loyalty: true, requests: true,
+            analytics: true, business: true, catalogs: true, calendarWeek: true,
+            calendarMonth: true, machines: true, myProfile: true
+        });
+        toast.info("Preset aplicado: Modo Estricto (Sin Cuenta Fácil).");
+    });
+
+    modalEl.querySelector('#btn-cancel-mod').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-mod').onclick = async () => {
+        const updatedModules = {
+            accounts: modalEl.querySelector('#mod-accounts')?.checked ?? true,
+            catalogs: modalEl.querySelector('#mod-catalogs')?.checked ?? true,
+            requests: modalEl.querySelector('#mod-requests')?.checked ?? true,
+            clients: modalEl.querySelector('#mod-clients')?.checked ?? true,
+            loyalty: modalEl.querySelector('#mod-loyalty')?.checked ?? true,
+            myProfile: modalEl.querySelector('#mod-myProfile')?.checked ?? true,
+            calendarWeek: modalEl.querySelector('#mod-calendarWeek')?.checked ?? true,
+            calendarMonth: modalEl.querySelector('#mod-calendarMonth')?.checked ?? true,
+            machines: modalEl.querySelector('#mod-machines')?.checked ?? true,
+            analytics: modalEl.querySelector('#mod-analytics')?.checked ?? true,
+            business: modalEl.querySelector('#mod-business')?.checked ?? true
+        };
+
+        try {
+            await tenantManager.updateBusinessModules(business.id, updatedModules);
+            toast.success(`Funciones de "${business.name}" actualizadas exitosamente.`);
+            modal.close();
+            renderSuperadminView(container);
+        } catch (e) {
+            toast.error(e.message || "Error al actualizar módulos.");
         }
     };
 }

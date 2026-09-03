@@ -39,7 +39,7 @@ class App {
     }
 
     async init() {
-        console.log("🎮 Inicializando Pump It Up Hub v1.7.1...");
+        console.log("🎮 Inicializando Pump It Up Hub v1.7.2 (Feature Toggles)...");
 
         // 1. Inicializar Gestor de Negocios
         await tenantManager.init();
@@ -85,12 +85,12 @@ class App {
             if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.7.1 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.7.2 • Novedades 📜)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.7.1 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.7.2 • Novedades 📜)</span>
                 `;
             }
         }
@@ -104,10 +104,10 @@ class App {
         if (this.mainContent) {
             const isLocalSelected = tenantManager.isLocalSelected;
             const isSuperAdmin = authManager.isSuperAdmin();
-            const currentView = store.currentView;
+            const activeBusiness = tenantManager.getActiveBusiness();
+            let currentView = store.currentView;
 
             // Actualizar título de la pestaña dinámicamente en el navegador
-            const activeBusiness = tenantManager.getActiveBusiness();
             if (activeBusiness && isLocalSelected) {
                 document.title = `${activeBusiness.name} • Pump It Up Hub`;
             } else {
@@ -117,6 +117,20 @@ class App {
             if (!isLocalSelected && (!isSuperAdmin || currentView !== 'SUPERADMIN')) {
                 renderLandingView(this.mainContent);
                 return;
+            }
+
+            // GUARDIA 1: SUCURSAL EN PAUSA / FUERA DE SERVICIO (Para clientes/staff no Superadmin)
+            if (isLocalSelected && activeBusiness && !tenantManager.isBusinessActive(activeBusiness) && !isSuperAdmin) {
+                this.renderInactiveBusinessView(this.mainContent, activeBusiness);
+                return;
+            }
+
+            // GUARDIA 2: FEATURE TOGGLES (Módulos deshabilitados por sucursal para no Superadmin)
+            if (isLocalSelected && !isSuperAdmin && !tenantManager.isModuleEnabled(currentView, activeBusiness)) {
+                // Redirigir suavemente a la vista principal disponible
+                const fallbackView = tenantManager.isModuleEnabled('HOME', activeBusiness) ? 'HOME' : 'DAY';
+                store.currentView = fallbackView;
+                currentView = fallbackView;
             }
 
             switch (currentView) {
@@ -164,6 +178,40 @@ class App {
                     break;
             }
         }
+    }
+
+    renderInactiveBusinessView(container, business) {
+        container.innerHTML = `
+            <div class="animate-fade-in" style="max-width: 680px; margin: 40px auto; padding: 32px; background: var(--bg-dark-800); border: 2px solid var(--color-neon-yellow); border-radius: var(--radius-lg); text-align: center; box-shadow: 0 0 30px rgba(255, 184, 0, 0.15);">
+                <div style="font-size: 4rem; margin-bottom: 12px; animation: bounce 2s infinite;">⏸️</div>
+                <h2 style="font-family: 'Rajdhani', sans-serif; font-size: 2.2rem; font-weight: 800; color: #ffffff; text-transform: uppercase; margin: 0 0 8px 0;">
+                    ${business.name}
+                </h2>
+                <div class="badge badge-warning" style="font-size: 0.85rem; padding: 6px 14px; margin-bottom: 20px;">
+                    ⚠️ SUCURSAL TEMPORALMENTE EN PAUSA
+                </div>
+                <p style="color: var(--text-secondary); font-size: 1rem; line-height: 1.6; margin-bottom: 24px;">
+                    Esta sucursal se encuentra en mantenimiento programado o pausada por la administración central. Las reservaciones de máquinas y la atención en mostrador se encuentran suspendidas temporalmente.
+                </p>
+
+                ${business.phone || business.whatsapp ? `
+                    <div style="background: var(--bg-dark-900); padding: 14px; border-radius: var(--radius-md); border: 1px dashed var(--border-color); margin-bottom: 24px; font-size: 0.9rem; color: var(--text-muted);">
+                        <span>📞 ¿Dudas o informes? Comunícate al </span>
+                        <strong style="color: var(--color-neon-lime);">${business.phone || business.whatsapp}</strong>
+                    </div>
+                ` : ''}
+
+                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-outline" id="btn-back-to-landing-paused">
+                        <span>🏠 Cambiar de Sucursal</span>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        container.querySelector('#btn-back-to-landing-paused')?.addEventListener('click', () => {
+            tenantManager.clearSelectedLocal();
+        });
     }
 }
 

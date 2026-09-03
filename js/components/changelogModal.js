@@ -4,10 +4,45 @@ import { modal } from './modal.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.7.2',
+        date: '03 de Septiembre de 2026',
+        badge: '🛡️ Versión Actual (Feature Toggles)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🎛️ Control de Funciones por Sucursal (Feature Toggles)',
+                icon: '🎛️',
+                items: [
+                    'Módulo maestro para Superadministradores para activar/desactivar funciones por sucursal con 1 clic.',
+                    'Control independiente de Cuenta Fácil (POS), Directorio de Jugadores, Lealtad, Catálogos en Sala, Solicitudes, Analítica, Calendarios, Máquinas y Portal Mi Perfil.',
+                    'Perfiles preconfigurados (Presets): Modo Completo, Básico Arcade y Modo Estricto (sin fiados).',
+                    'Navegación dinámica y Router Guards reactivos que adaptan la interfaz de clientes y staff en tiempo real.'
+                ]
+            },
+            {
+                title: '⏸️ Pausa y Activación Operativa de Locales',
+                icon: '🏢',
+                items: [
+                    'Interruptor de estado operativo (🟢 Activo / ⏸️ En Pausa) en el panel de administración central.',
+                    'Pantalla arcade protectora que informa a los clientes si la sucursal está en mantenimiento, impidiendo nuevas reservas.',
+                    'Bypass administrativo total: los Superadministradores siempre pueden acceder y reconfigurar cualquier sucursal.'
+                ]
+            },
+            {
+                title: '🛡️ 100% Retrocompatible y Safe Defaults',
+                icon: '🔒',
+                items: [
+                    'Resolución segura de valores por defecto: sucursales existentes conservan todas sus funciones activas sin romper configuraciones.',
+                    'Suite de pruebas financieras (E1 - E7) blindada y validada al 100%.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.7.1',
         date: '02 de Septiembre de 2026',
-        badge: '🛡️ Versión Actual (Hotfixes)',
-        isCurrent: true,
+        badge: 'Estable (Hotfixes)',
+        isCurrent: false,
         highlights: [
             {
                 title: '🎮 Soporte Oficial de PIU ID (piugame.com)',
