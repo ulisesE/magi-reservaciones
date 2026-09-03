@@ -366,8 +366,8 @@ export async function renderClientsView(container, queryVal = '') {
                             <div class="gamer-hud-grid">
                                 <div class="gamer-hud-cell">
                                     <span class="gamer-hud-label">💳 Saldo</span>
-                                    <span class="gamer-hud-value ${netDebt > 0 ? 'has-debt' : (credit > 0 ? 'has-credit' : '')}">
-                                        ${netDebt > 0 ? `-$${netDebt.toFixed(2)}` : (credit > 0 ? `+$${credit.toFixed(2)}` : `$0.00`)}
+                                    <span class="gamer-hud-value ${netDebt > 0 && credit > 0 ? '' : (netDebt > 0 ? 'has-debt' : (credit > 0 ? 'has-credit' : ''))}" style="${netDebt > 0 && credit > 0 ? 'color:var(--color-neon-gold); font-size:0.75rem;' : ''}" title="${netDebt > 0 && credit > 0 ? `Deuda fiada: $${netDebt.toFixed(2)} | Saldo a favor: $${credit.toFixed(2)}` : ''}">
+                                        ${netDebt > 0 && credit > 0 ? `-$${netDebt.toFixed(2)} / +$${credit.toFixed(2)}` : (netDebt > 0 ? `-$${netDebt.toFixed(2)}` : (credit > 0 ? `+$${credit.toFixed(2)}` : `$0.00`))}
                                     </span>
                                 </div>
                                 <div class="gamer-hud-cell">

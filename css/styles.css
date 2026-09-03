@@ -269,12 +269,17 @@ a:hover {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .form-group {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .form-group label {
@@ -283,6 +288,7 @@ a:hover {
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    word-break: break-word;
 }
 
 .neon-arrow {
@@ -301,6 +307,10 @@ a:hover {
     border: 1px solid var(--border-color);
     outline: none;
     transition: all 0.2s ease;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
 }
 
 .cyber-input:focus, .cyber-select:focus, .cyber-textarea:focus {
@@ -312,23 +322,45 @@ a:hover {
 .cyber-textarea {
     resize: vertical;
     min-height: 70px;
+    max-width: 100%;
 }
 
 .form-row {
     display: flex;
     gap: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.form-row > * {
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.grid-2 > * {
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .grid-3 {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.grid-3 > * {
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .form-divider {

@@ -379,30 +379,53 @@ class AccountManager {
                     }
 
                     // 2. TODAS LAS ESCRITURAS (WRITES)
+                    const isCreditPayment = newRecord.paymentMethod === 'ACCOUNT_CREDIT';
+                    if (isCreditPayment) {
+                        newRecord.paymentStatus = 'PAID';
+                        newRecord.paidAmount = totalAmount;
+                        newRecord.remainingAmount = 0;
+                    } else if (newRecord.paymentStatus === 'PENDING') {
+                        newRecord.paidAmount = 0;
+                        newRecord.remainingAmount = totalAmount;
+                    } else {
+                        newRecord.paidAmount = totalAmount;
+                        newRecord.remainingAmount = 0;
+                    }
+
                     transaction.set(consumptionRef, newRecord);
 
                     if (playerDoc && playerDoc.exists() && playerRef) {
                         const playerData = playerDoc.data();
                         const accountsMap = playerData.accounts || {};
-                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, totalConsumed: 0 };
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, creditBalance: 0, totalConsumed: 0 };
 
                         const newConsumed = (curBizAccount.totalConsumed || 0) + totalAmount;
-                        const newDebt = paymentStatus === 'PENDING'
-                            ? (curBizAccount.netDebt || 0) + totalAmount
-                            : (curBizAccount.netDebt || 0);
+                        let newDebt = curBizAccount.netDebt || 0;
+                        let newCreditBalance = curBizAccount.creditBalance || 0;
+
+                        if (isCreditPayment) {
+                            if (newCreditBalance < totalAmount) {
+                                throw new Error(`Saldo a favor insuficiente ($${newCreditBalance.toFixed(2)} disponible). Se requieren $${totalAmount.toFixed(2)}.`);
+                            }
+                            newCreditBalance = Math.max(0, newCreditBalance - totalAmount);
+                        } else if (paymentStatus === 'PENDING') {
+                            newDebt = newDebt + totalAmount;
+                        }
 
                         accountsMap[businessId] = {
                             ...curBizAccount,
                             netDebt: Math.max(0, newDebt),
+                            creditBalance: Math.max(0, newCreditBalance),
                             totalConsumed: newConsumed,
                             hasPendingDebt: newDebt > 0,
+                            hasCredit: newCreditBalance > 0,
                             lastUpdated: nowIso
                         };
 
-                        // Acreditación atómica de puntos de lealtad si fue pagado al contado
+                        // Acreditación atómica de puntos de lealtad si fue pagado al contado o con saldo
                         let updatedLoyaltyPoints = playerData.loyaltyPoints || 0;
                         const business = tenantManager.getBusinessById(businessId);
-                        if (business && business.loyaltyEnabled && business.loyaltyMode !== 'VISITS' && paymentStatus === 'PAID') {
+                        if (business && business.loyaltyEnabled && business.loyaltyMode !== 'VISITS' && newRecord.paymentStatus === 'PAID') {
                             const ratio = Number(business.pointsRatio) || 10;
                             const ptsEarned = Math.floor(totalAmount / ratio);
                             if (ptsEarned > 0) {
@@ -427,7 +450,7 @@ class AccountManager {
                             paymentMethod: newRecord.paymentMethod,
                             paymentStatus: newRecord.paymentStatus
                         },
-                        details: `Venta registrada: "${finalConcept}" ($${totalAmount}) [${paymentStatus === 'PENDING' ? 'A Cuenta' : 'Pagado'}] por ${currentStaff}`
+                        details: `Venta registrada: "${finalConcept}" ($${totalAmount}) [${newRecord.paymentStatus === 'PENDING' ? 'Fiado / A Cuenta' : isCreditPayment ? 'Pagado con Saldo a Favor' : 'Pagado al Contado'}] por ${currentStaff}`
                     });
                 });
             } catch (err) {
@@ -554,17 +577,18 @@ class AccountManager {
                     if (playerDoc && playerDoc.exists() && playerRef) {
                         const playerData = playerDoc.data();
                         const accountsMap = playerData.accounts || {};
-                        const curBizAccount = accountsMap[businessId] || { netDebt: 0 };
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, creditBalance: 0 };
 
                         const previousDebt = curBizAccount.netDebt || 0;
-                        const newDebt = Math.max(0, previousDebt - numAmount);
-                        const creditBalance = Math.max(0, numAmount - previousDebt);
+                        const currentCredit = curBizAccount.creditBalance || 0;
+                        const newCreditBalance = currentCredit + numAmount;
 
                         accountsMap[businessId] = {
                             ...curBizAccount,
-                            netDebt: newDebt,
-                            creditBalance: creditBalance,
-                            hasPendingDebt: newDebt > 0,
+                            netDebt: previousDebt,
+                            creditBalance: newCreditBalance,
+                            hasPendingDebt: previousDebt > 0,
+                            hasCredit: newCreditBalance > 0,
                             lastUpdated: nowIso
                         };
 
@@ -583,7 +607,7 @@ class AccountManager {
                             paymentMethod: paymentRecord.paymentMethod,
                             paymentStatus: 'PAID'
                         },
-                        details: `Abono de $${numAmount} registrado por ${currentStaff} para ${playerName}`
+                        details: `Abono de $${numAmount} registrado por ${currentStaff} para ${playerName} (Saldo a favor acumulado: $${((playerDoc.data()?.accounts?.[businessId]?.creditBalance || 0) + numAmount).toFixed(2)})`
                     });
                 });
             } catch (err) {
@@ -602,6 +626,140 @@ class AccountManager {
     }
 
     /**
+     * Liquida de forma total o parcial un ticket específico de consumo fiado/pendiente.
+     * Permite pagar con Efectivo, Tarjeta, SPEI o Saldo a Favor (Monedero).
+     */
+    async settleConsumptionTicket(businessId, playerId, transactionId, { amountToPay = null, paymentMethod = 'CASH', notes = '', createdBy = null } = {}) {
+        if (!businessId || !transactionId) throw new Error("Datos insuficientes para liquidar el ticket.");
+        assertFinancialOnline();
+
+        const currentStaff = createdBy || authManager.getCurrentUser()?.name || 'Encargado';
+        const nowIso = new Date().toISOString();
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const txRef = doc(db, COLLECTIONS.CONSUMPTIONS, transactionId);
+                    const txDoc = await transaction.get(txRef);
+                    if (!txDoc.exists()) throw new Error("El ticket no existe en la base de datos.");
+
+                    const txData = txDoc.data();
+                    if (txData.status === 'VOIDED' || txData.status === 'CANCELLED') {
+                        throw new Error("No se puede liquidar un ticket anulado o cancelado.");
+                    }
+                    if (txData.paymentStatus === 'PAID') {
+                        throw new Error("Este ticket ya se encuentra totalmente liquidado / pagado.");
+                    }
+
+                    const targetPlayerId = playerId || txData.playerId;
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (targetPlayerId && targetPlayerId !== 'guest_walkin') {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, targetPlayerId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    const totalTicket = Number(txData.totalAmount) || 0;
+                    const prevPaid = Number(txData.paidAmount || 0);
+                    const currentRemaining = Math.max(0, totalTicket - prevPaid);
+
+                    const payAmount = (amountToPay !== null && !isNaN(Number(amountToPay)) && Number(amountToPay) > 0)
+                        ? Math.min(Number(amountToPay), currentRemaining)
+                        : currentRemaining;
+
+                    if (payAmount <= 0) throw new Error("El monto a pagar debe ser mayor a 0.");
+
+                    const newPaid = prevPaid + payAmount;
+                    const newRemaining = Math.max(0, totalTicket - newPaid);
+                    const isFullyPaid = newRemaining <= 0;
+
+                    // Manejo si paga con Saldo a Favor
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const accountsMap = playerData.accounts || {};
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, creditBalance: 0 };
+
+                        if (paymentMethod === 'ACCOUNT_CREDIT') {
+                            const availCredit = Number(curBizAccount.creditBalance || 0);
+                            if (availCredit < payAmount) {
+                                throw new Error(`Saldo a favor insuficiente ($${availCredit.toFixed(2)} disponible). Se requieren $${payAmount.toFixed(2)}.`);
+                            }
+                            curBizAccount.creditBalance = Math.max(0, availCredit - payAmount);
+                        }
+
+                        const curDebt = Number(curBizAccount.netDebt || 0);
+                        curBizAccount.netDebt = Math.max(0, curDebt - payAmount);
+                        curBizAccount.hasPendingDebt = curBizAccount.netDebt > 0;
+                        curBizAccount.hasCredit = (curBizAccount.creditBalance || 0) > 0;
+                        curBizAccount.lastUpdated = nowIso;
+                        accountsMap[businessId] = curBizAccount;
+
+                        transaction.update(playerRef, {
+                            accounts: accountsMap,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    const updatePayload = {
+                        paidAmount: newPaid,
+                        remainingAmount: newRemaining,
+                        paymentStatus: isFullyPaid ? 'PAID' : 'PENDING',
+                        paymentMethod: paymentMethod,
+                        lastSettledAt: nowIso,
+                        lastSettledBy: currentStaff,
+                        notes: notes ? (txData.notes ? `${txData.notes} | ${notes}` : notes) : (txData.notes || ''),
+                        updatedAt: nowIso
+                    };
+
+                    if (isFullyPaid) {
+                        updatePayload.settledAt = nowIso;
+                    }
+
+                    transaction.update(txRef, updatePayload);
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId,
+                        action: AUDIT_ACTIONS.PAYMENT_RECORDED,
+                        target: { type: 'CONSUMPTION', id: transactionId, name: txData.concept || 'Ticket' },
+                        financialData: {
+                            amount: payAmount,
+                            paymentMethod,
+                            paymentStatus: isFullyPaid ? 'PAID' : 'PENDING'
+                        },
+                        details: `Liquidación ${isFullyPaid ? 'total' : 'parcial'} de ticket "${txData.concept}": pagado $${payAmount.toFixed(2)} vía ${paymentMethod} por ${currentStaff}. Restante: $${newRemaining.toFixed(2)}`
+                    });
+                });
+            } catch (err) {
+                handleAppError(err, { context: "Error liquidando ticket de forma atómica", showToast: true, rethrow: true });
+            }
+        }
+
+        // Actualizar caché local
+        if (playerId) {
+            const localKey = `piu_consumptions_${businessId}_${playerId}`;
+            const localList = JSON.parse(localStorage.getItem(localKey) || '[]');
+            const idx = localList.findIndex(t => t.id === transactionId);
+            if (idx !== -1) {
+                const totalTicket = Number(localList[idx].totalAmount) || 0;
+                const prevPaid = Number(localList[idx].paidAmount || 0);
+                const payAmount = (amountToPay !== null && !isNaN(Number(amountToPay)) && Number(amountToPay) > 0)
+                    ? Math.min(Number(amountToPay), Math.max(0, totalTicket - prevPaid))
+                    : Math.max(0, totalTicket - prevPaid);
+                const newPaid = prevPaid + payAmount;
+                const newRemaining = Math.max(0, totalTicket - newPaid);
+                localList[idx].paidAmount = newPaid;
+                localList[idx].remainingAmount = newRemaining;
+                localList[idx].paymentStatus = newRemaining <= 0 ? 'PAID' : 'PENDING';
+                localList[idx].paymentMethod = paymentMethod;
+                localList[idx].lastSettledAt = nowIso;
+                localStorage.setItem(localKey, JSON.stringify(localList));
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Liquida de golpe la totalidad de la deuda pendiente de un jugador en este local.
      */
     async liquidatePlayerDebt(businessId, playerId, { paymentMethod = 'CASH', notes = '' } = {}) {
@@ -611,6 +769,13 @@ class AccountManager {
         }
 
         const client = authManager.getClientUsers().find(c => c.id === playerId) || { name: 'Jugador', username: '' };
+
+        // Si se usa saldo a favor, descontar directamente
+        if (paymentMethod === 'ACCOUNT_CREDIT') {
+            if (account.creditBalance < account.netDebt) {
+                throw new Error(`Saldo a favor insuficiente ($${account.creditBalance.toFixed(2)} disponible) para cubrir la deuda total de $${account.netDebt.toFixed(2)}.`);
+            }
+        }
 
         return this.recordPayment({
             businessId,
@@ -813,6 +978,8 @@ class AccountManager {
             breakdownByType[t.id] = { count: 0, total: 0, label: t.label, icon: t.icon };
         });
 
+        let totalPaidWithCredit = 0;
+
         activeTx.forEach(t => {
             const amount = Number(t.totalAmount) || 0;
 
@@ -829,15 +996,21 @@ class AccountManager {
 
                 if (t.paymentStatus === 'PAID') {
                     totalPaidDirectly += amount;
+                    if (t.paymentMethod === 'ACCOUNT_CREDIT') {
+                        totalPaidWithCredit += amount;
+                    }
                 } else {
-                    totalPendingDebt += amount;
+                    const paid = Number(t.paidAmount || 0);
+                    const remaining = t.remainingAmount !== undefined ? Number(t.remainingAmount) : Math.max(0, amount - paid);
+                    totalPendingDebt += remaining;
+                    totalPaidDirectly += paid;
                 }
             }
         });
 
-        // El saldo neto por cobrar se arrastra acumulado
-        const netDebt = Math.max(0, totalPendingDebt - totalAbonos);
-        const creditBalance = Math.max(0, totalAbonos - totalPendingDebt);
+        // La deuda viva acumulada y el saldo a favor disponible
+        const netDebt = Math.max(0, totalPendingDebt);
+        const creditBalance = Math.max(0, totalAbonos - totalPaidWithCredit);
 
         return {
             playerId,
@@ -846,8 +1019,9 @@ class AccountManager {
             totalPaidDirectly,
             totalPendingDebt,
             totalAbonos,
-            netDebt,          // Deuda pendiente acumulada viva
-            creditBalance,    // Saldo a favor disponible
+            totalPaidWithCredit,
+            netDebt,          // Deuda pendiente acumulada viva (tickets fiados)
+            creditBalance,    // Saldo a favor disponible en monedero
             hasPendingDebt: netDebt > 0,
             hasCredit: creditBalance > 0,
             transactionsCount: activeTx.length,
