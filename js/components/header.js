@@ -8,6 +8,7 @@ import { openChangelogModal } from './changelogModal.js';
 import { modal } from './modal.js';
 import { toast } from './toast.js';
 import { navShortcutsManager } from '../core/navShortcutsManager.js';
+import { notificationManager } from '../core/notificationManager.js';
 
 export function renderHeader(container) {
     const isLocalSelected = tenantManager.isLocalSelected;
@@ -118,6 +119,11 @@ export function renderHeader(container) {
                         <span style="font-size:0.6rem;">${navigator.onLine ? '🟢' : '🟡'}</span>
                         <span class="network-status-text">${navigator.onLine ? 'En Línea' : 'Offline'}</span>
                     </div>
+
+                    <!-- Botón de Notificaciones del Navegador -->
+                    <button id="btn-toggle-notifs" class="btn btn-outline btn-xs" style="border-radius:var(--radius-full); padding:4px 8px; font-size:0.85rem;" title="${notificationManager.getPermissionStatus() === 'granted' ? 'Notificaciones activadas (clic para probar)' : 'Activar notificaciones del navegador'}">
+                        ${notificationManager.getPermissionStatus() === 'granted' ? '🔔' : '🔕'}
+                    </button>
 
                     <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
                         <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
@@ -373,6 +379,53 @@ export function renderHeader(container) {
     if (quickBookBtn) {
         quickBookBtn.addEventListener('click', () => {
             openBookingModal();
+        });
+    }
+
+    // Botón de Notificaciones del Navegador
+    const notifsBtn = container.querySelector('#btn-toggle-notifs');
+    if (notifsBtn) {
+        notifsBtn.addEventListener('click', async () => {
+            const status = notificationManager.getPermissionStatus();
+            if (status !== 'granted') {
+                const granted = await notificationManager.requestPermission();
+                if (granted) {
+                    notifsBtn.textContent = '🔔';
+                    notifsBtn.title = 'Notificaciones activadas (clic para probar)';
+                }
+            } else {
+                const modalEl = modal.open({
+                    title: '🔔 NOTIFICACIONES DEL NAVEGADOR',
+                    icon: '🔔',
+                    contentHtml: `
+                        <div style="text-align:center; padding:10px 0;">
+                            <div style="font-size:2.8rem; margin-bottom:8px;">🔔</div>
+                            <h3 style="color:#ffffff; margin:0 0 4px 0;">Notificaciones Activas</h3>
+                            <span class="badge badge-success" style="font-size:0.75rem;">🟢 Permiso Concedido en el Navegador</span>
+                            <p style="color:var(--text-muted); font-size:0.85rem; margin:12px auto; max-width:380px;">
+                                Recibirás alertas flotantes del sistema cuando recibas retos PVP en la <strong>Arena Versus</strong> o cuando el encargado apruebe tus reservaciones.
+                            </p>
+                            <div style="margin-top:16px;">
+                                <button type="button" class="btn btn-primary btn-sm glow-red" id="btn-send-test-notif">
+                                    <span>🚀 Enviar Notificación de Prueba</span>
+                                </button>
+                            </div>
+                        </div>
+                    `,
+                    footerHtml: `<button class="btn btn-secondary btn-sm" id="btn-close-notif-modal">Cerrar</button>`,
+                    maxWidth: '440px'
+                });
+
+                modalEl.querySelector('#btn-close-notif-modal').onclick = () => modal.close();
+                modalEl.querySelector('#btn-send-test-notif').onclick = async () => {
+                    await notificationManager.sendNotification({
+                        title: '⚔️ Pump It Up Hub (Test)',
+                        body: '¡El Service Worker intermediario está funcionando al 100%!',
+                        tag: 'test-sw-notification'
+                    });
+                    toast.success("¡Notificación de prueba enviada al Service Worker!");
+                };
+            }
         });
     }
 

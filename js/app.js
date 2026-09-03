@@ -21,6 +21,7 @@ import { renderSuperadminView } from './views/superadminView.js';
 import { renderClientProfileView } from './views/clientProfileView.js';
 import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
 import { renderVersusView } from './views/versusView.js';
+import { notificationManager } from './core/notificationManager.js';
 import { openChangelogModal } from './components/changelogModal.js';
 import { isFirebaseAvailable } from './firebaseConfig.js';
 import './core/financialTests.js';
@@ -40,13 +41,17 @@ class App {
     }
 
     async init() {
-        console.log("🎮 Inicializando Pump It Up Hub v1.7.2 (Feature Toggles)...");
+        console.log("🎮 Inicializando Pump It Up Hub v1.9.0 (Versus & Notifications)...");
 
         // 1. Inicializar Gestor de Negocios
         await tenantManager.init();
 
         // 2. Inicializar Autenticación y Roles
         await authManager.init();
+
+        // 2.5. Inicializar Service Worker de Notificaciones
+        await notificationManager.init();
+        notificationManager.setupRealtimeListeners(authManager.getCurrentUser());
 
         // 3. Inicializar Catálogos Maestros (Versiones de Juego, Reglas)
         await catalogsManager.init();
@@ -75,7 +80,10 @@ class App {
         // 6. Suscripciones para reactividad
         store.subscribe(() => this.render());
         tenantManager.subscribe(() => this.render());
-        authManager.subscribe(() => this.render());
+        authManager.subscribe(() => {
+            notificationManager.setupRealtimeListeners(authManager.getCurrentUser());
+            this.render();
+        });
 
         // 7. Actualizar indicador de conexión
         this.updateSyncIndicator();
