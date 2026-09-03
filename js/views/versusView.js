@@ -807,15 +807,16 @@ export function openSendChallengeModal(targetPlayer, currentUser, allBusinesses)
 
     const m = modal.open({
         title: `⚔️ DESAFIAR A ${targetPlayer.name.toUpperCase()}`,
-        content: contentHtml,
-        size: 'medium'
+        icon: '⚔️',
+        contentHtml: contentHtml,
+        maxWidth: '580px'
     });
 
-    const form = m.element.querySelector('#form-send-challenge');
-    const modeSelect = m.element.querySelector('#chal-mode');
-    const singleLocWrapper = m.element.querySelector('#wrapper-single-local');
-    const multiLocWrapper = m.element.querySelector('#wrapper-multi-local');
-    const extLocWrapper = m.element.querySelector('#wrapper-external-local');
+    const form = m.querySelector('#form-send-challenge');
+    const modeSelect = m.querySelector('#chal-mode');
+    const singleLocWrapper = m.querySelector('#wrapper-single-local');
+    const multiLocWrapper = m.querySelector('#wrapper-multi-local');
+    const extLocWrapper = m.querySelector('#wrapper-external-local');
 
     modeSelect?.addEventListener('change', () => {
         const mode = modeSelect.value;
@@ -834,15 +835,15 @@ export function openSendChallengeModal(targetPlayer, currentUser, allBusinesses)
         }
     });
 
-    m.element.querySelector('#btn-cancel-send')?.addEventListener('click', () => m.close());
+    m.querySelector('#btn-cancel-send')?.addEventListener('click', () => modal.close());
 
     form?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const mode = modeSelect.value;
-        const date = m.element.querySelector('#chal-date').value;
-        const startTime = m.element.querySelector('#chal-start').value;
-        const endTime = m.element.querySelector('#chal-end').value;
-        const notes = m.element.querySelector('#chal-notes').value;
+        const date = m.querySelector('#chal-date').value;
+        const startTime = m.querySelector('#chal-start').value;
+        const endTime = m.querySelector('#chal-end').value;
+        const notes = m.querySelector('#chal-notes').value;
 
         let businessId = null;
         let businessName = '';
@@ -852,18 +853,18 @@ export function openSendChallengeModal(targetPlayer, currentUser, allBusinesses)
         let externalLocationName = '';
 
         if (mode === 'SAME_LOCAL') {
-            businessId = m.element.querySelector('#chal-business').value;
+            businessId = m.querySelector('#chal-business').value;
             businessName = allBusinesses.find(b => b.id === businessId)?.name || '';
         } else if (mode === 'DIFFERENT_LOCALS') {
-            businessId = m.element.querySelector('#chal-biz-a').value;
+            businessId = m.querySelector('#chal-biz-a').value;
             businessName = allBusinesses.find(b => b.id === businessId)?.name || '';
-            businessIdB = m.element.querySelector('#chal-biz-b').value;
+            businessIdB = m.querySelector('#chal-biz-b').value;
             businessNameB = allBusinesses.find(b => b.id === businessIdB)?.name || '';
         } else {
-            externalLocationName = m.element.querySelector('#chal-external-name').value || 'Local Externo';
+            externalLocationName = m.querySelector('#chal-external-name').value || 'Local Externo';
         }
 
-        const submitBtn = m.element.querySelector('#btn-submit-send');
+        const submitBtn = m.querySelector('#btn-submit-send');
         submitBtn.disabled = true;
         submitBtn.textContent = "Enviando...";
 
@@ -893,7 +894,7 @@ export function openSendChallengeModal(targetPlayer, currentUser, allBusinesses)
             });
 
             toast.success(`⚔️ ¡Desafío enviado a ${targetPlayer.name}!`);
-            m.close();
+            modal.close();
         } catch (err) {
             toast.error("Error enviando reto: " + err.message);
             submitBtn.disabled = false;
@@ -956,22 +957,23 @@ function openCounterOfferModal(challenge, currentUser, allBusinesses, parentCont
 
     const m = modal.open({
         title: "🔄 CONTRAPROPONER HORARIO / LOCAL",
-        content: contentHtml,
-        size: 'medium'
+        icon: '🔄',
+        contentHtml: contentHtml,
+        maxWidth: '560px'
     });
 
-    m.element.querySelector('#btn-cancel-co')?.addEventListener('click', () => m.close());
+    m.querySelector('#btn-cancel-co')?.addEventListener('click', () => modal.close());
 
-    m.element.querySelector('#form-counter-offer')?.addEventListener('submit', async (e) => {
+    m.querySelector('#form-counter-offer')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const newDate = m.element.querySelector('#co-date').value;
-        const newStartTime = m.element.querySelector('#co-start').value;
-        const newEndTime = m.element.querySelector('#co-end').value;
-        const newBusinessId = m.element.querySelector('#co-business').value;
+        const newDate = m.querySelector('#co-date').value;
+        const newStartTime = m.querySelector('#co-start').value;
+        const newEndTime = m.querySelector('#co-end').value;
+        const newBusinessId = m.querySelector('#co-business').value;
         const newBusinessName = allBusinesses.find(b => b.id === newBusinessId)?.name || '';
-        const counterNotes = m.element.querySelector('#co-notes').value;
+        const counterNotes = m.querySelector('#co-notes').value;
 
-        const btnSubmit = m.element.querySelector('#btn-submit-co');
+        const btnSubmit = m.querySelector('#btn-submit-co');
         btnSubmit.disabled = true;
         btnSubmit.textContent = "Enviando...";
 
@@ -986,7 +988,7 @@ function openCounterOfferModal(challenge, currentUser, allBusinesses, parentCont
             });
 
             toast.success("🔄 Contrapropuesta enviada al rival.");
-            m.close();
+            modal.close();
             const refreshed = await challengeManager.getChallengesForUser(currentUser.id);
             renderMyChallengesTab(parentContentEl, refreshed, currentUser, allBusinesses);
         } catch (err) {
@@ -1051,23 +1053,24 @@ function openReportResultModal(challenge, currentUser, parentContentEl) {
 
     const m = modal.open({
         title: "🏆 REGISTRAR RESULTADO DE RETA",
-        content: contentHtml,
-        size: 'medium'
+        icon: '🏆',
+        contentHtml: contentHtml,
+        maxWidth: '560px'
     });
 
-    m.element.querySelector('#btn-cancel-res')?.addEventListener('click', () => m.close());
+    m.querySelector('#btn-cancel-res')?.addEventListener('click', () => modal.close());
 
-    m.element.querySelector('#form-report-result')?.addEventListener('submit', async (e) => {
+    m.querySelector('#form-report-result')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const winnerChoice = m.element.querySelector('#res-winner').value;
+        const winnerChoice = m.querySelector('#res-winner').value;
         const isDraw = winnerChoice === 'DRAW';
         const winnerId = isDraw ? null : winnerChoice;
-        const scoreA = m.element.querySelector('#res-score-a').value;
-        const scoreB = m.element.querySelector('#res-score-b').value;
-        const songsPlayed = m.element.querySelector('#res-songs').value;
-        const matchNotes = m.element.querySelector('#res-notes').value;
+        const scoreA = m.querySelector('#res-score-a').value;
+        const scoreB = m.querySelector('#res-score-b').value;
+        const songsPlayed = m.querySelector('#res-songs').value;
+        const matchNotes = m.querySelector('#res-notes').value;
 
-        const btnSubmit = m.element.querySelector('#btn-submit-res');
+        const btnSubmit = m.querySelector('#btn-submit-res');
         btnSubmit.disabled = true;
         btnSubmit.textContent = "Guardando...";
 
@@ -1082,7 +1085,7 @@ function openReportResultModal(challenge, currentUser, parentContentEl) {
             });
 
             toast.success("🏆 ¡Resultado oficial registrado y ranking actualizado!");
-            m.close();
+            modal.close();
             const refreshed = await challengeManager.getChallengesForUser(currentUser.id);
             renderMyChallengesTab(parentContentEl, refreshed, currentUser, tenantManager.getAllBusinesses());
         } catch (err) {

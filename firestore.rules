@@ -159,5 +159,12 @@ service cloud.firestore {
       allow create: if true;
       allow update, delete: if false; // Inmutable
     }
+
+    // =========================================================================
+    // 10. ARENA VERSUS Y RETAS PVP (piu_challenges)
+    // =========================================================================
+    match /piu_challenges/{challengeId} {
+      allow read, write: if true;
+    }
   }
 }

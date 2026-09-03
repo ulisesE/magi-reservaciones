@@ -228,84 +228,214 @@ class NotificationManager {
     }
 
     /**
-     * Escuchador reactivo en tiempo real para disparar notificaciones al usuario activo
+     * Escuchador reactivo en tiempo real para disparar notificaciones segmentadas por ROL:
+     * 1. JUGADORES (CLIENT): Retos propios, contrapropuestas y estado de sus reservaciones.
+     * 2. ENCARGADOS/LOCATARIOS (MANAGER/STAFF): Nuevas solicitudes y cancelaciones de SU sucursal.
+     * 3. SUPERADMINISTRADOR (SUPERADMIN): Alertas globales de la red y registros de auditoría.
      */
     setupRealtimeListeners(currentUser) {
         // Limpiar escuchadores anteriores
         this.realtimeUnsubscribers.forEach(unsub => unsub());
         this.realtimeUnsubscribers = [];
 
-        if (!currentUser || !currentUser.id || !isFirebaseAvailable || !db) return;
+        if (!currentUser || !isFirebaseAvailable || !db) return;
+
+        const role = currentUser.role || 'CLIENT';
+        const isClient = role === 'CLIENT';
+        const isStaff = role === 'MANAGER' || role === 'STAFF';
+        const isSuperAdmin = role === 'SUPERADMIN';
+        const userBizId = currentUser.businessId;
 
         try {
-            // 1. Escuchar retos entrantes
-            const qChallenges = query(
-                collection(db, COLLECTIONS.CHALLENGES),
-                where("opponent.id", "==", currentUser.id)
-            );
+            // =========================================================================
+            // A. NOTIFICACIONES PARA JUGADORES (CLIENT)
+            // =========================================================================
+            if (isClient && currentUser.id) {
+                // 1. Retos donde soy el retado (opponent)
+                const qIncomingChallenges = query(
+                    collection(db, COLLECTIONS.CHALLENGES),
+                    where("opponent.id", "==", currentUser.id)
+                );
 
-            const unsubChallenges = onSnapshot(qChallenges, (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    const chal = { id: change.doc.id, ...change.doc.data() };
-                    
-                    if (change.type === 'added') {
-                        if (this.hasInitializedSnapshot && !this.knownChallengeIds.has(chal.id)) {
-                            if (chal.status === 'PENDING' && chal.turn === currentUser.id) {
-                                this.notifyChallengeReceived({
-                                    challengerName: chal.challenger.name,
-                                    league: chal.challenger.league,
+                const unsubIncoming = onSnapshot(qIncomingChallenges, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        const chal = { id: change.doc.id, ...change.doc.data() };
+                        
+                        if (change.type === 'added') {
+                            if (this.hasInitializedSnapshot && !this.knownChallengeIds.has(chal.id)) {
+                                if (chal.status === 'PENDING' && chal.turn === currentUser.id) {
+                                    this.notifyChallengeReceived({
+                                        challengerName: chal.challenger.name,
+                                        league: chal.challenger.league,
+                                        date: chal.schedule.date,
+                                        startTime: chal.schedule.startTime,
+                                        businessName: chal.location.businessName || chal.location.externalName,
+                                        challengeId: chal.id
+                                    });
+                                }
+                            }
+                            this.knownChallengeIds.add(chal.id);
+                        } else if (change.type === 'modified') {
+                            if (chal.status === 'COUNTER_OFFERED' && chal.turn === currentUser.id) {
+                                this.sendNotification({
+                                    title: `🔄 Contrapropuesta de ${chal.challenger.name}`,
+                                    body: `Ha propuesto un nuevo horario: ${chal.schedule.date} a las ${chal.schedule.startTime} en ${chal.location.businessName || chal.location.externalName}.`,
+                                    tag: `challenge-counter-${chal.id}`,
+                                    url: `/?view=VERSUS&challenge=${chal.id}`
+                                });
+                            }
+                        }
+                    });
+                }, (err) => {
+                    console.warn("ℹ️ Escuchador de retos entrantes:", err.message);
+                });
+                this.realtimeUnsubscribers.push(unsubIncoming);
+
+                // 2. Retos donde soy el retador (challenger) y el rival aceptó o contrapropuso
+                const qOutgoingChallenges = query(
+                    collection(db, COLLECTIONS.CHALLENGES),
+                    where("challenger.id", "==", currentUser.id)
+                );
+
+                const unsubOutgoing = onSnapshot(qOutgoingChallenges, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        const chal = { id: change.doc.id, ...change.doc.data() };
+                        if (change.type === 'modified' && this.hasInitializedSnapshot) {
+                            if (chal.status === 'ACCEPTED') {
+                                this.notifyChallengeAccepted({
+                                    opponentName: chal.opponent.name,
                                     date: chal.schedule.date,
                                     startTime: chal.schedule.startTime,
                                     businessName: chal.location.businessName || chal.location.externalName,
                                     challengeId: chal.id
                                 });
+                            } else if (chal.status === 'COUNTER_OFFERED' && chal.turn === currentUser.id) {
+                                this.sendNotification({
+                                    title: `🔄 Contrapropuesta de ${chal.opponent.name}`,
+                                    body: `Ha propuesto un nuevo horario: ${chal.schedule.date} a las ${chal.schedule.startTime} en ${chal.location.businessName || chal.location.externalName}.`,
+                                    tag: `challenge-counter-${chal.id}`,
+                                    url: `/?view=VERSUS&challenge=${chal.id}`
+                                });
+                            } else if (chal.status === 'REJECTED') {
+                                this.sendNotification({
+                                    title: `❌ Reto Declinado`,
+                                    body: `${chal.opponent.name} no pudo aceptar el reto para el ${chal.schedule.date}.`,
+                                    tag: `challenge-rejected-${chal.id}`,
+                                    url: `/?view=VERSUS`
+                                });
                             }
                         }
-                        this.knownChallengeIds.add(chal.id);
-                    } else if (change.type === 'modified') {
-                        if (chal.status === 'COUNTER_OFFERED' && chal.turn === currentUser.id) {
-                            this.sendNotification({
-                                title: `🔄 Contrapropuesta de ${chal.challenger.name}`,
-                                body: `Ha propuesto un nuevo horario: ${chal.schedule.date} a las ${chal.schedule.startTime} en ${chal.location.businessName || chal.location.externalName}.`,
-                                tag: `challenge-counter-${chal.id}`,
-                                url: `/?view=VERSUS&challenge=${chal.id}`
-                            });
-                        }
-                    }
+                    });
+                }, (err) => {
+                    console.warn("ℹ️ Escuchador de retos salientes:", err.message);
                 });
-            });
+                this.realtimeUnsubscribers.push(unsubOutgoing);
 
-            this.realtimeUnsubscribers.push(unsubChallenges);
+                // 3. Reservaciones propias del cliente
+                const qReservations = query(
+                    collection(db, COLLECTIONS.RESERVATIONS),
+                    where("clientId", "==", currentUser.id)
+                );
 
-            // 2. Escuchar reservaciones
-            const qReservations = query(
-                collection(db, COLLECTIONS.RESERVATIONS),
-                where("clientId", "==", currentUser.id)
-            );
-
-            const unsubReservations = onSnapshot(qReservations, (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    const res = { id: change.doc.id, ...change.doc.data() };
-                    if (change.type === 'added') {
-                        this.knownReservationIds.add(res.id);
-                    } else if (change.type === 'modified') {
-                        if (this.hasInitializedSnapshot) {
-                            this.notifyBookingStatus({
-                                status: res.status,
-                                date: res.date,
-                                startTime: res.startTime,
-                                machineName: res.machineName,
-                                businessName: res.businessName,
-                                reservationId: res.id
-                            });
+                const unsubReservations = onSnapshot(qReservations, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        const res = { id: change.doc.id, ...change.doc.data() };
+                        if (change.type === 'added') {
+                            this.knownReservationIds.add(res.id);
+                        } else if (change.type === 'modified') {
+                            if (this.hasInitializedSnapshot) {
+                                this.notifyBookingStatus({
+                                    status: res.status,
+                                    date: res.date,
+                                    startTime: res.startTime,
+                                    machineName: res.machineName,
+                                    businessName: res.businessName,
+                                    reservationId: res.id
+                                });
+                            }
                         }
-                    }
+                    });
+                }, (err) => {
+                    console.warn("ℹ️ Escuchador de reservaciones cliente:", err.message);
                 });
-            });
+                this.realtimeUnsubscribers.push(unsubReservations);
+            }
 
-            this.realtimeUnsubscribers.push(unsubReservations);
+            // =========================================================================
+            // B. NOTIFICACIONES PARA ENCARGADOS / LOCATARIOS (MANAGER / STAFF)
+            // =========================================================================
+            if (isStaff && userBizId) {
+                // Escuchar nuevas solicitudes de reservación en SU sucursal
+                const qStaffReservations = query(
+                    collection(db, COLLECTIONS.RESERVATIONS),
+                    where("businessId", "==", userBizId)
+                );
 
-            // Marcar snapshot inicial para no disparar notificaciones de eventos viejos
+                const unsubStaffRes = onSnapshot(qStaffReservations, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        const res = { id: change.doc.id, ...change.doc.data() };
+                        
+                        if (change.type === 'added') {
+                            if (this.hasInitializedSnapshot && !this.knownReservationIds.has(res.id)) {
+                                if (res.status === 'PENDING') {
+                                    this.sendNotification({
+                                        title: `📥 Nueva Solicitud en Tu Sucursal`,
+                                        body: `${res.clientName || 'Un jugador'} solicitó ${res.machineName || 'una máquina'} para el ${res.date} a las ${res.startTime}.`,
+                                        tag: `staff-new-booking-${res.id}`,
+                                        url: `/?view=REQUESTS`
+                                    });
+                                }
+                            }
+                            this.knownReservationIds.add(res.id);
+                        } else if (change.type === 'modified' && this.hasInitializedSnapshot) {
+                            if (res.status === 'CANCELLED') {
+                                this.sendNotification({
+                                    title: `❌ Turno Cancelado en Tu Sucursal`,
+                                    body: `La reserva de ${res.clientName} del ${res.date} (${res.startTime}) fue cancelada.`,
+                                    tag: `staff-cancelled-${res.id}`,
+                                    url: `/?view=DAY`
+                                });
+                            }
+                        }
+                    });
+                }, (err) => {
+                    console.warn("ℹ️ Escuchador de reservaciones staff:", err.message);
+                });
+                this.realtimeUnsubscribers.push(unsubStaffRes);
+            }
+
+            // =========================================================================
+            // C. NOTIFICACIONES PARA SUPERADMINISTRADORES (SUPERADMIN)
+            // =========================================================================
+            if (isSuperAdmin) {
+                // Escuchar nuevas solicitudes pendientes globales en cualquier sucursal
+                const qSuperRes = query(
+                    collection(db, COLLECTIONS.RESERVATIONS),
+                    where("status", "==", "PENDING")
+                );
+
+                const unsubSuperRes = onSnapshot(qSuperRes, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        const res = { id: change.doc.id, ...change.doc.data() };
+                        if (change.type === 'added') {
+                            if (this.hasInitializedSnapshot && !this.knownReservationIds.has(res.id)) {
+                                this.sendNotification({
+                                    title: `👑 [Superadmin] Nueva Solicitud en Red`,
+                                    body: `${res.clientName || 'Jugador'} en ${res.businessName || 'Local'} (${res.date} • ${res.startTime}).`,
+                                    tag: `super-booking-${res.id}`,
+                                    url: `/?view=SUPERADMIN`
+                                });
+                            }
+                            this.knownReservationIds.add(res.id);
+                        }
+                    });
+                }, (err) => {
+                    console.warn("ℹ️ Escuchador de reservaciones superadmin:", err.message);
+                });
+                this.realtimeUnsubscribers.push(unsubSuperRes);
+            }
+
+            // Marcar snapshot inicial después de 3 segundos para evitar disparar alertas de registros antiguos
             setTimeout(() => {
                 this.hasInitializedSnapshot = true;
             }, 3000);
