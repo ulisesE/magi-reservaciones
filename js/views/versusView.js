@@ -7,7 +7,7 @@ import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { escapeHTML } from '../core/securityUtils.js';
 import { formatDateKey, format12Hour } from '../core/timeUtils.js';
-import { openLoginModal } from '../components/loginModal.js';
+import { openLoginModal } from '../components/header.js';
 
 let activeTab = 'tab-challenge-player';
 let leagueFilter = 'ALL';
