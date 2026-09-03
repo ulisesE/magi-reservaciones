@@ -778,21 +778,36 @@ class Store {
                     // A. Escribir documento de reservación
                     transaction.set(resRef, newReservation);
 
-                    // B. Acreditar puntos si es confirmada
+                    // B. Acreditar puntos si es confirmada (Regla: Máximo 1 visita por día calendario)
                     if (newReservation.status === 'CONFIRMED' && playerDoc && playerDoc.exists() && playerRef && verifiedBusiness?.loyaltyEnabled) {
                         const playerData = playerDoc.data();
                         const loyaltyMap = playerData.loyalty || {};
-                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce', visitedDates: [] };
                         const isVisitsMode = verifiedBusiness.loyaltyMode === 'VISITS';
-                        const pts = isVisitsMode ? 1 : Math.floor(newReservation.totalCost / (Number(verifiedBusiness.pointsRatio) || 10));
-                        if (pts > 0 || isVisitsMode) {
-                            const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? 0 : pts);
-                            const nextVisits = (bizLoyalty.visits || 0) + (isVisitsMode ? pts : 1);
-                            const valForTier = isVisitsMode ? nextVisits : nextPoints;
-                            const nextTier = loyaltyManager.calculateTier(valForTier, verifiedBusiness.loyaltyMode || 'POINTS').name;
-                            loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
-                            transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
+
+                        const visitedDates = Array.isArray(bizLoyalty.visitedDates) ? [...bizLoyalty.visitedDates] : (bizLoyalty.lastVisitDate ? [bizLoyalty.lastVisitDate] : []);
+                        const isNewVisitDay = !visitedDates.includes(newReservation.date);
+                        const visitsToAdd = isNewVisitDay ? 1 : 0;
+
+                        if (isNewVisitDay) {
+                            visitedDates.push(newReservation.date);
                         }
+
+                        const ptsEarned = isVisitsMode ? 0 : Math.floor(newReservation.totalCost / (Number(verifiedBusiness.pointsRatio) || 10));
+                        const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? visitsToAdd : ptsEarned);
+                        const nextVisits = (bizLoyalty.visits || 0) + visitsToAdd;
+                        const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                        const nextTier = loyaltyManager.calculateTier(valForTier, verifiedBusiness.loyaltyMode || 'POINTS').name;
+
+                        loyaltyMap[this.currentBusiness.id] = {
+                            ...bizLoyalty,
+                            points: nextPoints,
+                            visits: nextVisits,
+                            tier: nextTier,
+                            lastVisitDate: newReservation.date,
+                            visitedDates: visitedDates.slice(-60) // Mantener últimos 60 días
+                        };
+                        transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                     }
 
                     // C. Auditoría inmutable dentro de la misma transacción atómica (si fue creada por Staff autenticado)
@@ -1027,20 +1042,35 @@ class Store {
                         updatedAt: nowIso
                     });
 
-                    // Acreditar puntos de lealtad atómicamente solo una vez
-                    if (playerDoc && playerDoc.exists() && playerRef) {
+                    // Acreditar puntos de lealtad atómicamente solo una vez (Máximo 1 visita por día)
+                    if (playerDoc && playerDoc.exists() && playerRef && this.currentBusiness?.loyaltyEnabled) {
                         const playerData = playerDoc.data();
                         const loyaltyMap = playerData.loyalty || {};
-                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce', visitedDates: [] };
                         const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-                        const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
 
-                        const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? 0 : pts);
-                        const nextVisits = (bizLoyalty.visits || 0) + (isVisitsMode ? pts : 1);
+                        const visitedDates = Array.isArray(bizLoyalty.visitedDates) ? [...bizLoyalty.visitedDates] : (bizLoyalty.lastVisitDate ? [bizLoyalty.lastVisitDate] : []);
+                        const isNewVisitDay = !visitedDates.includes(resData.date);
+                        const visitsToAdd = isNewVisitDay ? 1 : 0;
+
+                        if (isNewVisitDay) {
+                            visitedDates.push(resData.date);
+                        }
+
+                        const ptsEarned = isVisitsMode ? 0 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
+                        const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? visitsToAdd : ptsEarned);
+                        const nextVisits = (bizLoyalty.visits || 0) + visitsToAdd;
                         const valForTier = isVisitsMode ? nextVisits : nextPoints;
                         const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
 
-                        loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                        loyaltyMap[this.currentBusiness.id] = {
+                            ...bizLoyalty,
+                            points: nextPoints,
+                            visits: nextVisits,
+                            tier: nextTier,
+                            lastVisitDate: resData.date,
+                            visitedDates: visitedDates.slice(-60)
+                        };
                         transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                     }
 
@@ -1290,15 +1320,27 @@ class Store {
                         const ratio = Number(verifiedBusiness.pointsRatio) || 10;
                         const playerData = playerDoc.data();
                         const loyaltyMap = playerData.loyalty || {};
-                        const bizLoyalty = loyaltyMap[this.currentBusiness?.id || resData.businessId] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const bizLoyalty = loyaltyMap[this.currentBusiness?.id || resData.businessId] || { points: 0, visits: 0, tier: 'Bronce', visitedDates: [] };
 
                         if (isReactivating && validatedStatus === 'CONFIRMED') {
-                            const pts = isVisitsMode ? 1 : Math.floor(verifiedNewTotalCost / ratio);
-                            const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? 0 : pts);
-                            const nextVisits = (bizLoyalty.visits || 0) + (isVisitsMode ? pts : 1);
+                            const visitedDates = Array.isArray(bizLoyalty.visitedDates) ? [...bizLoyalty.visitedDates] : (bizLoyalty.lastVisitDate ? [bizLoyalty.lastVisitDate] : []);
+                            const isNewVisitDay = !visitedDates.includes(persistedFields.date);
+                            const visitsToAdd = isNewVisitDay ? 1 : 0;
+                            if (isNewVisitDay) visitedDates.push(persistedFields.date);
+
+                            const pts = isVisitsMode ? 0 : Math.floor(verifiedNewTotalCost / ratio);
+                            const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? visitsToAdd : pts);
+                            const nextVisits = (bizLoyalty.visits || 0) + visitsToAdd;
                             const valForTier = isVisitsMode ? nextVisits : nextPoints;
                             const nextTier = loyaltyManager.calculateTier(valForTier, verifiedBusiness.loyaltyMode || 'POINTS').name;
-                            loyaltyMap[this.currentBusiness?.id || resData.businessId] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                            loyaltyMap[this.currentBusiness?.id || resData.businessId] = {
+                                ...bizLoyalty,
+                                points: nextPoints,
+                                visits: nextVisits,
+                                tier: nextTier,
+                                lastVisitDate: persistedFields.date,
+                                visitedDates: visitedDates.slice(-60)
+                            };
                             transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                         } else if (wasConfirmed && validatedStatus === 'CONFIRMED' && !isVisitsMode) {
                             const oldPts = Math.floor(oldCostInDb / ratio);
@@ -1393,19 +1435,36 @@ class Store {
                         updatedAt: nowIso
                     });
 
-                    if (playerDoc && playerDoc.exists() && playerRef) {
+                    if (playerDoc && playerDoc.exists() && playerRef && this.currentBusiness?.loyaltyEnabled) {
                         const playerData = playerDoc.data();
                         const loyaltyMap = playerData.loyalty || {};
-                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce', visitedDates: [] };
                         const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-                        const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
 
-                        const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? 0 : pts));
-                        const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - (isVisitsMode ? pts : 1));
+                        // Verificar si el cliente tiene otras reservaciones activas en este mismo día
+                        const otherResSameDay = this.reservations.some(r => 
+                            r.id !== reservationId && 
+                            r.clientId === resData.clientId && 
+                            r.date === resData.date && 
+                            r.status === 'CONFIRMED'
+                        );
+
+                        const visitedDates = (Array.isArray(bizLoyalty.visitedDates) ? bizLoyalty.visitedDates : []).filter(d => otherResSameDay || d !== resData.date);
+                        const visitsToDeduct = (!otherResSameDay && (bizLoyalty.visits || 0) > 0) ? 1 : 0;
+
+                        const pts = isVisitsMode ? 0 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
+                        const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? visitsToDeduct : pts));
+                        const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - visitsToDeduct);
                         const valForTier = isVisitsMode ? nextVisits : nextPoints;
                         const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
 
-                        loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                        loyaltyMap[this.currentBusiness.id] = {
+                            ...bizLoyalty,
+                            points: nextPoints,
+                            visits: nextVisits,
+                            tier: nextTier,
+                            visitedDates
+                        };
                         transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
                     }
 
