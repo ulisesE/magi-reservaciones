@@ -25,15 +25,24 @@ export async function renderVersusView(container) {
         (c.status === CHALLENGE_STATUS.COUNTER_OFFERED && c.turn === currentUser?.id)
     ).length;
 
-    // Cargar directorio de jugadores
-    let allPlayers = authManager.clientUsers || [];
-    if (allPlayers.length === 0) {
-        try {
-            allPlayers = JSON.parse(localStorage.getItem('piu_registered_players_cache') || '[]');
-        } catch (e) {
-            allPlayers = [];
-        }
+    // Cargar directorio global de jugadores
+let allPlayers = [];
+
+try {
+    allPlayers = await authManager.loadClientUsers();
+} catch (e) {
+    console.warn('No se pudo cargar el directorio de jugadores:', e);
+}
+
+if (!allPlayers || allPlayers.length === 0) {
+    try {
+        allPlayers = JSON.parse(
+            localStorage.getItem('piu_registered_players_cache') || '[]'
+        );
+    } catch (e) {
+        allPlayers = [];
     }
+}
 
     container.innerHTML = `
         <div class="versus-arena-wrapper animate-fade-in" style="max-width:1200px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:20px;">
