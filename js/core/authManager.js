@@ -222,21 +222,33 @@ if (isFirebaseAvailable && db) {
 async loadClientUsers() {
     if (isFirebaseAvailable && db) {
         try {
-            const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+            console.log("🔄 Actualizando jugadores desde Firestore...");
 
-            if (!snap.empty) {
-                this.clientUsers = snap.docs.map(d => ({
-                    id: d.id,
-                    ...d.data()
-                }));
+            const snap = await getDocs(
+                collection(db, COLLECTIONS.PLAYERS)
+            );
 
-                localStorage.setItem(
-                    'piu_registered_players_cache',
-                    JSON.stringify(this.clientUsers)
-                );
-            }
+            // Firestore es la fuente de verdad
+            this.clientUsers = snap.docs.map(d => ({
+                id: d.id,
+                ...d.data()
+            }));
+
+            // Reemplazar el cache viejo
+            localStorage.setItem(
+                'piu_registered_players_cache',
+                JSON.stringify(this.clientUsers)
+            );
+
+            console.log(
+                `✅ Jugadores actualizados: ${this.clientUsers.length}`
+            );
+
         } catch (e) {
-            console.warn("Error cargando jugadores de Firestore:", e);
+            console.warn(
+                "⚠️ Error cargando jugadores de Firestore:",
+                e
+            );
         }
     }
 
