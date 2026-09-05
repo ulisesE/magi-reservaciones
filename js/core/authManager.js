@@ -92,6 +92,10 @@ class AuthManager {
         if (localClients) {
             try { this.clientUsers = JSON.parse(localClients); } catch (e) { this.clientUsers = []; }
         }
+// Cargar catálogo completo de jugadores desde Firestore
+if (isFirebaseAvailable && db) {
+    await this.loadClientUsers();
+}
 
         // 2. Control reactivo no destructivo del estado de sesión con Firebase Auth
         if (isFirebaseAvailable && auth) {
@@ -215,7 +219,29 @@ class AuthManager {
         }
         return this.staffUsers.length > 0 ? this.staffUsers : DEFAULT_STAFF_USERS;
     }
+async loadClientUsers() {
+    if (isFirebaseAvailable && db) {
+        try {
+            const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
 
+            if (!snap.empty) {
+                this.clientUsers = snap.docs.map(d => ({
+                    id: d.id,
+                    ...d.data()
+                }));
+
+                localStorage.setItem(
+                    'piu_registered_players_cache',
+                    JSON.stringify(this.clientUsers)
+                );
+            }
+        } catch (e) {
+            console.warn("Error cargando jugadores de Firestore:", e);
+        }
+    }
+
+    return this.clientUsers;
+}
     getRole() {
         return this.currentUser ? this.currentUser.role : 'CLIENT';
     }
