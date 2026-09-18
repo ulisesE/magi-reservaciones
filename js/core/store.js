@@ -20,7 +20,7 @@ import {
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
-import { formatDateKey, isOverlapping, getBusinessHoursForDate, calculateBookingCost } from './timeUtils.js';
+import { formatDateKey, isOverlapping, getBusinessHoursForDate, calculateBookingCost, isReservationPast } from './timeUtils.js';
 import { loyaltyManager } from './loyaltyManager.js';
 import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
 import { handleAppError, assertFinancialOnline } from './errorHandler.js';
@@ -593,6 +593,97 @@ class Store {
         return { available: true };
     }
 
+    /**
+     * 🛡️ CANDADO AUTORITATIVO INFALIBLE:
+     * Consulta directamente en Firestore COLLECTIONS.RESERVATIONS + Memoria + LocalStorage
+     * para encontrar cualquier reservación que choque con el rango solicitado.
+     */
+    async getAuthoritativeConflicts(businessId, machineId, date, startTime, endTime, excludeReservationId = null, onlyConfirmed = false) {
+        const conflicts = [];
+        const bizId = businessId || this.currentBusiness?.id;
+        const biz = (tenantManager.getBusinessById && bizId) ? (tenantManager.getBusinessById(bizId) || this.currentBusiness) : this.currentBusiness;
+        const { openingTime, closingTime } = getBusinessHoursForDate(biz, date);
+
+        // 1. Verificar directamente en Firestore sobre COLLECTIONS.RESERVATIONS (fuente autoritativa real)
+        if (isFirebaseAvailable && db && bizId) {
+            try {
+                const q = query(
+                    collection(db, COLLECTIONS.RESERVATIONS),
+                    where("businessId", "==", bizId),
+                    where("machineId", "==", machineId),
+                    where("date", "==", date)
+                );
+                const snap = await getDocs(q);
+                snap.forEach(docSnap => {
+                    const r = { id: docSnap.id, ...docSnap.data() };
+                    if (excludeReservationId && r.id === excludeReservationId) return;
+                    if (r.status === 'CANCELLED' || r.status === 'REJECTED') return;
+                    if (onlyConfirmed && r.status !== 'CONFIRMED') return;
+
+                    if (isOverlapping(startTime, endTime, r.startTime, r.endTime, openingTime, closingTime)) {
+                        conflicts.push(r);
+                        if (!this.reservations.some(item => item.id === r.id)) {
+                            this.reservations.push(r);
+                        }
+                    }
+                });
+            } catch (err) {
+                console.warn("⚠️ Error consultando conflictos en Firestore:", err);
+            }
+        }
+
+        // 2. Verificar en memoria local y en localStorage
+        let localList = [...this.reservations];
+        if (this.pendingReservations) {
+            localList.push(...this.pendingReservations);
+        }
+        try {
+            const cached = JSON.parse(localStorage.getItem(`piu_reservations_${bizId}`) || '[]');
+            localList.push(...cached);
+        } catch(e) {}
+
+        const seen = new Set(conflicts.map(c => c.id));
+        for (const r of localList) {
+            if (!r || seen.has(r.id)) continue;
+            if (excludeReservationId && r.id === excludeReservationId) continue;
+            if (r.businessId && bizId && r.businessId !== bizId) continue;
+            if (r.machineId !== machineId || r.date !== date) continue;
+            if (r.status === 'CANCELLED' || r.status === 'REJECTED') continue;
+            if (onlyConfirmed && r.status !== 'CONFIRMED') continue;
+
+            if (isOverlapping(startTime, endTime, r.startTime, r.endTime, openingTime, closingTime)) {
+                conflicts.push(r);
+                seen.add(r.id);
+            }
+        }
+
+        return conflicts;
+    }
+
+    async checkAvailabilityAsync(machineId, date, startTime, endTime, excludeReservationId = null) {
+        const conflicts = await this.getAuthoritativeConflicts(
+            this.currentBusiness?.id,
+            machineId,
+            date,
+            startTime,
+            endTime,
+            excludeReservationId,
+            false // bloquea tanto PENDING como CONFIRMED
+        );
+
+        if (conflicts.length > 0) {
+            const c = conflicts[0];
+            const isConf = c.status === 'CONFIRMED';
+            return {
+                available: false,
+                reason: `Conflicto de horario: La máquina ya está apartada por ${c.clientName || 'otro jugador'} (${format12Hour(c.startTime)} - ${format12Hour(c.endTime)}) en estado ${isConf ? 'CONFIRMADA' : 'PENDIENTE'}.`,
+                conflictingReservation: c
+            };
+        }
+
+        return { available: true };
+    }
+
     getMonthReservationsCount(year, month) {
         const counts = {};
         this.reservations.forEach(r => {
@@ -606,14 +697,15 @@ class Store {
     }
 
     async requestReservation(bookingData) {
-        if (!isFirebaseAvailable || !db) {
-            const availability = this.checkAvailability(
-                bookingData.machineId,
-                bookingData.date,
-                bookingData.startTime,
-                bookingData.endTime
-            );
-            if (!availability.available) throw new Error(availability.reason);
+        // 🛡️ CANDADO NIVEL 1: Validación autoritativa obligatoria de disponibilidad
+        const availability = await this.checkAvailabilityAsync(
+            bookingData.machineId,
+            bookingData.date,
+            bookingData.startTime,
+            bookingData.endTime
+        );
+        if (!availability.available) {
+            throw new Error(availability.reason);
         }
 
         const machine = this.getMachineById(bookingData.machineId);
@@ -680,7 +772,9 @@ class Store {
             id: newReservationId,
             idempotencyKey: finalIdempotencyKey,
             businessId: this.currentBusiness.id,
+            businessName: this.currentBusiness?.name || '',
             machineId: bookingData.machineId,
+            machineName: this.getMachineById(bookingData.machineId)?.name || '',
             clientId: resolvedClientId,
             clientUsername: resolvedClientUsername,
             clientName: bookingData.clientName.trim(),
@@ -764,26 +858,25 @@ class Store {
                     }
 
                     // 3. TODAS LAS ESCRITURAS (WRITES)
-                    if (isStaff || newReservation.status === 'CONFIRMED') {
-                        const updatedSlots = currentSlots.filter(s => s.resId !== newReservation.id);
-                        updatedSlots.push({
-                            resId: newReservation.id,
-                            startTime: newReservation.startTime,
-                            endTime: newReservation.endTime,
-                            status: 'CONFIRMED',
-                            clientName: newReservation.clientName,
-                            clientId: newReservation.clientId,
-                            updatedAt: nowIso
-                        });
+                    // 🛡️ CANDADO NIVEL 2: Guardar el slot en MACHINE_SCHEDULES para TODAS las reservaciones (PENDING y CONFIRMED)
+                    const updatedSlots = currentSlots.filter(s => s.resId !== newReservation.id);
+                    updatedSlots.push({
+                        resId: newReservation.id,
+                        startTime: newReservation.startTime,
+                        endTime: newReservation.endTime,
+                        status: newReservation.status, // 'PENDING' o 'CONFIRMED'
+                        clientName: newReservation.clientName,
+                        clientId: newReservation.clientId,
+                        updatedAt: nowIso
+                    });
 
-                        transaction.set(scheduleRef, {
-                            businessId: newReservation.businessId,
-                            machineId: newReservation.machineId,
-                            date: newReservation.date,
-                            slots: updatedSlots,
-                            updatedAt: nowIso
-                        }, { merge: true });
-                    }
+                    transaction.set(scheduleRef, {
+                        businessId: newReservation.businessId,
+                        machineId: newReservation.machineId,
+                        date: newReservation.date,
+                        slots: updatedSlots,
+                        updatedAt: nowIso
+                    }, { merge: true });
 
                     // A. Escribir documento de reservación
                     transaction.set(resRef, newReservation);
@@ -875,17 +968,27 @@ class Store {
                 console.warn("Error leyendo reservaciones locales:", e);
             }
         }
-
         return null;
     }
 
     async cancelReservationByClient(reservationId) {
         assertFinancialOnline();
-        if (this.currentBusiness && this.currentBusiness.allowClientCancellation === false) {
-            throw new Error("Esta sucursal no permite cancelaciones directas por parte de clientes. Por favor contacta al encargado por mensaje.");
-        }
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
+
+        // Validar que la fecha y horario de la reservación no hayan pasado
+        if (isReservationPast(res.date, res.startTime)) {
+            throw new Error("No es posible cancelar esta reservación porque la fecha y horario ya se cumplieron.");
+        }
+
+        // Validar si la sucursal de la reservación permite o no cancelación directa
+        const targetBiz = (res.businessId && tenantManager.getBusinessById) 
+            ? (tenantManager.getBusinessById(res.businessId) || this.currentBusiness) 
+            : this.currentBusiness;
+
+        if (targetBiz && targetBiz.allowClientCancellation === false) {
+            throw new Error("Esta sucursal no permite cancelaciones directas por parte de clientes. Por favor contacta al encargado por mensaje.");
+        }
 
         const nowIso = new Date().toISOString();
         res.status = 'CANCELLED';
@@ -981,6 +1084,24 @@ class Store {
         assertFinancialOnline();
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
+
+        // 🛡️ CANDADO NIVEL 1 EN APROBACIÓN:
+        // Verificar contra reservaciones confirmadas en memoria y evitar traslapes
+        const existingConfirmed = this.getReservations({
+            date: res.date,
+            machineId: res.machineId,
+            status: 'CONFIRMED'
+        }).filter(r => r.id !== reservationId);
+
+        const biz = tenantManager.getActiveBusiness() || this.currentBusiness;
+        const { openingTime: opt, closingTime: clt } = getBusinessHoursForDate(biz, res.date);
+
+        const localConflict = existingConfirmed.find(r => 
+            isOverlapping(res.startTime, res.endTime, r.startTime, r.endTime, opt, clt)
+        );
+        if (localConflict) {
+            throw new Error(`No se puede aprobar: este horario se traslapa con la reservación ya confirmada de ${localConflict.clientName} (${format12Hour(localConflict.startTime)} - ${format12Hour(localConflict.endTime)}).`);
+        }
 
         const nowIso = new Date().toISOString();
 
@@ -1208,6 +1329,17 @@ class Store {
         const targetEnd = updatedFields.endTime || res.endTime;
         const targetDuration = updatedFields.durationMinutes || res.durationMinutes || 60;
         const targetPlayersMode = updatedFields.playersMode || res.playersMode || 1;
+
+        const willBeActive = updatedFields.status 
+            ? (updatedFields.status !== 'CANCELLED' && updatedFields.status !== 'REJECTED') 
+            : (res.status !== 'CANCELLED' && res.status !== 'REJECTED');
+
+        if (willBeActive) {
+            const avail = await this.checkAvailabilityAsync(targetMachine, targetDate, targetStart, targetEnd, reservationId);
+            if (!avail.available) {
+                throw new Error(avail.reason);
+            }
+        }
 
         const nowIso = new Date().toISOString();
 
@@ -1652,6 +1784,7 @@ class Store {
 
     setSelectedDate(dateStr) {
         this.selectedDate = dateStr;
+        this.updateReservationsSubscription(dateStr, dateStr);
         this.notify();
     }
 

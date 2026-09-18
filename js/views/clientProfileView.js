@@ -7,7 +7,7 @@ import { toast } from '../components/toast.js';
 import { modal } from '../components/modal.js';
 import { openLoginModal } from '../components/header.js';
 import { openBookingModal, showReservationTicket } from './clientBookingModal.js';
-import { formatFriendlyDate, format12Hour, formatDuration } from '../core/timeUtils.js';
+import { formatFriendlyDate, format12Hour, formatDuration, isReservationPast } from '../core/timeUtils.js';
 import { 
     db, 
     isFirebaseAvailable, 
@@ -24,6 +24,8 @@ import { accountManager } from '../core/accountManager.js';
 import { escapeHTML } from '../core/securityUtils.js';
 
 const AVATAR_OPTIONS = ['🕺', '💃', '🕹️', '⚡', '🎧', '🔥', '🚀', '👑', '🎯', '🌟', '👾', '👟'];
+
+let selectedBranchFilter = 'ALL';
 
 export async function renderClientProfileView(container) {
     const currentUser = authManager.getCurrentUser();
@@ -117,6 +119,29 @@ export async function renderClientProfileView(container) {
 
     let myReservations = Array.from(myReservationsMap.values());
     myReservations.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+
+    // Identificar sucursales donde el cliente tiene reservaciones
+    const allBusinesses = tenantManager.getAllBusinesses();
+    const branchesWithBookingsMap = new Map();
+    myReservations.forEach(r => {
+        const bId = r.businessId || business?.id || 'unknown';
+        const bObj = allBusinesses.find(b => b.id === bId);
+        const bName = bObj ? bObj.name : (r.businessName || 'Sucursal');
+        if (!branchesWithBookingsMap.has(bId)) {
+            branchesWithBookingsMap.set(bId, { id: bId, name: bName, count: 0 });
+        }
+        branchesWithBookingsMap.get(bId).count++;
+    });
+    const branchesWithBookings = Array.from(branchesWithBookingsMap.values());
+
+    // Si el filtro seleccionado ya no existe, volver a 'ALL'
+    if (selectedBranchFilter !== 'ALL' && !branchesWithBookingsMap.has(selectedBranchFilter)) {
+        selectedBranchFilter = 'ALL';
+    }
+
+    const displayedReservations = selectedBranchFilter === 'ALL'
+        ? myReservations
+        : myReservations.filter(r => (r.businessId || business?.id) === selectedBranchFilter);
 
     // Carga de canjes del usuario
     let myRedemptions = [];
@@ -276,17 +301,38 @@ export async function renderClientProfileView(container) {
 
             <!-- Contenido Pestaña 1: Mis Reservaciones -->
             <div id="tab-my-bookings" class="profile-tab-section animate-fade-in">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-                    <h3 style="font-size:1.2rem; margin:0; color:#ffffff;">Mis Horarios y Reservaciones en ${business?.name || 'la Sala'}</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                    <div>
+                        <h3 style="font-size:1.2rem; margin:0; color:#ffffff;">
+                            Mis Horarios y Reservaciones ${selectedBranchFilter === 'ALL' ? '(Todas las Sucursales)' : `en ${escapeHTML(branchesWithBookingsMap.get(selectedBranchFilter)?.name || 'la Sucursal')}`}
+                        </h3>
+                        <span style="font-size:0.8rem; color:var(--text-muted);">Gestiona y consulta tus pases de juego por sucursal</span>
+                    </div>
                     <button id="btn-profile-new-booking" class="btn btn-primary btn-sm glow-red">
                         <span>➕ Solicitar Nueva Reserva</span>
                     </button>
                 </div>
 
-                ${myReservations.length === 0 ? `
+                <!-- Selector / Filtro Rápido de Sucursales -->
+                ${branchesWithBookings.length > 1 ? `
+                    <div class="machine-filter-bar" style="margin-bottom:16px;" role="toolbar" aria-label="Filtrar por sucursal">
+                        <button class="machine-filter-chip ${selectedBranchFilter === 'ALL' ? 'active' : ''}" data-branch-filter="ALL" title="Ver reservaciones de todas las sucursales">
+                            <span>🌐 Todas las Sucursales</span>
+                            <span class="chip-count">${myReservations.length}</span>
+                        </button>
+                        ${branchesWithBookings.map(b => `
+                            <button class="machine-filter-chip ${selectedBranchFilter === b.id ? 'active' : ''}" data-branch-filter="${b.id}" title="Ver solo reservaciones en ${escapeHTML(b.name)}">
+                                <span>🏬 ${escapeHTML(b.name)}</span>
+                                <span class="chip-count">${b.count}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                ` : ''}
+
+                ${displayedReservations.length === 0 ? `
                     <div class="empty-state settings-card" style="padding:36px; text-align:center;">
                         <div class="empty-icon" style="font-size:2.5rem; margin-bottom:10px;">🕹️</div>
-                        <h4 style="color:#ffffff;">No tienes reservaciones registradas aún</h4>
+                        <h4 style="color:#ffffff;">No tienes reservaciones registradas ${selectedBranchFilter === 'ALL' ? 'aún' : 'en esta sucursal'}</h4>
                         <p style="color:var(--text-secondary); max-width:400px; margin:0 auto 16px auto; font-size:0.9rem;">
                             Selecciona una máquina y tu horario preferido para apartarla.
                         </p>
@@ -295,48 +341,81 @@ export async function renderClientProfileView(container) {
                         </button>
                     </div>
                 ` : `
-                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:16px;">
-                        ${myReservations.map(r => {
-                            const machine = store.getMachineById(r.machineId);
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(310px, 1fr)); gap:16px;">
+                        ${displayedReservations.map(r => {
+                            const resBiz = allBusinesses.find(b => b.id === r.businessId) || business;
+                            const resBizName = resBiz?.name || r.businessName || 'Sucursal';
+                            const resBizCity = resBiz?.city ? `(${resBiz.city})` : '';
+                            const resCurrencySymbol = resBiz?.currencySymbol || '$';
+                            const resCurrency = resBiz?.currency || 'MXN';
+
+                            // Resolver nombre de la máquina
+                            let machine = null;
+                            if (store.getMachineById) machine = store.getMachineById(r.machineId);
+                            if (!machine && r.businessId) {
+                                const cached = JSON.parse(localStorage.getItem(`piu_machines_${r.businessId}`) || '[]');
+                                machine = cached.find(m => m.id === r.machineId);
+                            }
+                            if (!machine && resBiz?.machines) {
+                                machine = resBiz.machines.find(m => m.id === r.machineId);
+                            }
+                            const machineDisplayName = machine?.name || r.machineName || 'Gabinete Pump It Up';
+                            const machineModel = machine?.model || '';
+
                             const friendlyDate = formatFriendlyDate(r.date);
                             const timeFormatted = `${format12Hour(r.startTime)} - ${format12Hour(r.endTime)}`;
                             
+                            const isPast = isReservationPast(r.date, r.startTime);
                             let statusBadge = '<span class="badge badge-warning">En Revisión</span>';
                             if (r.status === 'CONFIRMED') statusBadge = '<span class="badge badge-success">Confirmada</span>';
                             if (r.status === 'CANCELLED') statusBadge = '<span class="badge badge-danger">Cancelada</span>';
                             if (r.status === 'REJECTED') statusBadge = '<span class="badge badge-danger">Rechazada</span>';
+                            if (isPast && (r.status === 'CONFIRMED' || r.status === 'PENDING')) {
+                                statusBadge = '<span class="badge" style="background:rgba(255,255,255,0.08); color:var(--text-muted); border:1px solid rgba(255,255,255,0.2);">Concluida</span>';
+                            }
 
-                            const isCancellable = r.status === 'PENDING' || r.status === 'CONFIRMED';
+                            const isCancellable = !isPast && (r.status === 'PENDING' || r.status === 'CONFIRMED');
 
                             return `
                                 <div class="settings-card" style="padding:16px; display:flex; flex-direction:column; gap:10px; border:1px solid ${r.status === 'CONFIRMED' ? 'rgba(0,255,136,0.3)' : 'var(--border-color)'};">
-                                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-                                        <div>
-                                            <strong style="font-size:1.05rem; color:#ffffff; display:block;">${machine ? machine.name : 'Máquina PIU'}</strong>
-                                            <small style="color:var(--text-muted); font-size:0.78rem;">${friendlyDate}</small>
-                                        </div>
+                                    
+                                    <!-- Badge Distintivo de Sucursal Original -->
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <span class="badge" style="background:rgba(0, 229, 255, 0.12); color:var(--piu-cyan); border:1px solid rgba(0, 229, 255, 0.35); font-size:0.75rem; font-weight:700; display:inline-flex; align-items:center; gap:5px;">
+                                            🏬 ${escapeHTML(resBizName)} ${escapeHTML(resBizCity)}
+                                        </span>
                                         <div>${statusBadge}</div>
                                     </div>
 
-                                    <div style="background:var(--bg-dark-700); padding:10px; border-radius:var(--radius-sm); font-size:0.85rem; display:flex; flex-direction:column; gap:4px;">
-                                        <div>⏰ Horario: <strong style="color:var(--piu-cyan);">${timeFormatted}</strong> (${formatDuration(r.durationMinutes)})</div>
-                                        <div>👥 Modo: <strong>${r.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</strong></div>
-                                        <div>💰 Tarifa: <strong style="color:var(--color-chartreuse);">${business?.currencySymbol || '$'}${r.totalCost} ${business?.currency || 'MXN'}</strong></div>
-                                        ${r.notes ? `<div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">📝 Notas: "${r.notes}"</div>` : ''}
+                                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                                        <div>
+                                            <strong style="font-size:1.05rem; color:#ffffff; display:block;">🕹️ ${escapeHTML(machineDisplayName)}</strong>
+                                            ${machineModel ? `<span class="badge badge-dark" style="font-size:0.68rem; margin-top:2px;">${escapeHTML(machineModel)}</span>` : ''}
+                                            <small style="color:var(--text-muted); font-size:0.78rem; display:block; margin-top:3px;">📅 ${friendlyDate}</small>
+                                        </div>
                                     </div>
 
-                                    <div style="display:flex; gap:8px; margin-top:auto; padding-top:8px; border-top:1px solid var(--border-color);">
+                                    <div style="background:var(--bg-dark-700); padding:10px; border-radius:var(--radius-sm); font-size:0.85rem; display:flex; flex-direction:column; gap:5px;">
+                                        <div>⏰ Horario: <strong style="color:var(--piu-cyan);">${timeFormatted}</strong> (${formatDuration(r.durationMinutes)})</div>
+                                        <div>👥 Modo: <strong>${r.playersMode === 2 ? '👥 2 Jugadores' : '👤 1 Jugador'}</strong></div>
+                                        <div>💰 Tarifa: <strong style="color:var(--color-chartreuse);">${resCurrencySymbol}${r.totalCost} ${resCurrency}</strong></div>
+                                        ${r.isVersusMatch ? `<div style="font-size:0.78rem; color:var(--color-neon-pink); font-weight:bold;">⚔️ Reta PVP Oficial (Arena Versus)</div>` : ''}
+                                        ${r.notes ? `<div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">📝 Notas: "${escapeHTML(r.notes)}"</div>` : ''}
+                                    </div>
+
+                                    <div style="display:flex; gap:8px; margin-top:auto; padding-top:8px; border-top:1px solid var(--border-color); align-items:center;">
                                         <button class="btn btn-outline btn-xs btn-view-ticket" data-res-id="${r.id}" style="flex:1;">
                                             🎟️ Ver Comprobante
                                         </button>
                                         ${isCancellable ? `
-                                            ${(business && business.allowClientCancellation === false) ? `
+                                            ${(resBiz && resBiz.allowClientCancellation === false) ? `
                                                 <button class="btn btn-warning btn-xs btn-request-cancel-msg" 
                                                     data-res-id="${r.id}" 
+                                                    data-biz-id="${r.businessId}"
                                                     data-res-date="${escapeHTML(friendlyDate)}" 
                                                     data-res-time="${escapeHTML(timeFormatted)}" 
-                                                    data-machine-name="${escapeHTML(machine ? machine.name : 'Máquina')}"
-                                                    title="Solicitar cancelación al encargado por mensaje">
+                                                    data-machine-name="${escapeHTML(machineDisplayName)}"
+                                                    title="Solicitar cancelación al encargado de ${escapeHTML(resBizName)} por mensaje">
                                                     💬 Cancelar (Vía Mensaje)
                                                 </button>
                                             ` : `
@@ -344,7 +423,9 @@ export async function renderClientProfileView(container) {
                                                     ❌ Cancelar
                                                 </button>
                                             `}
-                                        ` : ''}
+                                        ` : (isPast && (r.status === 'CONFIRMED' || r.status === 'PENDING') ? `
+                                            <span style="font-size:0.75rem; color:var(--text-dimmed); font-style:italic; padding:4px 8px;">⏰ Horario concluido</span>
+                                        ` : '')}
                                     </div>
                                 </div>
                             `;
@@ -826,6 +907,11 @@ export async function renderClientProfileView(container) {
     container.querySelectorAll('.btn-cancel-res').forEach(btn => {
         btn.addEventListener('click', async () => {
             const resId = btn.dataset.resId;
+            const res = myReservations.find(r => r.id === resId);
+            if (isReservationPast(res?.date, res?.startTime)) {
+                toast.warning("Esta reservación ya cumplió su fecha y horario, por lo que no puede cancelarse.");
+                return;
+            }
             if (confirm("¿Estás seguro de cancelar tu reservación? Esta acción liberará la máquina para otros jugadores.")) {
                 try {
                     await store.cancelReservationByClient(resId);
@@ -838,17 +924,32 @@ export async function renderClientProfileView(container) {
         });
     });
 
+    // Evento Filtro por Sucursal en Mis Reservaciones
+    container.querySelectorAll('[data-branch-filter]').forEach(chip => {
+        chip.addEventListener('click', () => {
+            selectedBranchFilter = chip.dataset.branchFilter;
+            renderClientProfileView(container);
+        });
+    });
+
     // Solicitar cancelación al locatario por mensaje (cuando la sucursal bloquea cancelación directa)
     container.querySelectorAll('.btn-request-cancel-msg').forEach(btn => {
         btn.addEventListener('click', () => {
             const resId = btn.dataset.resId;
+            const res = myReservations.find(r => r.id === resId);
+            if (isReservationPast(res?.date, res?.startTime)) {
+                toast.warning("Esta reservación ya cumplió su fecha y horario, por lo que no puede cancelarse.");
+                return;
+            }
             const machName = btn.dataset.machineName || 'Máquina';
             const resDate = btn.dataset.resDate || '';
             const resTime = btn.dataset.resTime || '';
-            
-            const rawPhone = (business?.phone || business?.whatsapp || '').replace(/\D/g, '');
+            const bId = btn.dataset.bizId;
+            const targetBiz = allBusinesses.find(b => b.id === bId) || business;
+
+            const rawPhone = (targetBiz?.phone || targetBiz?.whatsapp || '').replace(/\D/g, '');
             const waNumber = rawPhone.length === 10 ? `52${rawPhone}` : rawPhone;
-            const msgText = encodeURIComponent(`Hola, solicito cancelar mi reservación en ${business?.name || 'la sucursal'}.\nFolio: ${resId}\nMáquina: ${machName}\nFecha: ${resDate}\nHorario: ${resTime}\nCliente: ${currentUser.name || currentUser.username}`);
+            const msgText = encodeURIComponent(`Hola, solicito cancelar mi reservación en ${targetBiz?.name || 'la sucursal'}.\nFolio: #${resId.slice(-6).toUpperCase()}\nMáquina: ${machName}\nFecha: ${resDate}\nHorario: ${resTime}\nCliente: ${currentUser.name || currentUser.username}`);
             const waUrl = waNumber ? `https://wa.me/${waNumber}?text=${msgText}` : null;
 
             modal.open({
