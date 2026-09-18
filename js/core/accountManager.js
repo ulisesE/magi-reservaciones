@@ -1,9 +1,7 @@
-// js/core/accountManager.js
-// Módulo de Gestión de Cuentas, Consumos, Catálogo de Productos y Flujo de Caja (Cuenta Fácil v1.6.0)
-// Principio Rector: FIRESTORE ES EL MANDANTE (Single Source of Truth) con Aislamiento Estricto por Local
 import { 
     db, 
     isFirebaseAvailable, 
+    isOnline,
     COLLECTIONS, 
     collection, 
     getDocs, 
@@ -15,11 +13,14 @@ import {
     query, 
     where, 
     limit,
+    runTransaction,
     onSnapshot 
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
 import { loyaltyManager } from './loyaltyManager.js';
+import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
+import { handleAppError, assertFinancialOnline } from './errorHandler.js';
 
 export const CONSUMPTION_TYPES = {
     JUEGO: {
@@ -84,6 +85,7 @@ class AccountManager {
     constructor() {
         this.cache = new Map();
         this.productsCache = new Map();
+        this.processedIdempotencyKeys = new Set();
     }
 
     /**
@@ -124,7 +126,7 @@ class AccountManager {
                 const snap = await getDocs(q);
                 snap.forEach(d => list.push({ id: d.id, ...d.data() }));
             } catch (err) {
-                console.warn("⚠️ Error cargando productos de Firestore, usando caché local:", err);
+                handleAppError(err, { context: "Error cargando catálogo de productos de Firestore", showToast: false });
             }
         }
 
@@ -152,6 +154,7 @@ class AccountManager {
         if (!businessId) throw new Error("Se requiere la sucursal (businessId) para guardar el producto.");
         if (!productData.name || !productData.name.trim()) throw new Error("El nombre del producto es obligatorio.");
 
+        const isNew = !productData.id;
         const productId = productData.id || `prod_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
         const finalProduct = {
             id: productId,
@@ -163,15 +166,23 @@ class AccountManager {
             status: productData.status || 'ACTIVE',
             updatedAt: new Date().toISOString()
         };
-        if (!productData.id) {
+        if (isNew) {
             finalProduct.createdAt = new Date().toISOString();
         }
 
         if (isFirebaseAvailable && db) {
             try {
                 await setDoc(doc(db, COLLECTIONS.PRODUCTS, productId), finalProduct, { merge: true });
+                
+                await auditLogger.logEvent({
+                    businessId,
+                    action: isNew ? AUDIT_ACTIONS.PRODUCT_CREATED : AUDIT_ACTIONS.PRODUCT_UPDATED,
+                    target: { type: 'PRODUCT', id: productId, name: finalProduct.name },
+                    financialData: { amount: finalProduct.price },
+                    details: `${isNew ? 'Creado' : 'Actualizado'} producto: ${finalProduct.name} ($${finalProduct.price})`
+                });
             } catch (err) {
-                console.warn("⚠️ Error guardando producto en Firestore:", err);
+                handleAppError(err, { context: "Error guardando producto en catálogo", showToast: true, rethrow: true });
             }
         }
 
@@ -195,11 +206,21 @@ class AccountManager {
     async deleteProduct(businessId, productId) {
         if (!businessId || !productId) return false;
 
+        let deletedProduct = null;
+        const currentProducts = await this.getProducts(businessId);
+        deletedProduct = currentProducts.find(p => p.id === productId);
+
         if (isFirebaseAvailable && db) {
             try {
                 await deleteDoc(doc(db, COLLECTIONS.PRODUCTS, productId));
+                await auditLogger.logEvent({
+                    businessId,
+                    action: AUDIT_ACTIONS.PRODUCT_DELETED,
+                    target: { type: 'PRODUCT', id: productId, name: deletedProduct?.name || 'Producto' },
+                    details: `Eliminado producto de catálogo: ${deletedProduct?.name || productId}`
+                });
             } catch (err) {
-                console.warn("⚠️ Error eliminando producto de Firestore:", err);
+                handleAppError(err, { context: "Error eliminando producto del catálogo", showToast: true, rethrow: true });
             }
         }
 
@@ -212,11 +233,12 @@ class AccountManager {
     }
 
     // =========================================================================
-    // 2. REGISTRO DE VENTAS, CONSUMOS Y ABONOS (MULTI-ITEM & TIEMPO REAL)
+    // 2. REGISTRO TRANSACCIONAL ATÓMICO CON IDEMPOTENCIA (VENTAS, ABONOS Y ANULACIONES)
     // =========================================================================
 
     /**
-     * Registra una venta / consumo multi-producto o individual con registro exacto de fecha y hora.
+     * Registra una venta / consumo multi-producto o individual mediante runTransaction() atómico.
+     * Cero riesgo de registros duplicados (Idempotencia) y actualización garantizada de saldos y auditoría.
      */
     async recordSale({
         businessId,
@@ -224,17 +246,30 @@ class AccountManager {
         playerUsername = '',
         playerName = '',
         playerPhone = '',
-        items = [], // Array de { id, name, category, quantity, unitPrice, subtotal, icon }
+        items = [],
         customConcept = '',
         customPrice = 0,
         notes = '',
-        paymentStatus = 'PAID', // 'PAID' (Pagado al momento) o 'PENDING' (Fiado / A la cuenta)
+        paymentStatus = 'PAID', // 'PAID' o 'PENDING'
         paymentMethod = 'CASH', // 'CASH', 'CARD', 'TRANSFER', 'ACCOUNT_CREDIT'
         reservationId = null,
-        createdBy = null
+        createdBy = null,
+        idempotencyKey = null
     }) {
         if (!businessId) throw new Error("Se requiere la sucursal (businessId) para registrar la venta.");
         if (!playerId) throw new Error("Se requiere seleccionar un cliente o registrar venta de mostrador.");
+
+        // Validar conexión activa obligatoria (Política: Consulta offline SÍ, Operación monetaria NO)
+        assertFinancialOnline();
+
+        // Validar idempotencia en memoria rápida
+        const finalIdempotencyKey = idempotencyKey || `idem_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        if (this.processedIdempotencyKeys.has(finalIdempotencyKey)) {
+            console.warn(`[IDEMPOTENCY_INTERCEPT] Petición duplicada interceptada: ${finalIdempotencyKey}`);
+            throw new Error("Esta venta ya está siendo procesada o fue completada. Evitando cargo duplicado.");
+        }
+        this.processedIdempotencyKeys.add(finalIdempotencyKey);
+        setTimeout(() => this.processedIdempotencyKeys.delete(finalIdempotencyKey), 10000); // Expiración 10s
 
         const currentStaff = createdBy || authManager.getCurrentUser()?.name || 'Encargado';
         const nowIso = new Date().toISOString();
@@ -265,7 +300,6 @@ class AccountManager {
             }
         }
 
-        // Sumar concepto personalizado si se especificó
         if (customConcept && customConcept.trim() && Number(customPrice) > 0) {
             const cPrice = Number(customPrice);
             totalAmount += cPrice;
@@ -284,7 +318,6 @@ class AccountManager {
             throw new Error("El total de la venta debe ser mayor a 0.");
         }
 
-        // Construir concepto descriptivo legible
         let finalConcept = '';
         if (finalItems.length === 1) {
             const it = finalItems[0];
@@ -295,10 +328,12 @@ class AccountManager {
             finalConcept = customConcept || 'Consumo en sala';
         }
 
-        const consumptionId = `csm_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        // ID determinista de documento anclado a la clave de idempotencia
+        const consumptionId = `csm_${finalIdempotencyKey}`;
 
         const newRecord = {
             id: consumptionId,
+            idempotencyKey: finalIdempotencyKey,
             businessId,
             playerId,
             playerUsername: playerUsername || '',
@@ -320,49 +355,122 @@ class AccountManager {
             createdAt: nowIso
         };
 
-        // 1. Guardar en Firestore (Firestore es el Mandante)
+        let resultingRecord = newRecord;
+
+        // 2. EJECUCIÓN ATÓMICA CON runTransaction EN FIRESTORE (IDEMPOTENCIA GARANTIZADA)
         if (isFirebaseAvailable && db) {
             try {
-                await setDoc(doc(db, COLLECTIONS.CONSUMPTIONS, consumptionId), newRecord, { merge: true });
-                if (playerId && playerId !== 'guest_walkin') {
-                    await this.syncPlayerAccountSummary(businessId, playerId);
-                }
+                await runTransaction(db, async (transaction) => {
+                    const consumptionRef = doc(db, COLLECTIONS.CONSUMPTIONS, consumptionId);
+
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
+                    const existingTx = await transaction.get(consumptionRef);
+                    if (existingTx.exists()) {
+                        console.warn(`[IDEMPOTENCY_PERSISTED] Transacción ${consumptionId} ya existe en Firestore. Retornando registro original sin duplicar.`);
+                        resultingRecord = existingTx.data();
+                        return;
+                    }
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (playerId && playerId !== 'guest_walkin') {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. TODAS LAS ESCRITURAS (WRITES)
+                    const isCreditPayment = newRecord.paymentMethod === 'ACCOUNT_CREDIT';
+                    if (isCreditPayment) {
+                        newRecord.paymentStatus = 'PAID';
+                        newRecord.paidAmount = totalAmount;
+                        newRecord.remainingAmount = 0;
+                    } else if (newRecord.paymentStatus === 'PENDING') {
+                        newRecord.paidAmount = 0;
+                        newRecord.remainingAmount = totalAmount;
+                    } else {
+                        newRecord.paidAmount = totalAmount;
+                        newRecord.remainingAmount = 0;
+                    }
+
+                    transaction.set(consumptionRef, newRecord);
+
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const accountsMap = playerData.accounts || {};
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, creditBalance: 0, totalConsumed: 0 };
+
+                        const newConsumed = (curBizAccount.totalConsumed || 0) + totalAmount;
+                        let newDebt = curBizAccount.netDebt || 0;
+                        let newCreditBalance = curBizAccount.creditBalance || 0;
+
+                        if (isCreditPayment) {
+                            if (newCreditBalance < totalAmount) {
+                                throw new Error(`Saldo a favor insuficiente ($${newCreditBalance.toFixed(2)} disponible). Se requieren $${totalAmount.toFixed(2)}.`);
+                            }
+                            newCreditBalance = Math.max(0, newCreditBalance - totalAmount);
+                        } else if (paymentStatus === 'PENDING') {
+                            newDebt = newDebt + totalAmount;
+                        }
+
+                        accountsMap[businessId] = {
+                            ...curBizAccount,
+                            netDebt: Math.max(0, newDebt),
+                            creditBalance: Math.max(0, newCreditBalance),
+                            totalConsumed: newConsumed,
+                            hasPendingDebt: newDebt > 0,
+                            hasCredit: newCreditBalance > 0,
+                            lastUpdated: nowIso
+                        };
+
+                        // Acreditación atómica de puntos de lealtad si fue pagado al contado o con saldo
+                        let updatedLoyaltyPoints = playerData.loyaltyPoints || 0;
+                        const business = tenantManager.getBusinessById(businessId);
+                        if (business && business.loyaltyEnabled && business.loyaltyMode !== 'VISITS' && newRecord.paymentStatus === 'PAID') {
+                            const ratio = Number(business.pointsRatio) || 10;
+                            const ptsEarned = Math.floor(totalAmount / ratio);
+                            if (ptsEarned > 0) {
+                                updatedLoyaltyPoints += ptsEarned;
+                            }
+                        }
+
+                        transaction.update(playerRef, {
+                            accounts: accountsMap,
+                            loyaltyPoints: updatedLoyaltyPoints,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    // Inyectar auditoría inmutable en la misma transacción atómica
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId,
+                        action: AUDIT_ACTIONS.SALE_RECORDED,
+                        target: { type: 'CONSUMPTION', id: consumptionId, name: finalConcept },
+                        financialData: {
+                            amount: totalAmount,
+                            paymentMethod: newRecord.paymentMethod,
+                            paymentStatus: newRecord.paymentStatus
+                        },
+                        details: `Venta registrada: "${finalConcept}" ($${totalAmount}) [${newRecord.paymentStatus === 'PENDING' ? 'Fiado / A Cuenta' : isCreditPayment ? 'Pagado con Saldo a Favor' : 'Pagado al Contado'}] por ${currentStaff}`
+                    });
+                });
             } catch (err) {
-                console.warn("⚠️ Error guardando venta en Firestore:", err);
+                handleAppError(err, { context: "Error en transacción atómica de venta", showToast: true, rethrow: true });
             }
         }
 
-        // 2. Guardar en LocalStorage como respaldo
+        // 3. Guardar en LocalStorage como respaldo
         const localKey = `piu_consumptions_${businessId}_${playerId}`;
         const localList = JSON.parse(localStorage.getItem(localKey) || '[]');
-        localList.unshift(newRecord);
-        localStorage.setItem(localKey, JSON.stringify(localList));
-
-        // 3. Auto-acreditación de lealtad si fue pagado de contado
-        const business = tenantManager.getBusinessById(businessId);
-        if (business && business.loyaltyEnabled && business.loyaltyMode !== 'VISITS' && paymentStatus === 'PAID' && totalAmount > 0 && playerId !== 'guest_walkin') {
-            try {
-                const ratio = Number(business.pointsRatio) || 10;
-                const ptsEarned = Math.floor(totalAmount / ratio);
-                if (ptsEarned > 0) {
-                    await loyaltyManager.adjustPlayerPoints(
-                        businessId, 
-                        playerId, 
-                        ptsEarned, 
-                        0, 
-                        `Consumo registrado (${finalConcept}) $${totalAmount}`
-                    );
-                }
-            } catch (ltyErr) {
-                console.warn("No se pudo auto-acreditar puntos de lealtad:", ltyErr);
-            }
+        if (!localList.some(r => r.id === resultingRecord.id)) {
+            localList.unshift(resultingRecord);
+            localStorage.setItem(localKey, JSON.stringify(localList));
         }
 
-        return newRecord;
+        return resultingRecord;
     }
 
     /**
-     * Mantiene retrocompatibilidad con recordConsumption simple.
+     * Mantiene retrocompatibilidad con recordConsumption.
      */
     async recordConsumption(payload) {
         return this.recordSale({
@@ -387,7 +495,8 @@ class AccountManager {
     }
 
     /**
-     * Registra un Abono / Pago a la cuenta para amortizar o liquidar adeudos pendientes.
+     * Registra un Abono / Pago a la cuenta mediante runTransaction() atómico.
+     * Actualiza el saldo vivo del jugador, descuenta adeudo y escribe el log inmutable.
      */
     async recordPayment({
         businessId,
@@ -397,18 +506,30 @@ class AccountManager {
         amount = 0,
         paymentMethod = 'CASH',
         notes = '',
-        createdBy = null
+        createdBy = null,
+        idempotencyKey = null
     }) {
         if (!businessId || !playerId) throw new Error("Sucursal y jugador son requeridos para registrar un abono.");
         const numAmount = Number(amount);
         if (isNaN(numAmount) || numAmount <= 0) throw new Error("El monto del abono debe ser mayor a 0.");
 
+        // Validar conexión activa obligatoria (Política: Consulta offline SÍ, Operación monetaria NO)
+        assertFinancialOnline();
+
+        const finalIdempotencyKey = idempotencyKey || `pay_idem_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        if (this.processedIdempotencyKeys.has(finalIdempotencyKey)) {
+            throw new Error("Este abono ya está siendo procesado. Evitando registro duplicado.");
+        }
+        this.processedIdempotencyKeys.add(finalIdempotencyKey);
+        setTimeout(() => this.processedIdempotencyKeys.delete(finalIdempotencyKey), 10000);
+
         const currentStaff = createdBy || authManager.getCurrentUser()?.name || 'Encargado';
-        const paymentId = `pay_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        const paymentId = `pay_${finalIdempotencyKey}`;
         const nowIso = new Date().toISOString();
 
         const paymentRecord = {
             id: paymentId,
+            idempotencyKey: finalIdempotencyKey,
             businessId,
             playerId,
             playerUsername: playerUsername || '',
@@ -427,21 +548,215 @@ class AccountManager {
             createdAt: nowIso
         };
 
+        let resultingRecord = paymentRecord;
+
+        // Transacción Atómica de Abono con Idempotencia Persistente
         if (isFirebaseAvailable && db) {
             try {
-                await setDoc(doc(db, COLLECTIONS.CONSUMPTIONS, paymentId), paymentRecord, { merge: true });
-                await this.syncPlayerAccountSummary(businessId, playerId);
+                await runTransaction(db, async (transaction) => {
+                    const paymentRef = doc(db, COLLECTIONS.CONSUMPTIONS, paymentId);
+
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
+                    const existingPayment = await transaction.get(paymentRef);
+                    if (existingPayment.exists()) {
+                        console.warn(`[IDEMPOTENCY_PERSISTED] Abono ${paymentId} ya existe en Firestore. Retornando registro original.`);
+                        resultingRecord = existingPayment.data();
+                        return;
+                    }
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (playerId && playerId !== 'guest_walkin') {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. TODAS LAS ESCRITURAS (WRITES)
+                    transaction.set(paymentRef, paymentRecord);
+
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const accountsMap = playerData.accounts || {};
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, creditBalance: 0 };
+
+                        const previousDebt = curBizAccount.netDebt || 0;
+                        const currentCredit = curBizAccount.creditBalance || 0;
+                        const newCreditBalance = currentCredit + numAmount;
+
+                        accountsMap[businessId] = {
+                            ...curBizAccount,
+                            netDebt: previousDebt,
+                            creditBalance: newCreditBalance,
+                            hasPendingDebt: previousDebt > 0,
+                            hasCredit: newCreditBalance > 0,
+                            lastUpdated: nowIso
+                        };
+
+                        transaction.update(playerRef, {
+                            accounts: accountsMap,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId,
+                        action: AUDIT_ACTIONS.PAYMENT_RECORDED,
+                        target: { type: 'PLAYER_ACCOUNT', id: playerId, name: playerName },
+                        financialData: {
+                            amount: numAmount,
+                            paymentMethod: paymentRecord.paymentMethod,
+                            paymentStatus: 'PAID'
+                        },
+                        details: `Abono de $${numAmount} registrado por ${currentStaff} para ${playerName} (Saldo a favor acumulado: $${((playerDoc.data()?.accounts?.[businessId]?.creditBalance || 0) + numAmount).toFixed(2)})`
+                    });
+                });
             } catch (err) {
-                console.warn("⚠️ Error guardando abono en Firestore:", err);
+                handleAppError(err, { context: "Error en transacción atómica de abono", showToast: true, rethrow: true });
             }
         }
 
         const localKey = `piu_consumptions_${businessId}_${playerId}`;
         const localList = JSON.parse(localStorage.getItem(localKey) || '[]');
-        localList.unshift(paymentRecord);
-        localStorage.setItem(localKey, JSON.stringify(localList));
+        if (!localList.some(r => r.id === resultingRecord.id)) {
+            localList.unshift(resultingRecord);
+            localStorage.setItem(localKey, JSON.stringify(localList));
+        }
 
-        return paymentRecord;
+        return resultingRecord;
+    }
+
+    /**
+     * Liquida de forma total o parcial un ticket específico de consumo fiado/pendiente.
+     * Permite pagar con Efectivo, Tarjeta, SPEI o Saldo a Favor (Monedero).
+     */
+    async settleConsumptionTicket(businessId, playerId, transactionId, { amountToPay = null, paymentMethod = 'CASH', notes = '', createdBy = null } = {}) {
+        if (!businessId || !transactionId) throw new Error("Datos insuficientes para liquidar el ticket.");
+        assertFinancialOnline();
+
+        const currentStaff = createdBy || authManager.getCurrentUser()?.name || 'Encargado';
+        const nowIso = new Date().toISOString();
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const txRef = doc(db, COLLECTIONS.CONSUMPTIONS, transactionId);
+                    const txDoc = await transaction.get(txRef);
+                    if (!txDoc.exists()) throw new Error("El ticket no existe en la base de datos.");
+
+                    const txData = txDoc.data();
+                    if (txData.status === 'VOIDED' || txData.status === 'CANCELLED') {
+                        throw new Error("No se puede liquidar un ticket anulado o cancelado.");
+                    }
+                    if (txData.paymentStatus === 'PAID') {
+                        throw new Error("Este ticket ya se encuentra totalmente liquidado / pagado.");
+                    }
+
+                    const targetPlayerId = playerId || txData.playerId;
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (targetPlayerId && targetPlayerId !== 'guest_walkin') {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, targetPlayerId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    const totalTicket = Number(txData.totalAmount) || 0;
+                    const prevPaid = Number(txData.paidAmount || 0);
+                    const currentRemaining = Math.max(0, totalTicket - prevPaid);
+
+                    const payAmount = (amountToPay !== null && !isNaN(Number(amountToPay)) && Number(amountToPay) > 0)
+                        ? Math.min(Number(amountToPay), currentRemaining)
+                        : currentRemaining;
+
+                    if (payAmount <= 0) throw new Error("El monto a pagar debe ser mayor a 0.");
+
+                    const newPaid = prevPaid + payAmount;
+                    const newRemaining = Math.max(0, totalTicket - newPaid);
+                    const isFullyPaid = newRemaining <= 0;
+
+                    // Manejo si paga con Saldo a Favor
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const accountsMap = playerData.accounts || {};
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, creditBalance: 0 };
+
+                        if (paymentMethod === 'ACCOUNT_CREDIT') {
+                            const availCredit = Number(curBizAccount.creditBalance || 0);
+                            if (availCredit < payAmount) {
+                                throw new Error(`Saldo a favor insuficiente ($${availCredit.toFixed(2)} disponible). Se requieren $${payAmount.toFixed(2)}.`);
+                            }
+                            curBizAccount.creditBalance = Math.max(0, availCredit - payAmount);
+                        }
+
+                        const curDebt = Number(curBizAccount.netDebt || 0);
+                        curBizAccount.netDebt = Math.max(0, curDebt - payAmount);
+                        curBizAccount.hasPendingDebt = curBizAccount.netDebt > 0;
+                        curBizAccount.hasCredit = (curBizAccount.creditBalance || 0) > 0;
+                        curBizAccount.lastUpdated = nowIso;
+                        accountsMap[businessId] = curBizAccount;
+
+                        transaction.update(playerRef, {
+                            accounts: accountsMap,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    const updatePayload = {
+                        paidAmount: newPaid,
+                        remainingAmount: newRemaining,
+                        paymentStatus: isFullyPaid ? 'PAID' : 'PENDING',
+                        paymentMethod: paymentMethod,
+                        lastSettledAt: nowIso,
+                        lastSettledBy: currentStaff,
+                        notes: notes ? (txData.notes ? `${txData.notes} | ${notes}` : notes) : (txData.notes || ''),
+                        updatedAt: nowIso
+                    };
+
+                    if (isFullyPaid) {
+                        updatePayload.settledAt = nowIso;
+                    }
+
+                    transaction.update(txRef, updatePayload);
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId,
+                        action: AUDIT_ACTIONS.PAYMENT_RECORDED,
+                        target: { type: 'CONSUMPTION', id: transactionId, name: txData.concept || 'Ticket' },
+                        financialData: {
+                            amount: payAmount,
+                            paymentMethod,
+                            paymentStatus: isFullyPaid ? 'PAID' : 'PENDING'
+                        },
+                        details: `Liquidación ${isFullyPaid ? 'total' : 'parcial'} de ticket "${txData.concept}": pagado $${payAmount.toFixed(2)} vía ${paymentMethod} por ${currentStaff}. Restante: $${newRemaining.toFixed(2)}`
+                    });
+                });
+            } catch (err) {
+                handleAppError(err, { context: "Error liquidando ticket de forma atómica", showToast: true, rethrow: true });
+            }
+        }
+
+        // Actualizar caché local
+        if (playerId) {
+            const localKey = `piu_consumptions_${businessId}_${playerId}`;
+            const localList = JSON.parse(localStorage.getItem(localKey) || '[]');
+            const idx = localList.findIndex(t => t.id === transactionId);
+            if (idx !== -1) {
+                const totalTicket = Number(localList[idx].totalAmount) || 0;
+                const prevPaid = Number(localList[idx].paidAmount || 0);
+                const payAmount = (amountToPay !== null && !isNaN(Number(amountToPay)) && Number(amountToPay) > 0)
+                    ? Math.min(Number(amountToPay), Math.max(0, totalTicket - prevPaid))
+                    : Math.max(0, totalTicket - prevPaid);
+                const newPaid = prevPaid + payAmount;
+                const newRemaining = Math.max(0, totalTicket - newPaid);
+                localList[idx].paidAmount = newPaid;
+                localList[idx].remainingAmount = newRemaining;
+                localList[idx].paymentStatus = newRemaining <= 0 ? 'PAID' : 'PENDING';
+                localList[idx].paymentMethod = paymentMethod;
+                localList[idx].lastSettledAt = nowIso;
+                localStorage.setItem(localKey, JSON.stringify(localList));
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -455,6 +770,13 @@ class AccountManager {
 
         const client = authManager.getClientUsers().find(c => c.id === playerId) || { name: 'Jugador', username: '' };
 
+        // Si se usa saldo a favor, descontar directamente
+        if (paymentMethod === 'ACCOUNT_CREDIT') {
+            if (account.creditBalance < account.netDebt) {
+                throw new Error(`Saldo a favor insuficiente ($${account.creditBalance.toFixed(2)} disponible) para cubrir la deuda total de $${account.netDebt.toFixed(2)}.`);
+            }
+        }
+
         return this.recordPayment({
             businessId,
             playerId,
@@ -467,36 +789,117 @@ class AccountManager {
     }
 
     /**
-     * Cancela o anula un movimiento (consumo o abono) revirtiendo su impacto en la cuenta.
+     * ANULACIÓN FORMAL DE MOVIMIENTO (Consumo o Abono).
+     * Reemplaza por completo el borrado físico (deleteDoc).
+     * Marca el estado a 'VOIDED', guarda motivo/autor y revierte el impacto financiero de forma atómica.
      */
-    async cancelTransaction(businessId, playerId, transactionId, reason = 'Cancelado por el encargado') {
-        if (!businessId || !transactionId) throw new Error("Datos insuficientes para cancelar la transacción.");
+    async voidTransaction(businessId, playerId, transactionId, { reason = 'Anulación autorizada por encargado', actor = null } = {}) {
+        if (!businessId || !transactionId) throw new Error("Datos insuficientes para anular la transacción.");
+        if (!reason || !reason.trim()) throw new Error("Se requiere especificar un motivo claro para la anulación.");
 
+        // Validar conexión activa obligatoria (Política: Consulta offline SÍ, Operación monetaria NO)
+        assertFinancialOnline();
+
+        const currentStaff = actor || authManager.getCurrentUser()?.name || 'Encargado';
         const nowIso = new Date().toISOString();
+
         if (isFirebaseAvailable && db) {
             try {
-                await setDoc(doc(db, COLLECTIONS.CONSUMPTIONS, transactionId), {
-                    status: 'CANCELLED',
-                    cancelledReason: reason,
-                    cancelledAt: nowIso
-                }, { merge: true });
+                await runTransaction(db, async (transaction) => {
+                    const txRef = doc(db, COLLECTIONS.CONSUMPTIONS, transactionId);
 
-                if (playerId) {
-                    await this.syncPlayerAccountSummary(businessId, playerId);
-                }
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
+                    const txDoc = await transaction.get(txRef);
+
+                    if (!txDoc.exists()) {
+                        throw new Error("La transacción no existe en la base de datos.");
+                    }
+
+                    const txData = txDoc.data();
+                    if (txData.status === 'VOIDED' || txData.status === 'CANCELLED') {
+                        throw new Error("Esta transacción ya se encuentra anulada previamente.");
+                    }
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (playerId && playerId !== 'guest_walkin') {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, playerId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. TODAS LAS ESCRITURAS (WRITES)
+                    // Marcar como VOIDED (Inmutable en historial)
+                    transaction.update(txRef, {
+                        status: 'VOIDED',
+                        voidReason: reason.trim(),
+                        voidedAt: nowIso,
+                        voidedBy: currentStaff,
+                        updatedAt: nowIso
+                    });
+
+                    // Revertir impacto en la cuenta del jugador
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const accountsMap = playerData.accounts || {};
+                        const curBizAccount = accountsMap[businessId] || { netDebt: 0, totalConsumed: 0 };
+                        const amount = Number(txData.totalAmount) || 0;
+
+                        let newDebt = curBizAccount.netDebt || 0;
+                        let newConsumed = curBizAccount.totalConsumed || 0;
+
+                        if (txData.type === 'ABONO') {
+                            // Si se anula un abono, se RESTAURA la deuda que había sido amortizada
+                            newDebt += amount;
+                        } else {
+                            // Si se anula un consumo
+                            newConsumed = Math.max(0, newConsumed - amount);
+                            if (txData.paymentStatus === 'PENDING') {
+                                newDebt = Math.max(0, newDebt - amount);
+                            }
+                        }
+
+                        accountsMap[businessId] = {
+                            ...curBizAccount,
+                            netDebt: Math.max(0, newDebt),
+                            totalConsumed: newConsumed,
+                            hasPendingDebt: newDebt > 0,
+                            lastUpdated: nowIso
+                        };
+
+                        transaction.update(playerRef, {
+                            accounts: accountsMap,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    // 3. Registrar auditoría obligatoria de la anulación
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId,
+                        action: AUDIT_ACTIONS.TRANSACTION_VOIDED,
+                        target: { type: 'CONSUMPTION', id: transactionId, name: txData.concept || 'Movimiento' },
+                        financialData: {
+                            amount: txData.totalAmount,
+                            paymentMethod: txData.paymentMethod,
+                            paymentStatus: txData.paymentStatus
+                        },
+                        details: `Transacción ${transactionId} ($${txData.totalAmount}) ANULADA por ${currentStaff}. Motivo: "${reason.trim()}"`
+                    });
+                });
             } catch (err) {
-                console.warn("⚠️ Error cancelando en Firestore:", err);
+                handleAppError(err, { context: "Error al anular transacción en base de datos", showToast: true, rethrow: true });
             }
         }
 
+        // Actualizar caché local
         if (playerId) {
             const localKey = `piu_consumptions_${businessId}_${playerId}`;
             const localList = JSON.parse(localStorage.getItem(localKey) || '[]');
             const idx = localList.findIndex(t => t.id === transactionId);
             if (idx !== -1) {
-                localList[idx].status = 'CANCELLED';
-                localList[idx].cancelledReason = reason;
-                localList[idx].cancelledAt = nowIso;
+                localList[idx].status = 'VOIDED';
+                localList[idx].voidReason = reason.trim();
+                localList[idx].voidedAt = nowIso;
+                localList[idx].voidedBy = currentStaff;
                 localStorage.setItem(localKey, JSON.stringify(localList));
             }
         }
@@ -505,34 +908,22 @@ class AccountManager {
     }
 
     /**
-     * Elimina permanentemente una única transacción de la base de datos de Firestore.
+     * Alias de retrocompatibilidad que redirige a voidTransaction garantizando que NUNCA se borren datos.
      */
-    async deleteTransaction(businessId, playerId, transactionId) {
-        if (!businessId || !transactionId) throw new Error("Datos insuficientes para eliminar la transacción.");
+    async cancelTransaction(businessId, playerId, transactionId, reason = 'Cancelado por el encargado') {
+        return this.voidTransaction(businessId, playerId, transactionId, { reason });
+    }
 
-        if (isFirebaseAvailable && db) {
-            try {
-                await deleteDoc(doc(db, COLLECTIONS.CONSUMPTIONS, transactionId));
-                if (playerId && playerId !== 'guest_walkin') {
-                    await this.syncPlayerAccountSummary(businessId, playerId);
-                }
-            } catch (err) {
-                console.warn("⚠️ Error eliminando transacción de Firestore:", err);
-            }
-        }
-
-        if (playerId) {
-            const localKey = `piu_consumptions_${businessId}_${playerId}`;
-            const localList = JSON.parse(localStorage.getItem(localKey) || '[]');
-            const filtered = localList.filter(t => t.id !== transactionId);
-            localStorage.setItem(localKey, JSON.stringify(filtered));
-        }
-
-        return true;
+    /**
+     * Alias de seguridad: redirige deleteTransaction a anulación inmutable en lugar de borrado físico.
+     */
+    async deleteTransaction(businessId, playerId, transactionId, reason = 'Anulación solicitada por encargado') {
+        console.warn(`[INMUTABILITY_GUARD] Redirigiendo deleteTransaction a anulación formal (VOIDED) para ID: ${transactionId}`);
+        return this.voidTransaction(businessId, playerId, transactionId, { reason });
     }
 
     // =========================================================================
-    // 3. CONSULTAS, ESTADO DE CUENTA Y RESÚMENES (AISLAMIENTO STRICTO POR LOCAL)
+    // 3. CONSULTAS, ESTADO DE CUENTA Y RESÚMENES (EXCLUSIÓN DE ANULACIONES)
     // =========================================================================
 
     /**
@@ -552,7 +943,7 @@ class AccountManager {
                 const snap = await getDocs(q);
                 snap.forEach(d => list.push({ id: d.id, ...d.data() }));
             } catch (err) {
-                console.warn("⚠️ Error cargando transacciones de Firestore:", err);
+                handleAppError(err, { context: "Error consultando transacciones de jugador", showToast: false });
             }
         }
 
@@ -571,11 +962,11 @@ class AccountManager {
 
     /**
      * Calcula el estado de cuenta y saldos continuos de un jugador en la sucursal actual.
-     * Las deudas se arrastran a lo largo de los días hasta ser saldadas.
+     * Excluye estrictamente las transacciones CANCELLED y VOIDED del cálculo de saldo vivo.
      */
     async getPlayerAccount(businessId, playerId) {
         const transactions = await this.getPlayerTransactions(businessId, playerId);
-        const activeTx = transactions.filter(t => t.status !== 'CANCELLED');
+        const activeTx = transactions.filter(t => t.status !== 'CANCELLED' && t.status !== 'VOIDED');
 
         let totalConsumed = 0;
         let totalPaidDirectly = 0;
@@ -586,6 +977,8 @@ class AccountManager {
         Object.values(CONSUMPTION_TYPES).forEach(t => {
             breakdownByType[t.id] = { count: 0, total: 0, label: t.label, icon: t.icon };
         });
+
+        let totalPaidWithCredit = 0;
 
         activeTx.forEach(t => {
             const amount = Number(t.totalAmount) || 0;
@@ -603,15 +996,21 @@ class AccountManager {
 
                 if (t.paymentStatus === 'PAID') {
                     totalPaidDirectly += amount;
+                    if (t.paymentMethod === 'ACCOUNT_CREDIT') {
+                        totalPaidWithCredit += amount;
+                    }
                 } else {
-                    totalPendingDebt += amount;
+                    const paid = Number(t.paidAmount || 0);
+                    const remaining = t.remainingAmount !== undefined ? Number(t.remainingAmount) : Math.max(0, amount - paid);
+                    totalPendingDebt += remaining;
+                    totalPaidDirectly += paid;
                 }
             }
         });
 
-        // El saldo neto por cobrar se arrastra acumulado
-        const netDebt = Math.max(0, totalPendingDebt - totalAbonos);
-        const creditBalance = Math.max(0, totalAbonos - totalPendingDebt);
+        // La deuda viva acumulada y el saldo a favor disponible
+        const netDebt = Math.max(0, totalPendingDebt);
+        const creditBalance = Math.max(0, totalAbonos - totalPaidWithCredit);
 
         return {
             playerId,
@@ -620,8 +1019,9 @@ class AccountManager {
             totalPaidDirectly,
             totalPendingDebt,
             totalAbonos,
-            netDebt,          // Deuda pendiente acumulada arrastrada
-            creditBalance,    // Saldo a favor disponible
+            totalPaidWithCredit,
+            netDebt,          // Deuda pendiente acumulada viva (tickets fiados)
+            creditBalance,    // Saldo a favor disponible en monedero
             hasPendingDebt: netDebt > 0,
             hasCredit: creditBalance > 0,
             transactionsCount: activeTx.length,
@@ -653,26 +1053,25 @@ class AccountManager {
                 const snap = await getDocs(q);
                 snap.forEach(d => list.push({ id: d.id, ...d.data() }));
             } catch (err) {
-                console.warn("⚠️ Error cargando movimientos de la sucursal de Firestore:", err);
+                handleAppError(err, { context: "Error cargando movimientos del negocio", showToast: false });
             }
         }
 
-        // Ordenar cronológicamente descendente
         list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        // Aplicar filtros en memoria
+        // Filtros en memoria
         if (playerId) {
             list = list.filter(t => t.playerId === playerId);
         }
 
         if (status === 'PAID') {
-            list = list.filter(t => t.type === 'CONSUMO' && t.paymentStatus === 'PAID' && t.status !== 'CANCELLED');
+            list = list.filter(t => t.type === 'CONSUMO' && t.paymentStatus === 'PAID' && t.status !== 'CANCELLED' && t.status !== 'VOIDED');
         } else if (status === 'PENDING') {
-            list = list.filter(t => t.type === 'CONSUMO' && t.paymentStatus === 'PENDING' && t.status !== 'CANCELLED');
+            list = list.filter(t => t.type === 'CONSUMO' && t.paymentStatus === 'PENDING' && t.status !== 'CANCELLED' && t.status !== 'VOIDED');
         } else if (status === 'ABONO') {
-            list = list.filter(t => t.type === 'ABONO' && t.status !== 'CANCELLED');
-        } else if (status === 'CANCELLED') {
-            list = list.filter(t => t.status === 'CANCELLED');
+            list = list.filter(t => t.type === 'ABONO' && t.status !== 'CANCELLED' && t.status !== 'VOIDED');
+        } else if (status === 'VOIDED' || status === 'CANCELLED') {
+            list = list.filter(t => t.status === 'CANCELLED' || t.status === 'VOIDED');
         }
 
         if (dateFilter === 'TODAY') {
@@ -692,16 +1091,11 @@ class AccountManager {
     }
 
     /**
-     * Calcula el resumen integral de Cuenta Fácil para la sucursal activa:
-     * - Por Cobrar General (Deuda total histórica acumulada).
-     * - Conteo de clientes con cuenta pendiente.
-     * - Total de venta fiada histórica.
-     * - Directorio de clientes deudores ordenado por mayor saldo pendiente.
+     * Calcula el resumen integral de Cuenta Fácil para la sucursal activa.
      */
     async getDebtorsSummary(businessId) {
         if (!businessId) return { totalReceivableDebt: 0, totalDebtorsCount: 0, totalCreditSales: 0, debtorsList: [] };
 
-        // Obtener todos los movimientos activos de este negocio
         let allTransactions = [];
         if (isFirebaseAvailable && db) {
             try {
@@ -712,13 +1106,11 @@ class AccountManager {
                 const snap = await getDocs(q);
                 snap.forEach(d => allTransactions.push({ id: d.id, ...d.data() }));
             } catch (err) {
-                console.warn("Error cargando deudores de Firestore:", err);
+                handleAppError(err, { context: "Error consultando resumen de deudores", showToast: false });
             }
         }
 
-        const activeTx = allTransactions.filter(t => t.status !== 'CANCELLED');
-
-        // Agrupar por jugador
+        const activeTx = allTransactions.filter(t => t.status !== 'CANCELLED' && t.status !== 'VOIDED');
         const playerMap = new Map();
         let totalCreditSales = 0;
 
@@ -755,7 +1147,6 @@ class AccountManager {
             }
         });
 
-        // Calcular balances netos por jugador
         let totalReceivableDebt = 0;
         const debtorsList = [];
 
@@ -772,7 +1163,6 @@ class AccountManager {
             }
         });
 
-        // Ordenar deudores de mayor a menor deuda
         debtorsList.sort((a, b) => b.netDebt - a.netDebt);
 
         return {
@@ -811,7 +1201,7 @@ class AccountManager {
                 });
             }
         } catch (err) {
-            console.warn("No se pudo sincronizar resumen de cuenta en piu_players:", err);
+            handleAppError(err, { context: "Error sincronizando resumen de cuenta en perfil", showToast: false });
         }
     }
 }

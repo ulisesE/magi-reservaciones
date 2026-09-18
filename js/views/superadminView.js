@@ -7,6 +7,7 @@ import { catalogsManager } from '../core/catalogsManager.js';
 import { clientDirManager, openClientFormModal } from './clientsView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { escapeHTML } from '../core/securityUtils.js';
 import { 
     db, 
     isFirebaseAvailable, 
@@ -16,8 +17,14 @@ import {
     setDoc, 
     doc 
 } from '../firebaseConfig.js';
+import { formatFriendlyDate, format12Hour } from '../core/timeUtils.js';
+import { showReservationTicket } from './clientBookingModal.js';
+import { openModifyModal } from './requestsView.js';
 
-let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'PLAYERS', 'CABINETS', 'VERSIONS', 'MACHINES', 'STAFF'
+let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'RESERVATIONS', 'PLAYERS', 'CABINETS', 'VERSIONS', 'MACHINES', 'STAFF'
+let resSearchQuery = '';
+let resFilterBiz = '';
+let resFilterStatus = 'ALL';
 
 export async function renderSuperadminView(container) {
     const businesses = tenantManager.getAllBusinesses();
@@ -28,6 +35,17 @@ export async function renderSuperadminView(container) {
     const players = await clientDirManager.loadClients();
     const totalBusinesses = businesses.length;
 
+    let globalReservations = [];
+    if (isFirebaseAvailable && db) {
+        try {
+            const snap = await getDocs(collection(db, COLLECTIONS.RESERVATIONS));
+            snap.forEach(d => globalReservations.push({ id: d.id, ...d.data() }));
+        } catch(e) {
+            console.warn("Error cargando reservaciones globales:", e);
+        }
+    }
+    globalReservations.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+
     container.innerHTML = `
         <div class="superadmin-view-wrapper animate-fade-in">
             <!-- Header Global -->
@@ -37,7 +55,7 @@ export async function renderSuperadminView(container) {
                         <span style="font-size:1.8rem;">👑</span>
                         <h2 class="friendly-date-title">Consola Global de Super Administrador</h2>
                     </div>
-                    <p class="subtitle-text">Administración completa de todos los locales, jugadores globales, modelos de gabinete, versiones de software y personal.</p>
+                    <p class="subtitle-text">Administración completa de todos los locales, jugadores globales, modelos de gabinete, versiones de software, reservaciones y personal.</p>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                     <button class="btn btn-outline" id="btn-export-backup" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);" title="Descargar copia de seguridad en JSON">
@@ -61,6 +79,9 @@ export async function renderSuperadminView(container) {
                 <button class="filter-tab ${activeSuperTab === 'BUSINESSES' ? 'active' : ''}" data-tab="BUSINESSES">
                     <span>🏢 Locales (${totalBusinesses})</span>
                 </button>
+                <button class="filter-tab ${activeSuperTab === 'RESERVATIONS' ? 'active' : ''}" data-tab="RESERVATIONS">
+                    <span>📋 Auditoría de Reservas (${globalReservations.length})</span>
+                </button>
                 <button class="filter-tab ${activeSuperTab === 'PLAYERS' ? 'active' : ''}" data-tab="PLAYERS">
                     <span>🕺 Clientes / Jugadores (${players.length})</span>
                 </button>
@@ -80,7 +101,7 @@ export async function renderSuperadminView(container) {
 
             <!-- Contenido Dinámico de la Pestaña -->
             <div id="superadmin-tab-content">
-                ${renderTabContent(activeSuperTab, businesses, staffUsers, managers, cabinetModels, gameVersions, players)}
+                ${renderTabContent(activeSuperTab, businesses, staffUsers, managers, cabinetModels, gameVersions, players, globalReservations)}
             </div>
         </div>
     `;
@@ -110,6 +131,33 @@ export async function renderSuperadminView(container) {
             await tenantManager.selectLocal(id);
             store.setCurrentView('DAY');
             toast.info(`Ingresando a: ${tenantManager.getActiveBusiness().name}`);
+        });
+    });
+
+    // Alternar Estado Operativo de Sucursal (Activo / En Pausa)
+    container.querySelectorAll('.btn-toggle-biz-status').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const bizId = btn.dataset.id;
+            const isCurrentlyActive = btn.dataset.active === 'true';
+            const newActive = !isCurrentlyActive;
+            try {
+                await tenantManager.toggleBusinessStatus(bizId, newActive);
+                toast.success(`Sucursal ${newActive ? 'activada 🟢' : 'pausada ⏸️'}.`);
+                renderSuperadminView(container);
+            } catch (e) {
+                toast.error(e.message);
+            }
+        });
+    });
+
+    // Abrir Modal de Feature Toggles / Módulos por Sucursal
+    container.querySelectorAll('.btn-biz-modules').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const bizId = btn.dataset.id;
+            const biz = tenantManager.getAllBusinesses().find(b => b.id === bizId);
+            if (biz) {
+                openBusinessModulesModal(biz, container);
+            }
         });
     });
 
@@ -338,31 +386,242 @@ export async function renderSuperadminView(container) {
     // ==========================================
     // Eventos de Versiones de Software (Global)
     // ==========================================
-    container.querySelector('#btn-add-global-version')?.addEventListener('click', () => {
-        openGameVersionModal(null, container);
+    // Eventos de Auditoría de Reservaciones Global
+    // ==========================================
+    container.querySelector('#super-search-res')?.addEventListener('input', (e) => {
+        resSearchQuery = e.target.value.toLowerCase().trim();
+        renderSuperadminView(container);
     });
 
-    container.querySelectorAll('.btn-edit-global-ver').forEach(btn => {
+    container.querySelector('#super-filter-biz')?.addEventListener('change', (e) => {
+        resFilterBiz = e.target.value;
+        renderSuperadminView(container);
+    });
+
+    container.querySelectorAll('.super-res-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const ver = catalogsManager.getGameVersions().find(v => v.id === id);
-            if (ver) openGameVersionModal(ver, container);
+            resFilterStatus = btn.dataset.status;
+            renderSuperadminView(container);
         });
     });
 
-    container.querySelectorAll('.btn-delete-global-ver').forEach(btn => {
+    container.querySelectorAll('.btn-view-ticket-super').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const res = globalReservations.find(r => r.id === id);
+            if (res) showReservationTicket(res);
+        });
+    });
+
+    container.querySelectorAll('.btn-approve-res-super').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
-            if (confirm("¿Eliminar esta versión del catálogo global?")) {
-                await catalogsManager.deleteGameVersion(id);
-                toast.info("Versión eliminada.");
+            try {
+                await store.approveReservation(id);
+                toast.success("Reservación aprobada.");
                 renderSuperadminView(container);
+            } catch (err) {
+                toast.error(err.message);
+            }
+        });
+    });
+
+    container.querySelectorAll('.btn-edit-res-super').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const res = globalReservations.find(r => r.id === id);
+            if (res) {
+                openModifyModal(res, container);
+            }
+        });
+    });
+
+    container.querySelectorAll('.btn-del-res-super').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            if (confirm("¿Estás seguro de eliminar permanentemente esta reservación de la base de datos? Se quitará de todos los reportes globales.")) {
+                try {
+                    await store.deleteReservation(id, 'Eliminada por Super Administrador');
+                    toast.success("Reservación eliminada permanentemente de la base de datos.");
+                    renderSuperadminView(container);
+                } catch (err) {
+                    toast.error(err.message);
+                }
             }
         });
     });
 }
 
-function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, gameVersions, players) {
+function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, gameVersions, players, globalReservations = []) {
+    if (tab === 'RESERVATIONS') {
+        const confirmedCount = globalReservations.filter(r => r.status === 'CONFIRMED').length;
+        const pendingCount = globalReservations.filter(r => r.status === 'PENDING').length;
+        const cancelledCount = globalReservations.filter(r => r.status === 'CANCELLED').length;
+        const rejectedCount = globalReservations.filter(r => r.status === 'REJECTED').length;
+
+        let filtered = globalReservations;
+        if (resFilterBiz) {
+            filtered = filtered.filter(r => r.businessId === resFilterBiz);
+        }
+        if (resFilterStatus !== 'ALL') {
+            filtered = filtered.filter(r => r.status === resFilterStatus);
+        }
+        if (resSearchQuery) {
+            filtered = filtered.filter(r => 
+                (r.clientName && r.clientName.toLowerCase().includes(resSearchQuery)) ||
+                (r.clientUsername && r.clientUsername.toLowerCase().includes(resSearchQuery)) ||
+                (r.clientPhone && r.clientPhone.includes(resSearchQuery)) ||
+                (r.id && r.id.toLowerCase().includes(resSearchQuery)) ||
+                (r.cancellationReason && r.cancellationReason.toLowerCase().includes(resSearchQuery)) ||
+                (r.rejectionReason && r.rejectionReason.toLowerCase().includes(resSearchQuery))
+            );
+        }
+
+        return `
+            <div class="settings-card">
+                <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div class="title-with-icon">
+                        <span class="t-icon">📋</span>
+                        <div>
+                            <h3>Auditoría y Registro Global de Reservaciones</h3>
+                            <small>Historial inmutable de reservaciones confirmadas, pendientes, canceladas y rechazadas de todos los locales</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Métricas de Estado Global -->
+                <div style="display:flex; gap:10px; margin: 16px 0; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'ALL' ? 'active' : ''}" data-status="ALL" style="border-color:var(--border-color);">
+                        📋 Todas (${globalReservations.length})
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'CONFIRMED' ? 'active' : ''}" data-status="CONFIRMED" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);">
+                        ✅ Confirmadas (${confirmedCount})
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'PENDING' ? 'active' : ''}" data-status="PENDING" style="border-color:var(--color-neon-gold); color:var(--color-neon-gold);">
+                        ⏳ Pendientes (${pendingCount})
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'CANCELLED' ? 'active' : ''}" data-status="CANCELLED" style="border-color:var(--color-neon-red); color:var(--color-neon-red);">
+                        🚫 Canceladas (${cancelledCount})
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm super-res-filter-btn ${resFilterStatus === 'REJECTED' ? 'active' : ''}" data-status="REJECTED" style="border-color:#ff4444; color:#ff8888;">
+                        ❌ Rechazadas (${rejectedCount})
+                    </button>
+                </div>
+
+                <!-- Filtros y Búsqueda -->
+                <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; background:var(--bg-dark-800); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+                    <div style="flex:2; min-width:220px;">
+                        <input type="text" id="super-search-res" class="cyber-input" placeholder="🔍 Buscar por cliente, GamerTag, teléfono, folio o motivo..." value="${escapeHTML(resSearchQuery)}" style="padding:8px 12px;">
+                    </div>
+                    <div style="flex:1; min-width:180px;">
+                        <select id="super-filter-biz" class="cyber-select" style="padding:8px 12px;">
+                            <option value="">🏢 Todos los Locales</option>
+                            ${businesses.map(b => `<option value="${b.id}" ${b.id === resFilterBiz ? 'selected' : ''}>${escapeHTML(b.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div style="color:var(--text-muted); font-size:0.85rem;">
+                        Mostrando: <strong style="color:var(--color-neon-lime);">${filtered.length}</strong> de <strong style="color:#ffffff;">${globalReservations.length}</strong>
+                    </div>
+                </div>
+
+                <div class="catalogs-table-wrapper" style="overflow-x:auto;">
+                    <table class="catalogs-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:0.85rem;">
+                        <thead>
+                            <tr style="border-bottom:2px solid var(--border-color); background:rgba(0,0,0,0.4); color:var(--text-muted);">
+                                <th style="padding:10px;">Folio / Estado</th>
+                                <th style="padding:10px;">Local / Sucursal</th>
+                                <th style="padding:10px;">Jugador / Cliente</th>
+                                <th style="padding:10px;">Fecha / Horario</th>
+                                <th style="padding:10px;">Monto</th>
+                                <th style="padding:10px;">Detalles / Auditoría</th>
+                                <th style="padding:10px; text-align:right;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filtered.length === 0 ? `
+                                <tr>
+                                    <td colspan="7" style="text-align:center; padding:32px; color:var(--text-muted); font-style:italic;">
+                                        No se encontraron reservaciones con los filtros seleccionados.
+                                    </td>
+                                </tr>
+                            ` : filtered.map(r => {
+                                const biz = businesses.find(b => b.id === r.businessId);
+                                const isConfirmed = r.status === 'CONFIRMED';
+                                const isPending = r.status === 'PENDING';
+                                const isCancelled = r.status === 'CANCELLED';
+                                const isRejected = r.status === 'REJECTED';
+
+                                let badgeClass = 'badge-warning';
+                                let badgeText = 'Pendiente';
+                                if (isConfirmed) {
+                                    badgeClass = 'badge-success';
+                                    badgeText = 'Confirmada';
+                                } else if (isCancelled) {
+                                    badgeClass = 'badge-danger';
+                                    badgeText = '🚫 Cancelada';
+                                } else if (isRejected) {
+                                    badgeClass = 'badge-danger';
+                                    badgeText = '❌ Rechazada';
+                                }
+
+                                return `
+                                    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                        <td style="padding:10px; white-space:nowrap;">
+                                            <div style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted);">${r.id}</div>
+                                            <span class="badge ${badgeClass}" style="font-size:0.7rem; padding:2px 6px;">${badgeText}</span>
+                                        </td>
+                                        <td style="padding:10px;">
+                                            <strong style="color:var(--piu-cyan);">${biz ? escapeHTML(biz.name) : (r.businessId || 'N/A')}</strong>
+                                        </td>
+                                        <td style="padding:10px;">
+                                            <strong style="color:#ffffff;">${escapeHTML(r.clientName || 'Sin Nombre')}</strong>
+                                            ${r.clientUsername ? `<div style="font-size:0.75rem; color:var(--text-muted);">@${escapeHTML(r.clientUsername)}</div>` : ''}
+                                            ${r.clientPhone ? `<div style="font-size:0.72rem; color:var(--color-neon-lime);">${escapeHTML(r.clientPhone)}</div>` : ''}
+                                        </td>
+                                        <td style="padding:10px; white-space:nowrap;">
+                                            <div>${formatFriendlyDate(r.date)}</div>
+                                            <div style="font-size:0.8rem; color:var(--piu-cyan); font-family:var(--font-mono);">${format12Hour(r.startTime)} - ${format12Hour(r.endTime)}</div>
+                                        </td>
+                                        <td style="padding:10px; font-weight:700; font-family:var(--font-mono); color:var(--color-chartreuse);">
+                                            $${r.totalCost || 0}
+                                        </td>
+                                        <td style="padding:10px; font-size:0.78rem;">
+                                            ${isCancelled ? `
+                                                <div style="color:var(--color-neon-red);"><strong>Motivo:</strong> ${escapeHTML(r.cancellationReason || 'Cancelada')}</div>
+                                                <div style="color:var(--text-muted); font-size:0.72rem;">Por: ${escapeHTML(r.cancelledBy || 'Encargado')} • ${r.cancelledAt ? new Date(r.cancelledAt).toLocaleString() : ''}</div>
+                                            ` : ''}
+                                            ${isRejected ? `
+                                                <div style="color:#ff8888;"><strong>Motivo:</strong> ${escapeHTML(r.rejectionReason || 'Rechazada')}</div>
+                                            ` : ''}
+                                            ${r.adminNotes ? `<div style="color:var(--text-muted); font-style:italic;">Nota: ${escapeHTML(r.adminNotes)}</div>` : ''}
+                                        </td>
+                                        <td style="padding:10px; text-align:right; white-space:nowrap;">
+                                            <div style="display:flex; gap:6px; justify-content:flex-end;">
+                                                <button type="button" class="btn btn-outline btn-xs btn-view-ticket-super" data-id="${r.id}" title="Ver Comprobante">
+                                                    🎟️ Ticket
+                                                </button>
+                                                ${isPending ? `
+                                                    <button type="button" class="btn btn-success btn-xs btn-approve-res-super" data-id="${r.id}">
+                                                        ✔️ Aprobar
+                                                    </button>
+                                                ` : ''}
+                                                <button type="button" class="btn btn-outline btn-xs btn-edit-res-super" data-id="${r.id}" title="${(isCancelled || isRejected) ? '⚡ Revivir / Reprogramar Reservación' : '✏️ Modificar / Reprogramar'}">
+                                                    ${(isCancelled || isRejected) ? '⚡ Revivir' : '✏️'}
+                                                </button>
+                                                <button type="button" class="btn btn-danger btn-xs btn-del-res-super" data-id="${r.id}" title="Anular o soft-cancel">
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
     if (tab === 'BUSINESSES') {
         return `
             <!-- Configuración Global (Solo Superadmin) -->
@@ -406,28 +665,41 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                         <thead>
                             <tr>
                                 <th>Local / Negocio</th>
+                                <th>Estado Operativo</th>
                                 <th>Ubicación</th>
                                 <th>Horarios</th>
                                 <th>Encargado Asignado</th>
                                 <th>Enlace Directo para Clientes</th>
-                                <th>Acciones</th>
+                                <th>Acciones & Módulos</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${businesses.map(b => {
                                 const assignedManager = managers.find(m => m.businessId === b.id);
                                 const clientUrl = `${window.location.origin}/local/${b.id}`;
+                                const isBizActive = b.isActive !== false && b.status !== 'INACTIVE';
+                                const modules = tenantManager.normalizeModules(b.enabledModules);
+                                const enabledCount = Object.values(modules).filter(Boolean).length;
+                                const totalModulesCount = Object.keys(modules).length;
 
                                 return `
-                                    <tr>
+                                    <tr style="${!isBizActive ? 'opacity:0.75; background:rgba(255,184,0,0.03);' : ''}">
                                         <td>
                                             <div style="display:flex; align-items:center; gap:8px;">
                                                 <span style="font-size:1.4rem;">${b.logoIcon || '🕹️'}</span>
                                                 <div>
-                                                    <strong style="color:#ffffff;">${b.name}</strong>
+                                                    <div style="display:flex; align-items:center; gap:6px;">
+                                                        <strong style="color:#ffffff;">${b.name}</strong>
+                                                        ${!isBizActive ? '<span class="badge badge-warning" style="font-size:0.65rem;">⏸️ PAUSADO</span>' : ''}
+                                                    </div>
                                                     <div style="font-size:0.72rem; color:var(--text-muted);">${b.id}</div>
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-xs ${isBizActive ? 'btn-success' : 'btn-outline'} btn-toggle-biz-status" data-id="${b.id}" data-active="${isBizActive}" title="Haz clic para ${isBizActive ? 'pausar' : 'activar'} este local">
+                                                ${isBizActive ? '🟢 Activo' : '⏸️ En Pausa'}
+                                            </button>
                                         </td>
                                         <td>${b.city}</td>
                                         <td><span class="badge badge-dark">${b.openingTime} - ${b.closingTime}</span></td>
@@ -442,20 +714,23 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                                         </td>
                                         <td>
                                             <div style="display:flex; align-items:center; gap:6px;">
-                                                <input type="text" readonly value="${clientUrl}" class="cyber-input" style="font-size:0.75rem; padding:4px 8px; max-width:190px; background:var(--bg-dark-800);">
+                                                <input type="text" readonly value="${clientUrl}" class="cyber-input" style="font-size:0.75rem; padding:4px 8px; max-width:180px; background:var(--bg-dark-800);">
                                                 <button class="btn btn-outline btn-xs btn-copy-link" data-url="${clientUrl}" title="Copiar enlace del cliente">
                                                     📋 Copiar
                                                 </button>
                                             </div>
                                         </td>
                                         <td>
-                                            <div style="display:flex; gap:6px;">
-                                                <button class="btn btn-primary btn-xs btn-enter-biz glow-red" data-id="${b.id}">
+                                            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                                <button class="btn btn-outline btn-xs btn-biz-modules" data-id="${b.id}" style="border-color:var(--piu-cyan); color:var(--piu-cyan);" title="Configurar módulos y funciones habilitadas">
+                                                    🎛️ Funciones (${enabledCount}/${totalModulesCount})
+                                                </button>
+                                                <button class="btn btn-primary btn-xs btn-enter-biz glow-red" data-id="${b.id}" title="Ingresar a la vista de esta sucursal">
                                                     ⚡ Entrar
                                                 </button>
                                                 ${businesses.length > 1 ? `
                                                     <button class="btn btn-danger btn-xs btn-delete-biz-cascade" data-id="${b.id}" title="Eliminar local y todos sus datos en cascada">
-                                                        🗑️ Eliminar
+                                                        🗑️
                                                     </button>
                                                 ` : ''}
                                             </div>
@@ -471,6 +746,9 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
     }
 
     if (tab === 'PLAYERS') {
+        const migratedCount = players.filter(p => p.authUid || p.isAuthMigrated).length;
+        const legacyCount = players.length - migratedCount;
+
         return `
             <div class="settings-card">
                 <div class="card-title-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -481,9 +759,27 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                             <small>Base de datos unificada de jugadores registrados en la plataforma</small>
                         </div>
                     </div>
-                    <button class="btn btn-primary btn-sm glow-red" id="btn-add-global-player">
-                        <span>➕ Registrar Nuevo Jugador</span>
-                    </button>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-primary btn-sm glow-red" id="btn-add-global-player">
+                            <span>➕ Registrar Nuevo Jugador</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Barra de Estado de Migración Progresiva -->
+                <div style="background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:12px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                        <span style="font-size:0.85rem; font-weight:700; color:#fff;">📊 Salud de Cuentas:</span>
+                        <span class="badge" style="background:rgba(104,242,5,0.15); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); font-size:0.8rem; padding:3px 10px;">
+                            🟢 ${migratedCount} Con Auth Activa
+                        </span>
+                        <span class="badge" style="background:rgba(255,184,0,0.15); color:var(--color-neon-gold); border:1px solid rgba(255,184,0,0.3); font-size:0.8rem; padding:3px 10px;">
+                            🟡 ${legacyCount} Perfil Tradicional / PIN
+                        </span>
+                    </div>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">
+                        💡 Los jugadores se vinculan a Firebase Auth automáticamente al iniciar sesión o reservar.
+                    </small>
                 </div>
 
                 <div class="catalogs-table-wrapper">
@@ -491,6 +787,7 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                         <thead>
                             <tr>
                                 <th>Jugador / GamerTag</th>
+                                <th>Estado Auth</th>
                                 <th>Liga (Ligas Potosinas)</th>
                                 <th>Teléfono / WhatsApp</th>
                                 <th>Correo</th>
@@ -502,6 +799,7 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                             ${players.map(p => {
                                 const cleanPhone = (p.phone || '').replace(/\D/g, '');
                                 const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
+                                const isMigrated = Boolean(p.authUid || p.isAuthMigrated);
 
                                 return `
                                     <tr>
@@ -509,22 +807,30 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
                                             <div style="display:flex; align-items:center; gap:8px;">
                                                 <span style="font-size:1.3rem;">${p.avatar || '🕺'}</span>
                                                 <div>
-                                                    <strong style="color:#ffffff;">${p.name}</strong>
-                                                    ${p.username ? `<div style="font-size:0.72rem; color:var(--text-muted);">@${p.username}</div>` : ''}
+                                                    <strong style="color:#ffffff;">${escapeHTML(p.name)}</strong>
+                                                    <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap; margin-top:2px;">
+                                                        ${p.username ? `<span style="font-size:0.72rem; color:var(--text-muted);">@${escapeHTML(p.username)}</span>` : ''}
+                                                        ${p.piuGameId ? `<span class="badge" style="font-size:0.65rem; padding:1px 4px; background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3);">🎮 ${escapeHTML(p.piuGameId)}</span>` : ''}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td><span class="badge badge-primary">${p.skillLevel || 'Liga C'}</span></td>
                                         <td>
-                                            <span>${p.phone || 'N/A'}</span>
+                                            <span class="badge" style="background:${isMigrated ? 'rgba(104,242,5,0.15)' : 'rgba(255,184,0,0.15)'}; color:${isMigrated ? 'var(--color-neon-lime)' : 'var(--color-neon-gold)'}; border:1px solid ${isMigrated ? 'rgba(104,242,5,0.3)' : 'rgba(255,184,0,0.3)'}; font-size:0.7rem; padding:2px 8px;">
+                                                ${isMigrated ? '🟢 Auth Activa' : '🟡 Clásico'}
+                                            </span>
+                                        </td>
+                                        <td><span class="badge badge-primary">${escapeHTML(p.skillLevel || 'Liga C')}</span></td>
+                                        <td>
+                                            <span>${escapeHTML(p.phone || 'N/A')}</span>
                                             ${cleanPhone ? `
                                                 <a href="${waLink}" target="_blank" rel="noopener noreferrer" style="margin-left:6px; color:#25D366; font-size:0.8rem; font-weight:700;">
                                                     💬 WhatsApp
                                                 </a>
                                             ` : ''}
                                         </td>
-                                        <td><span style="font-size:0.82rem; color:var(--text-muted);">${p.email || 'N/A'}</span></td>
-                                        <td><span style="font-size:0.82rem; color:var(--piu-cyan);">${p.preferredMode || 'Single / Double'}</span></td>
+                                        <td><span style="font-size:0.82rem; color:var(--text-muted);">${escapeHTML(p.email || 'N/A')}</span></td>
+                                        <td><span style="font-size:0.82rem; color:var(--piu-cyan);">${escapeHTML(p.preferredMode || 'Single / Double')}</span></td>
                                         <td>
                                             <div style="display:flex; gap:6px;">
                                                 <button class="btn btn-outline btn-xs btn-edit-global-player" data-id="${p.id}">✏️ Editar</button>
@@ -739,16 +1045,16 @@ function renderTabContent(tab, businesses, staffUsers, managers, cabinetModels, 
 
                                 return `
                                     <tr>
-                                        <td><strong>${u.avatar || '👤'} ${u.name}</strong></td>
-                                        <td><code>${u.username}</code></td>
-                                        <td><code style="color:var(--piu-gold); font-weight:700;">${u.pin}</code></td>
+                                        <td><strong>${u.avatar || '👤'} ${escapeHTML(u.name)}</strong></td>
+                                        <td><code>${escapeHTML(u.username)}</code></td>
+                                        <td><code style="color:var(--piu-gold); font-weight:700;">${u.pin ? escapeHTML(u.pin) : '•••• (PIN Hasheado)'}</code></td>
                                         <td>
                                             <span class="badge ${isSuper ? 'badge-danger' : 'badge-warning'}">
                                                 ${isSuper ? '👑 SUPERADMIN' : '🕹️ ENCARGADO'}
                                             </span>
                                         </td>
                                         <td>
-                                            ${isSuper ? '<span class="highlight-cyan">Acceso Global</span>' : (biz ? biz.name : 'Sin asignar')}
+                                            ${isSuper ? '<span class="highlight-cyan">Acceso Global</span>' : (biz ? escapeHTML(biz.name) : 'Sin asignar')}
                                         </td>
                                         <td>
                                             <div style="display:flex; gap:6px;">
@@ -1138,6 +1444,288 @@ function openCreateBusinessModal(container) {
             renderSuperadminView(container);
         } catch (e) {
             toast.error(e.message);
+        }
+    };
+}
+
+/**
+ * Modal de Control de Funciones y Módulos (Feature Toggles) por Sucursal
+ */
+function openBusinessModulesModal(business, container) {
+    const modules = tenantManager.normalizeModules(business.enabledModules);
+    const isBizActive = business.isActive !== false && business.status !== 'INACTIVE';
+
+    const contentHtml = `
+        <div style="display:flex; flex-direction:column; gap:16px;">
+            <!-- Encabezado de la Sucursal -->
+            <div style="background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:14px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:1.8rem;">${business.logoIcon || '🕹️'}</span>
+                    <div>
+                        <strong style="color:#ffffff; font-size:1.1rem; display:block;">${escapeHTML(business.name)}</strong>
+                        <small style="color:var(--text-muted); font-size:0.75rem;">ID: ${business.id} • ${escapeHTML(business.city)}</small>
+                    </div>
+                </div>
+                <div>
+                    <span class="badge ${isBizActive ? 'badge-success' : 'badge-warning'}" style="font-size:0.8rem; padding:4px 10px;">
+                        ${isBizActive ? '🟢 SUCURSAL ACTIVA' : '⏸️ SUCURSAL PAUSADA'}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Barra de Presets Rápidos -->
+            <div style="background:var(--bg-dark-900); border:1px dashed var(--border-color); border-radius:var(--radius-md); padding:10px 14px;">
+                <div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px; letter-spacing:1px;">
+                    ⚡ Perfiles Preconfigurados (Presets):
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline btn-xs" id="preset-all" style="border-color:var(--color-neon-lime); color:var(--color-neon-lime);">
+                        ⚡ Modo Completo (Todo Activo)
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" id="preset-basic" style="border-color:var(--piu-cyan); color:var(--piu-cyan);">
+                        🕹️ Básico Arcade (Reservas + Ficha)
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" id="preset-nofiad" style="border-color:var(--color-neon-gold); color:var(--color-neon-gold);">
+                        🔒 Estricto (Sin Cuenta Fácil / Fiados)
+                    </button>
+                </div>
+            </div>
+
+            <form id="form-biz-modules" class="cyber-form" style="display:flex; flex-direction:column; gap:18px;">
+                <!-- GRUPO 1: OPERACIÓN, CAJA Y MOSTRADOR -->
+                <div>
+                    <div style="font-size:0.82rem; font-weight:800; color:var(--piu-cyan); text-transform:uppercase; letter-spacing:1.5px; border-bottom:1px solid rgba(0,229,255,0.2); padding-bottom:4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span>💰</span> OPERACIÓN, CAJA Y MOSTRADOR
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-accounts" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.accounts ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <strong style="color:#ffffff; font-size:0.9rem;">💳 Cuenta Fácil & Caja Rápida (POS)</strong>
+                                </div>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Terminal de cobro en mostrador, cuentas corrientes por cobrar (fiado), abonos y desglose de caja.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-catalogs" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.catalogs ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">🛍️ Catálogos en Sala & Productos</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Inventario de snacks, refrescos, fichas y accesorios a la venta para cobro rápido.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-requests" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.requests ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">📥 Bandeja de Solicitudes</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Bandeja de entrada para que el encargado apruebe, modifique o rechace reservaciones de clientes.
+                                </small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- GRUPO 2: COMUNIDAD, LEALTAD Y CLIENTES -->
+                <div>
+                    <div style="font-size:0.82rem; font-weight:800; color:var(--color-neon-lime); text-transform:uppercase; letter-spacing:1.5px; border-bottom:1px solid rgba(104,242,5,0.2); padding-bottom:4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span>👥</span> COMUNIDAD, LEALTAD Y CLIENTES
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-clients" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.clients ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">👥 Directorio de Jugadores</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Listado de jugadores registrados, búsqueda predictiva por PIU ID y escáner de credencial QR.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-loyalty" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.loyalty ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">🎁 Programa de Lealtad y Recompensas</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Tiers de lealtad (Bronce, Plata, Oro, Platino), acumulación de puntos por visita y canje de premios.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-myProfile" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.myProfile ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">👤 Portal Mi Perfil (Gamer Pass)</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Portal de autogestión para que los jugadores consulten su tarjeta QR, historial y saldo personal.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-versus" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.versus !== false ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">⚔️ Arena Versus & Retas PVP</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Matchmaking de rivales, negociación de horarios/locales y rankings competitivos por Liga Potosina.
+                                </small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- GRUPO 3: VISTAS Y CALENDARIOS -->
+                <div>
+                    <div style="font-size:0.82rem; font-weight:800; color:var(--color-neon-gold); text-transform:uppercase; letter-spacing:1.5px; border-bottom:1px solid rgba(255,184,0,0.2); padding-bottom:4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span>📅</span> VISTAS DE CALENDARIO Y MÁQUINAS
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-calendarWeek" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.calendarWeek ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">📊 Vista Semanal</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Cuadrícula de ocupación para consultar la disponibilidad de los próximos 7 días.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-calendarMonth" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.calendarMonth ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">🗓️ Vista Mensual</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Calendario mensual con contador de turnos y eventos por fecha.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-machines" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.machines ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">🕹️ Ficha Técnica de Máquinas</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Catálogo público con las especificaciones de gabinetes, versiones y estado de sensores FSR.
+                                </small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- GRUPO 4: ADMINISTRACIÓN LOCAL & REPORTES -->
+                <div>
+                    <div style="font-size:0.82rem; font-weight:800; color:var(--color-neon-purple); text-transform:uppercase; letter-spacing:1.5px; border-bottom:1px solid rgba(157,78,221,0.2); padding-bottom:4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span>⚙️</span> ADMINISTRACIÓN LOCAL & REPORTES
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-analytics" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.analytics ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">📈 Rendimiento & Métricas Financieras</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Métricas de ingresos, horas jugadas, ocupación, gráficas Chart.js y comisiones a socios.
+                                </small>
+                            </div>
+                        </label>
+
+                        <label style="display:flex; align-items:flex-start; gap:12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; cursor:pointer;">
+                            <input type="checkbox" id="mod-business" style="width:18px; height:18px; accent-color:var(--color-neon-lime); margin-top:2px; cursor:pointer;" ${modules.business ? 'checked' : ''}>
+                            <div style="flex:1;">
+                                <strong style="color:#ffffff; font-size:0.9rem;">⚙️ Ajustes de Sucursal (Por Encargado)</strong>
+                                <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:2px;">
+                                    Permite al personal de mostrador editar horarios de apertura, porcentaje de anticipo y reglas locales.
+                                </small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </form>
+        </div>
+    `;
+
+    const footerHtml = `
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <button type="button" class="btn btn-secondary" id="btn-cancel-mod">Cancelar</button>
+            <button type="button" class="btn btn-primary glow-red" id="btn-save-mod">
+                💾 Guardar Configuración de Funciones
+            </button>
+        </div>
+    `;
+
+    const modalEl = modal.open({
+        title: `Configurar Funciones: ${business.name}`,
+        icon: '🎛️',
+        contentHtml,
+        footerHtml,
+        maxWidth: '680px'
+    });
+
+    // Eventos de Presets
+    const setAllCheckboxes = (valMap) => {
+        for (const [key, isChecked] of Object.entries(valMap)) {
+            const cb = modalEl.querySelector(`#mod-${key}`);
+            if (cb) cb.checked = isChecked;
+        }
+    };
+
+    modalEl.querySelector('#preset-all')?.addEventListener('click', () => {
+        setAllCheckboxes({
+            accounts: true, clients: true, loyalty: true, requests: true,
+            analytics: true, business: true, catalogs: true, calendarWeek: true,
+            calendarMonth: true, machines: true, myProfile: true, versus: true
+        });
+        toast.info("Preset aplicado: Todas las funciones activadas.");
+    });
+
+    modalEl.querySelector('#preset-basic')?.addEventListener('click', () => {
+        setAllCheckboxes({
+            accounts: false, clients: true, loyalty: false, requests: true,
+            analytics: false, business: false, catalogs: false, calendarWeek: true,
+            calendarMonth: false, machines: true, myProfile: false, versus: true
+        });
+        toast.info("Preset aplicado: Modo Básico Arcade.");
+    });
+
+    modalEl.querySelector('#preset-nofiad')?.addEventListener('click', () => {
+        setAllCheckboxes({
+            accounts: false, clients: true, loyalty: true, requests: true,
+            analytics: true, business: true, catalogs: true, calendarWeek: true,
+            calendarMonth: true, machines: true, myProfile: true, versus: true
+        });
+        toast.info("Preset aplicado: Modo Estricto (Sin Cuenta Fácil).");
+    });
+
+    modalEl.querySelector('#btn-cancel-mod').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-mod').onclick = async () => {
+        const updatedModules = {
+            accounts: modalEl.querySelector('#mod-accounts')?.checked ?? true,
+            catalogs: modalEl.querySelector('#mod-catalogs')?.checked ?? true,
+            requests: modalEl.querySelector('#mod-requests')?.checked ?? true,
+            clients: modalEl.querySelector('#mod-clients')?.checked ?? true,
+            loyalty: modalEl.querySelector('#mod-loyalty')?.checked ?? true,
+            myProfile: modalEl.querySelector('#mod-myProfile')?.checked ?? true,
+            versus: modalEl.querySelector('#mod-versus')?.checked ?? true,
+            calendarWeek: modalEl.querySelector('#mod-calendarWeek')?.checked ?? true,
+            calendarMonth: modalEl.querySelector('#mod-calendarMonth')?.checked ?? true,
+            machines: modalEl.querySelector('#mod-machines')?.checked ?? true,
+            analytics: modalEl.querySelector('#mod-analytics')?.checked ?? true,
+            business: modalEl.querySelector('#mod-business')?.checked ?? true
+        };
+
+        try {
+            await tenantManager.updateBusinessModules(business.id, updatedModules);
+            toast.success(`Funciones de "${business.name}" actualizadas exitosamente.`);
+            modal.close();
+            renderSuperadminView(container);
+        } catch (e) {
+            toast.error(e.message || "Error al actualizar módulos.");
         }
     };
 }

@@ -244,6 +244,10 @@ export async function renderClientProfileView(container) {
                                 <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas Jugadas</span>
                                 <strong style="font-size:1.3rem; color:#ffffff;">${totalHours}h</strong>
                             </div>
+                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid rgba(255,0,85,0.3); text-align:center; cursor:pointer;" id="btn-profile-pvp-stat" title="Ver Arena Versus">
+                                <span style="font-size:0.75rem; color:var(--color-neon-pink); display:block; font-weight:bold;">⚔️ Récord PVP</span>
+                                <strong style="font-size:1.3rem; color:#ffffff;">${currentUser.versusStats?.wins || 0}V - ${currentUser.versusStats?.losses || 0}D</strong>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -262,6 +266,9 @@ export async function renderClientProfileView(container) {
                         <span>🎁 Lealtad y Premios</span>
                     </button>
                 ` : ''}
+                <button class="btn btn-sm btn-outline" id="btn-profile-versus" style="flex:1; max-width:180px; border-color:var(--color-neon-pink); color:var(--color-neon-pink); font-weight:bold;" title="Ir a la Arena Versus y Retas">
+                    <span>⚔️ Arena Versus</span>
+                </button>
                 <button class="btn btn-sm btn-outline btn-profile-tab" data-tab="tab-edit-profile" style="flex:1; max-width:200px;">
                     <span>⚙️ Administrar Perfil</span>
                 </button>
@@ -323,9 +330,20 @@ export async function renderClientProfileView(container) {
                                             🎟️ Ver Comprobante
                                         </button>
                                         ${isCancellable ? `
-                                            <button class="btn btn-danger btn-xs btn-cancel-res" data-res-id="${r.id}" title="Cancelar esta reservación">
-                                                ❌ Cancelar
-                                            </button>
+                                            ${(business && business.allowClientCancellation === false) ? `
+                                                <button class="btn btn-warning btn-xs btn-request-cancel-msg" 
+                                                    data-res-id="${r.id}" 
+                                                    data-res-date="${escapeHTML(friendlyDate)}" 
+                                                    data-res-time="${escapeHTML(timeFormatted)}" 
+                                                    data-machine-name="${escapeHTML(machine ? machine.name : 'Máquina')}"
+                                                    title="Solicitar cancelación al encargado por mensaje">
+                                                    💬 Cancelar (Vía Mensaje)
+                                                </button>
+                                            ` : `
+                                                <button class="btn btn-danger btn-xs btn-cancel-res" data-res-id="${r.id}" title="Cancelar esta reservación">
+                                                    ❌ Cancelar
+                                                </button>
+                                            `}
                                         ` : ''}
                                     </div>
                                 </div>
@@ -614,13 +632,18 @@ export async function renderClientProfileView(container) {
                         <div class="form-row grid-2">
                             <div class="form-group">
                                 <label for="edit-email"><span class="neon-arrow">◆</span> Correo Electrónico</label>
-                                <input type="email" id="edit-email" class="cyber-input" value="${currentUser.email || ''}" placeholder="jugador@correo.com">
+                                <input type="email" id="edit-email" class="cyber-input" value="${escapeHTML(currentUser.email || '')}" placeholder="jugador@correo.com">
                             </div>
                             <div class="form-group">
-                                <label for="edit-pin"><span class="neon-arrow">◆</span> Cambiar PIN de Acceso (Opcional)</label>
-                                <input type="password" id="edit-pin" class="cyber-input" value="" maxlength="6" placeholder="Dejar vacío para conservar el actual">
-                                <small style="color:var(--text-muted); font-size:0.75rem;">Ingresa 4 a 6 dígitos solo si deseas cambiar tu clave de acceso.</small>
+                                <label for="edit-piu-id"><span class="neon-arrow">◆</span> PIU ID Oficial (piugame.com)</label>
+                                <input type="text" id="edit-piu-id" class="cyber-input" value="${escapeHTML(currentUser.piuGameId || '')}" placeholder="Ej. megajefelink#1234">
                             </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit-pin"><span class="neon-arrow">◆</span> Cambiar PIN de Acceso (Opcional)</label>
+                            <input type="password" id="edit-pin" class="cyber-input" value="" maxlength="6" placeholder="Dejar vacío para conservar el actual">
+                            <small style="color:var(--text-muted); font-size:0.75rem;">Ingresa 4 a 6 dígitos solo si deseas cambiar tu clave de acceso.</small>
                         </div>
 
                         <div class="form-row grid-2">
@@ -681,7 +704,8 @@ export async function renderClientProfileView(container) {
                         
                         <div style="text-align: left; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 6px; border-left: 3px solid ${currentTier.color}; border: 1px solid var(--border-color); border-left: 3px solid ${currentTier.color};">
                             <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight:700; letter-spacing:1px;">GamerTag</div>
-                            <strong style="font-size: 1.15rem; color: #ffffff;">@${currentUser.username || 'gamertag'}</strong>
+                            <strong style="font-size: 1.15rem; color: #ffffff;">@${escapeHTML(currentUser.username || 'gamertag')}</strong>
+                            ${currentUser.piuGameId ? `<div style="margin-top:2px;"><span class="badge" style="background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3); font-size:0.72rem;">🎮 ${escapeHTML(currentUser.piuGameId)}</span></div>` : ''}
                             
                             <div style="display: flex; justify-content: space-between; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
                                 <div>
@@ -724,6 +748,14 @@ export async function renderClientProfileView(container) {
         });
     });
 
+    // Evento para ir a Arena Versus
+    container.querySelector('#btn-profile-pvp-stat')?.addEventListener('click', () => {
+        store.setCurrentView('VERSUS');
+    });
+    container.querySelector('#btn-profile-versus')?.addEventListener('click', () => {
+        store.setCurrentView('VERSUS');
+    });
+
     // Selector de avatar
     container.querySelectorAll('.avatar-opt').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -740,6 +772,7 @@ export async function renderClientProfileView(container) {
         const name = container.querySelector('#edit-name').value.trim();
         const phone = container.querySelector('#edit-phone').value.trim();
         const email = container.querySelector('#edit-email').value.trim();
+        const piuGameId = container.querySelector('#edit-piu-id')?.value.trim() || '';
         const pin = container.querySelector('#edit-pin').value.trim();
         const skillLevel = container.querySelector('#edit-level').value;
         const preferredMode = container.querySelector('#edit-mode').value.trim();
@@ -752,7 +785,7 @@ export async function renderClientProfileView(container) {
         }
 
         const updatePayload = {
-            name, phone, email, skillLevel, preferredMode, notes, avatar
+            name, phone, email, piuGameId, skillLevel, preferredMode, notes, avatar
         };
 
         if (pin) {
@@ -789,7 +822,7 @@ export async function renderClientProfileView(container) {
         });
     });
 
-    // Cancelar reservación
+    // Cancelar reservación (cuando está permitido de forma directa)
     container.querySelectorAll('.btn-cancel-res').forEach(btn => {
         btn.addEventListener('click', async () => {
             const resId = btn.dataset.resId;
@@ -802,6 +835,54 @@ export async function renderClientProfileView(container) {
                     toast.error(err.message || "No se pudo cancelar la reservación.");
                 }
             }
+        });
+    });
+
+    // Solicitar cancelación al locatario por mensaje (cuando la sucursal bloquea cancelación directa)
+    container.querySelectorAll('.btn-request-cancel-msg').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const resId = btn.dataset.resId;
+            const machName = btn.dataset.machineName || 'Máquina';
+            const resDate = btn.dataset.resDate || '';
+            const resTime = btn.dataset.resTime || '';
+            
+            const rawPhone = (business?.phone || business?.whatsapp || '').replace(/\D/g, '');
+            const waNumber = rawPhone.length === 10 ? `52${rawPhone}` : rawPhone;
+            const msgText = encodeURIComponent(`Hola, solicito cancelar mi reservación en ${business?.name || 'la sucursal'}.\nFolio: ${resId}\nMáquina: ${machName}\nFecha: ${resDate}\nHorario: ${resTime}\nCliente: ${currentUser.name || currentUser.username}`);
+            const waUrl = waNumber ? `https://wa.me/${waNumber}?text=${msgText}` : null;
+
+            modal.open({
+                title: 'Solicitar Cancelación al Encargado',
+                icon: '💬',
+                contentHtml: `
+                    <div style="padding:10px 4px; text-align:left;">
+                        <p style="margin-bottom:12px; font-size:0.92rem; line-height:1.5;">
+                            En <strong>${escapeHTML(business?.name || 'esta sucursal')}</strong>, las reservaciones no pueden cancelarse directamente desde el portal.
+                        </p>
+                        <div style="background:var(--bg-dark-700); border:1px solid var(--border-color); border-radius:6px; padding:12px; margin-bottom:16px;">
+                            <div style="font-size:0.85rem; margin-bottom:4px;"><strong>Máquina:</strong> ${escapeHTML(machName)}</div>
+                            <div style="font-size:0.85rem; margin-bottom:4px;"><strong>Fecha y Hora:</strong> ${escapeHTML(resDate)} (${escapeHTML(resTime)})</div>
+                            <div style="font-size:0.85rem; color:var(--text-muted);"><strong>Folio:</strong> <code>${escapeHTML(resId)}</code></div>
+                        </div>
+                        <p style="font-size:0.88rem; color:var(--text-secondary); margin-bottom:16px;">
+                            Para cancelar o reprogramar, debes acordarlo directamente enviando un mensaje al encargado de la sucursal:
+                        </p>
+                        ${waUrl ? `
+                            <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-success glow-green" style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; text-decoration:none; padding:12px; font-weight:700;">
+                                <span>📲 Enviar WhatsApp al Encargado</span>
+                            </a>
+                        ` : `
+                            <div style="background:rgba(255,184,0,0.15); border:1px solid rgba(255,184,0,0.3); padding:10px; border-radius:4px; font-size:0.85rem; color:var(--color-neon-gold);">
+                                📞 Teléfono de contacto de la sucursal: <strong>${escapeHTML(business?.phone || 'No registrado')}</strong>
+                            </div>
+                        `}
+                    </div>
+                `,
+                footerHtml: `<button type="button" class="btn btn-secondary" id="btn-close-cancel-info">Entendido / Cerrar</button>`,
+                maxWidth: '460px'
+            });
+
+            document.getElementById('btn-close-cancel-info')?.addEventListener('click', () => modal.close());
         });
     });
 

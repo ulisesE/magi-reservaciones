@@ -4,10 +4,152 @@ import { modal } from './modal.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.7.3',
+        date: '18 de Septiembre de 2026',
+        badge: '⚡ Versión Actual (Políticas, Bloqueos & Mobile)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🚫 Control de Cancelaciones y Bloqueo de Jugadores',
+                icon: '🛡️',
+                items: [
+                    'Política de cancelación configurable por local: opción para desactivar cancelaciones autónomas de clientes y canalizarlas por WhatsApp.',
+                    'Bloqueo granular de jugadores sancionados por sucursal con validación en tiempo real al agendar.',
+                    'Directorio de bloqueados con motivo y fecha en el panel de configuración del negocio.',
+                    'Botones arcade cyberpunk de Bloquear y Desbloquear con estilo neón y gradientes interactivos.'
+                ]
+            },
+            {
+                title: '🗑️ Eliminación Permanente de Reservaciones',
+                icon: '⚡',
+                items: [
+                    'Borrado definitivo mediante deleteDoc en Firestore en Vista Día y Solicitudes.',
+                    'Limpieza fidedigna del historial para que las reservas eliminadas no reaparezcan en balances ni reportes.'
+                ]
+            },
+            {
+                title: '📱 Experiencia Móvil Optimizada (394 × 853 px)',
+                icon: '📱',
+                items: [
+                    'Menú de usuario flotante con z-index alto que no altera la altura de la cabecera al abrirse.',
+                    'Calendario de mes 100% responsivo con las 7 columnas completas de lunes a domingo sin desbordamiento.',
+                    'Botón superior "Reservar" navega de forma directa y fluida a la Vista Día.',
+                    'Alineación horizontal perfecta de la cabecera restaurada para pantallas de escritorio.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.7.2',
+        date: '03 de Septiembre de 2026',
+        badge: 'Estable (Feature Toggles)',
+        isCurrent: false,
+        highlights: [
+            {
+                title: '🎛️ Control de Funciones por Sucursal (Feature Toggles)',
+                icon: '🎛️',
+                items: [
+                    'Módulo maestro para Superadministradores para activar/desactivar funciones por sucursal con 1 clic.',
+                    'Control independiente de Cuenta Fácil (POS), Directorio de Jugadores, Lealtad, Catálogos en Sala, Solicitudes, Analítica, Calendarios, Máquinas y Portal Mi Perfil.',
+                    'Perfiles preconfigurados (Presets): Modo Completo, Básico Arcade y Modo Estricto (sin fiados).',
+                    'Navegación dinámica y Router Guards reactivos que adaptan la interfaz de clientes y staff en tiempo real.'
+                ]
+            },
+            {
+                title: '⏸️ Pausa y Activación Operativa de Locales',
+                icon: '🏢',
+                items: [
+                    'Interruptor de estado operativo (🟢 Activo / ⏸️ En Pausa) en el panel de administración central.',
+                    'Pantalla arcade protectora que informa a los clientes si la sucursal está en mantenimiento, impidiendo nuevas reservas.',
+                    'Bypass administrativo total: los Superadministradores siempre pueden acceder y reconfigurar cualquier sucursal.'
+                ]
+            },
+            {
+                title: '🛡️ 100% Retrocompatible y Safe Defaults',
+                icon: '🔒',
+                items: [
+                    'Resolución segura de valores por defecto: sucursales existentes conservan todas sus funciones activas sin romper configuraciones.',
+                    'Suite de pruebas financieras (E1 - E7) blindada y validada al 100%.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.7.1',
+        date: '02 de Septiembre de 2026',
+        badge: 'Estable (Hotfixes)',
+        isCurrent: false,
+        highlights: [
+            {
+                title: '🎮 Soporte Oficial de PIU ID (piugame.com)',
+                icon: '🎮',
+                items: [
+                    'Nuevo campo de PIU ID oficial con soporte para formatos con discriminador (ej. megajefelink#1234).',
+                    'Búsqueda predictiva con puntuación de máxima relevancia en Cuenta Fácil (POS), Directorio y Reservaciones.',
+                    'Insignias visuales de PIU ID en tarjetas Gamer Pass, membresía digital QR Pass y panel de Superadmin.',
+                    'Inicio de sesión flexible mediante GamerTag, PIU ID oficial o teléfono registrado.'
+                ]
+            },
+            {
+                title: '🧹 Aislamiento Estricto, Protección XSS & Purga de Seguridad',
+                icon: '🛡️',
+                items: [
+                    'Aislamiento 100% verificado en colecciones dedicadas piu_players y piu_staff_users.',
+                    'Sanitización integral con escapeHTML en todos los atributos data-id, nombres y tablas para neutralizar inyecciones de código.',
+                    'Auto-purga reactiva y botón manual 🧹 Purgar XSS para eliminar permanentemente registros residuales maliciosos.',
+                    'Sincronización atómica de caché local sin riesgo de resurrección de perfiles eliminados.'
+                ]
+            },
+            {
+                title: '⚡ Fix en Creación Atómica de Reservaciones',
+                icon: '⚙️',
+                items: [
+                    'Corrección de importación de Firebase Auth en store.js para garantizar auditoría inmutable sin excepciones.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.7.0',
+        date: '01 de Septiembre de 2026',
+        badge: 'Estable',
+        isCurrent: false,
+        highlights: [
+            {
+                title: '🔒 Blindaje y Confiabilidad Financiera (Los 11 Pilares)',
+                icon: '🛡️',
+                items: [
+                    'Operaciones financieras y de auditoría atómicas mediante runTransaction() en Firestore.',
+                    'Autoridad del precio en servidor: cálculo dinámico y validación de tarifas directamente en Firestore.',
+                    'Idempotencia determinista sin Date.now() para prevenir dobles cobros y reservaciones duplicadas.',
+                    'Acreditación y reversión atómica de puntos de lealtad ligada al estado confirmado del documento.',
+                    'Cero borrado físico de transacciones financieras y reservaciones (anulación formal y soft-cancel).'
+                ]
+            },
+            {
+                title: '📜 Auditoría y Trazabilidad Inmutable (piu_audit_logs)',
+                icon: '📋',
+                items: [
+                    'Bitácora inmutable de eventos financieros, cambios de personal, precios y configuraciones críticas.',
+                    'Actor anclado criptográficamente al UID de Firebase Auth.',
+                    'Nuevo panel visual de auditoría y trazabilidad en tiempo real dentro de la pestaña Rendimiento.'
+                ]
+            },
+            {
+                title: '👤 Soporte Seguro de Reservaciones para Invitados (Guests)',
+                icon: '🎟️',
+                items: [
+                    'Creación pública de solicitudes sin cuenta con validación perimetral estricta de esquema y estado PENDING obligatorio.',
+                    'Aislamiento estricto de calendarios: escritura restringida exclusivamente al personal del local.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.6.0',
         date: '01 de Septiembre de 2026',
-        badge: '🚀 Versión Actual',
-        isCurrent: true,
+        badge: 'Estable',
+        isCurrent: false,
         highlights: [
             {
                 title: '💳 Módulo y Pantalla Dedicada: Cuenta Fácil & Caja',
@@ -173,7 +315,7 @@ export function openChangelogModal() {
 
     const footerHtml = `
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.5.0</small>
+            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.3</small>
             <button type="button" class="btn btn-primary" id="btn-close-changelog">
                 <span>Entendido</span>
             </button>

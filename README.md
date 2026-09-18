@@ -4,7 +4,65 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## Funcionalidades recientes y optimizaciones (v1.6.0)
+## Novedades Recientes (v1.7.3 - Políticas de Sucursal, Bloqueos & Mobile 394px)
+
+### 🚫 Políticas de Cancelación y Bloqueo por Sucursal
+* **Cancelaciones de Clientes Personalizables**: Los locatarios pueden activar o desactivar la cancelación autónoma de reservaciones por parte del cliente. Al desactivarse, el sistema orienta al cliente a coordinar su cancelación directamente con la sucursal vía WhatsApp.
+* **Bloqueo Granular de Jugadores**: Los encargados pueden bloquear clientes no deseados para impedirles reservar en su sucursal, con registro de motivo, fecha y desbloqueo en 1 clic.
+* **Estética Cyberpunk Arcade**: Botones de Bloqueo/Desbloqueo rediseñados (`.btn-cyber-block` y `.btn-cyber-unblock`) con fondos translúcidos neón y animaciones hover fluidas, eliminando botones blancos por defecto.
+
+### ⚡ Eliminación Permanente de Reservaciones (Hard Delete)
+* **Borrado Definitivo**: Eliminación física en Firestore con `deleteDoc()` de reservas canceladas o rechazadas para limpiar reportes de ocupación y contabilidad.
+
+### 📱 Optimización Móvil Estricta (394 × 853 px) y Navegación
+* **Menú de Usuario Flotante**: Apertura del perfil sin afectar el flujo del DOM ni estirar la altura de la cabecera.
+* **Navegación Rápida "Reservar"**: El botón superior `➕ Reservar` navega al Calendario de Día en lugar de abrir el modal emergente.
+* **Calendario de Mes Adaptable**: Las 7 columnas (`Dom`-`Sáb`) encajan con precisión al 100% en pantallas móviles sin cortes laterales ni scroll horizontal indeseado.
+* **Alineación Restaurada en Escritorio**: Header en una única línea horizontal equilibrada en resoluciones estándar y panorámicas.
+
+---
+
+## Funcionalidades Anteriores (v1.7.2 - Feature Toggles & Control Operativo)
+* **Módulo de Feature Toggles**: Activación/desactivación granular de módulos por sucursal desde la consola del Superadministrador.
+* **Pausa Operativa de Locales**: Pausa y reactivación de sucursales con pantalla protectora de mantenimiento para usuarios.
+
+---
+
+## Funcionalidades Anteriores (v1.7.1 - Hotfixes & PIU ID Integration)
+
+### 🎮 Soporte Oficial de PIU ID (`piugame.com`)
+* **Identificador Oficial de Juego**: Campo dedicado para PIU ID con discriminador numérico (ej. `megajefelink#1234`).
+* **Búsqueda Inteligente de Alta Relevancia**: Búsqueda inmediata en *Cuenta Fácil (POS)*, *Directorio de Jugadores* y *Reservaciones* por tag (`#1234` o `megajefelink#1234`).
+* **Insignias Visuales & Login Flexible**: Badges distintivos `🎮 PIU ID` en perfiles, tarjeta QR Pass y tabla de Superadmin; login directo por GamerTag, PIU ID o teléfono + PIN.
+
+### 🛡️ Aislamiento Estricto, Protección XSS & Purga de Seguridad
+* **Aislamiento Total**: Desconexión absoluta de colecciones externas (`users`), restringiendo el 100% de la operación a los catálogos dedicados `piu_players` y `piu_staff_users`.
+* **Sanitización HTML Integral**: Uso de `escapeHTML()` en todos los atributos `data-id`, títulos, tablas y modales para prevenir inyecciones de código.
+* **Auto-Purga y Herramienta Manual**: Limpieza automática y botón `🧹 Purgar XSS` en el Directorio para eliminar registros corruptos o residuales de Firebase.
+* **Fix de Creación Atómica**: Corrección de importación de Firebase Auth en `store.js` garantizando transacciones y auditorías sin errores de referencia.
+
+---
+
+## Funcionalidades Anteriores (v1.7.0)
+
+### 🔒 Blindaje Financiero, Idempotencia y Transaccionalidad Atómica (Los 11 Pilares de MAGI)
+* **Transacciones Atómicas Integrales**: Toda operación monetaria (ventas, abonos, anulaciones, reservaciones) opera exclusivamente dentro de `runTransaction()` en Firestore.
+* **Autoridad del Precio en Servidor**: El cliente jamás decide el importe de una reservación; la transacción consulta directamente la máquina y tarifas del negocio en Firestore para calcular el costo verificado.
+* **Idempotencia Determinista**: Claves e IDs de transacción basados en tuplas semánticas inmutables sin `Date.now()`, previniendo dobles cobros y reservaciones duplicadas por clics concurrentes.
+* **Cero Borrado Físico Financiero**: Reemplazo de borrados por anulaciones formales (`VOIDED`) y cancelaciones soft-delete preservando la trazabilidad contable.
+* **Sincronía Atómica de Lealtad**: Acreditación y reversión de puntos y visitas calculada estrictamente a partir del estado confirmado en Firestore.
+
+### 📜 Auditoría Inmutable y Trazabilidad en Tiempo Real (`piu_audit_logs`)
+* **Bitácora Inmutable en Firestore**: Registro automático de eventos financieros, cambios de personal, precios y configuraciones críticas con actor validado contra `request.auth.uid`.
+* **Panel de Auditoría Visual**: Nueva tabla interactiva en la pestaña **Rendimiento** para visualizar cronológicamente cada acción, responsable e importe.
+
+### 👤 Soporte Perimetral para Reservaciones de Invitados (Guests)
+* **Flujo Seguro sin Cuenta**: Creación pública de solicitudes anónimas con validación perimetral estricta de esquema y estado `PENDING` obligatorio.
+* **Cierre de Calendarios**: Modificación de `piu_machine_schedules` restringida exclusivamente a Superadmin y Staff de la sucursal.
+
+---
+
+## Funcionalidades de Versiones Anteriores (v1.6.0)
 
 ### 💳 Módulo "Cuenta Fácil" & Flujo de Caja
 * **KPIs de Caja en Tiempo Real**: 💰 *Por Cobrar General* (deuda acumulada de la sala), 👥 *Clientes Deudores* (conteo de cuentas con adeudo) y 🛒 *Total Venta Fiada* (monto histórico de fiados).

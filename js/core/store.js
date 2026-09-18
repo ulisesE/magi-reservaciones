@@ -2,6 +2,7 @@
 // Almacén reactivo de datos (Máquinas, Reservaciones, Configuración) con sincronización Firebase y fallback LocalStorage
 import { 
     db, 
+    auth,
     isFirebaseAvailable, 
     COLLECTIONS, 
     collection, 
@@ -21,6 +22,8 @@ import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
 import { formatDateKey, isOverlapping, getBusinessHoursForDate, calculateBookingCost } from './timeUtils.js';
 import { loyaltyManager } from './loyaltyManager.js';
+import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
+import { handleAppError, assertFinancialOnline } from './errorHandler.js';
 
 function findReservationConflict(reservations, machineId, date, startTime, endTime, excludeReservationId = null) {
     const business = tenantManager.getActiveBusiness();
@@ -233,6 +236,7 @@ class Store {
         this.selectedDate = formatDateKey(new Date());
         this.currentView = 'DAY'; // 'DAY', 'WEEK', 'MONTH', 'MACHINES', 'REQUESTS', 'BUSINESS', 'SUPERADMIN'
         this.listeners = [];
+        this.processedReservationKeys = new Set();
         this.unsubscribeReservations = null;
         this.unsubscribePendingReservations = null;
         this.unsubscribeMachines = null;
@@ -282,8 +286,10 @@ class Store {
                 const machSnap = await getDocs(machQuery);
                 machSnap.forEach(d => loadedMachines.push({ id: d.id, ...d.data() }));
 
-                // Inicialmente cargamos solo las reservas de hoy para no traer todo el histórico
-                const todayStr = new Date().toISOString().split('T')[0];
+                // Inicialmente cargamos las reservas de la fecha seleccionada/hoy usando la zona horaria local
+                const todayStr = this.selectedDate || formatDateKey(new Date());
+                this.currentSubscriptionRange = { start: todayStr, end: todayStr };
+
                 const resQuery = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
                     where("businessId", "==", bizId),
@@ -425,11 +431,11 @@ class Store {
         let loaded = [];
         if (isFirebaseAvailable && db) {
             try {
-                // Cargar hasta 150 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
+                // Cargar hasta 250 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
                 const q = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
                     where("businessId", "==", bizId),
-                    limit(150)
+                    limit(250)
                 );
                 const snap = await getDocs(q);
                 snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
@@ -437,15 +443,38 @@ class Store {
                 console.warn("Error cargando bandeja de reservas de Firestore, usando local:", err);
             }
         }
+
+        // Fusionar con reservaciones en memoria local
+        if (this.reservations && this.reservations.length > 0) {
+            this.reservations.forEach(r => {
+                if (r.businessId === bizId && !loaded.some(item => item.id === r.id)) {
+                    loaded.push(r);
+                }
+            });
+        }
         
-        if (loaded.length === 0) {
-            loaded = [...this.reservations];
+        // Fusionar con caché de LocalStorage
+        try {
+            const localData = localStorage.getItem(`piu_reservations_${bizId}`);
+            if (localData) {
+                const parsed = JSON.parse(localData);
+                parsed.forEach(r => {
+                    if (!loaded.some(item => item.id === r.id)) {
+                        loaded.push(r);
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn("Error fusionando localStorage en bandeja:", e);
         }
 
         // Asegurar que las pendientes del listener en tiempo real estén incluidas
         if (this.pendingReservations && this.pendingReservations.length > 0) {
             this.pendingReservations.forEach(p => {
-                if (!loaded.some(item => item.id === p.id)) {
+                const existingIdx = loaded.findIndex(item => item.id === p.id);
+                if (existingIdx !== -1) {
+                    loaded[existingIdx] = p;
+                } else {
                     loaded.push(p);
                 }
             });
@@ -455,31 +484,43 @@ class Store {
         return loaded;
     }
 
-    getReservations() {
-        return [...this.reservations, ...this.pendingReservations];
-    }
-
     async syncMachinesToFirebase(machines) {
         if (!isFirebaseAvailable || !db) return;
         for (const m of machines) {
-            try { await setDoc(doc(db, COLLECTIONS.MACHINES, m.id), m); } catch (e) {}
+            try { 
+                await setDoc(doc(db, COLLECTIONS.MACHINES, m.id), m); 
+            } catch (e) {
+                handleAppError(e, {
+                    context: `Error sincronizando máquina ${m.id}`,
+                    showToast: true
+                });
+            }
         }
     }
 
     async syncReservationsToFirebase(reservations) {
         if (!isFirebaseAvailable || !db) return;
         for (const r of reservations) {
-            try { await setDoc(doc(db, COLLECTIONS.RESERVATIONS, r.id), r); } catch (e) {}
+            try { 
+                await setDoc(doc(db, COLLECTIONS.RESERVATIONS, r.id), r); 
+            } catch (e) {
+                handleAppError(e, {
+                    context: `Error sincronizando reservación ${r.id}`,
+                    showToast: true
+                });
+            }
         }
     }
 
     getMachines() {
-        return this.machines.map(m => {
-            if (m.hourlyRate2P === undefined || m.hourlyRate2P === null) {
-                m.hourlyRate2P = m.hourlyRate === 80 ? 130 : Math.round(m.hourlyRate * 1.625);
-            }
-            return m;
-        });
+        return this.machines
+            .filter(m => m.status !== 'DELETED' && !m.isDeleted)
+            .map(m => {
+                if (m.hourlyRate2P === undefined || m.hourlyRate2P === null) {
+                    m.hourlyRate2P = m.hourlyRate === 80 ? 130 : Math.round(m.hourlyRate * 1.625);
+                }
+                return m;
+            });
     }
 
     getActiveMachines() {
@@ -487,7 +528,7 @@ class Store {
     }
 
     getMachineById(id) {
-        const m = this.machines.find(m => m.id === id);
+        const m = this.machines.find(m => m.id === id && m.status !== 'DELETED' && !m.isDeleted);
         if (m && (m.hourlyRate2P === undefined || m.hourlyRate2P === null)) {
             m.hourlyRate2P = m.hourlyRate === 80 ? 130 : Math.round(m.hourlyRate * 1.625);
         }
@@ -495,7 +536,13 @@ class Store {
     }
 
     getReservations(filter = {}) {
-        let result = [...this.reservations];
+        const all = [...this.reservations];
+        if (this.pendingReservations && this.pendingReservations.length > 0) {
+            this.pendingReservations.forEach(p => {
+                if (!all.some(r => r.id === p.id)) all.push(p);
+            });
+        }
+        let result = all;
         if (filter.date) result = result.filter(r => r.date === filter.date);
         if (filter.machineId) result = result.filter(r => r.machineId === filter.machineId);
         if (filter.status) result = result.filter(r => r.status === filter.status);
@@ -586,11 +633,18 @@ class Store {
         } else if (!resolvedClientId) {
             const searchKey = (bookingData.clientUsername || bookingData.clientName || '').trim().toLowerCase();
             const searchPhone = (bookingData.clientPhone || '').replace(/\D/g, '');
-            const allPlayers = authManager.getClientUsers ? authManager.getClientUsers() : [];
+            let allPlayers = authManager.getClientUsers ? (authManager.getClientUsers() || []) : [];
+            if (allPlayers.length === 0) {
+                try {
+                    const localCache = localStorage.getItem('piu_registered_players_cache');
+                    if (localCache) allPlayers = JSON.parse(localCache);
+                } catch(e) {}
+            }
             const matchedPlayer = allPlayers.find(p => 
                 (p.username && (p.username.toLowerCase() === searchKey || (bookingData.clientUsername && p.username.toLowerCase() === bookingData.clientUsername.toLowerCase()))) ||
                 (p.name && p.name.toLowerCase() === searchKey) ||
-                (searchPhone && p.phone && p.phone.replace(/\D/g, '') === searchPhone)
+                (searchPhone && p.phone && p.phone.replace(/\D/g, '') === searchPhone) ||
+                (p.id && p.id.toLowerCase() === searchKey)
             );
             if (matchedPlayer) {
                 resolvedClientId = matchedPlayer.id;
@@ -598,8 +652,33 @@ class Store {
             }
         }
 
+        // Validación de bloqueo por sucursal para impedir reservaciones a usuarios bloqueados
+        if (tenantManager.isClientBlocked(this.currentBusiness, {
+            id: resolvedClientId,
+            username: resolvedClientUsername,
+            phone: bookingData.clientPhone,
+            name: bookingData.clientName
+        })) {
+            throw new Error("Tu cuenta o número telefónico tiene restringidas las reservaciones en esta sucursal por disposición de la administración.");
+        }
+
+        // IDEMPOTENCIA DETERMINISTA: Si el cliente no provee idempotencyKey, derivarla exclusivamente
+        // de los atributos semánticos de la reserva (local, máquina, fecha, hora inicio, jugador). CERO Date.now()
+        const canonicalClientKey = resolvedClientId || (bookingData.clientName || 'anon').trim().toLowerCase().replace(/\s+/g, '_');
+        const finalIdempotencyKey = bookingData.idempotencyKey || ('bk_' + (this.currentBusiness?.id || 'biz') + '_' + (bookingData.machineId || 'm') + '_' + (bookingData.date || '').replace(/-/g, '') + '_' + (bookingData.startTime || '').replace(/:/g, '') + '_' + canonicalClientKey);
+        
+        if (this.processedReservationKeys.has(finalIdempotencyKey)) {
+            throw new Error("Esta reservación ya está siendo procesada. Evitando duplicidad.");
+        }
+        this.processedReservationKeys.add(finalIdempotencyKey);
+        setTimeout(() => this.processedReservationKeys.delete(finalIdempotencyKey), 10000);
+
+        const newReservationId = bookingData.id || ('res_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
+        const nowIso = new Date().toISOString();
+
         const newReservation = {
-            id: 'res_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            id: newReservationId,
+            idempotencyKey: finalIdempotencyKey,
             businessId: this.currentBusiness.id,
             machineId: bookingData.machineId,
             clientId: resolvedClientId,
@@ -616,70 +695,154 @@ class Store {
             totalCost: totalCost,
             notes: bookingData.notes ? bookingData.notes.trim() : '',
             adminNotes: isStaff ? 'Asignada directamente por Encargado' : '',
-            createdAt: new Date().toISOString()
+            createdAt: nowIso
         };
 
-        if (newReservation.status === 'CONFIRMED' && newReservation.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-            const pts = isVisitsMode ? 1 : Math.floor(newReservation.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
-            if (pts > 0 || isVisitsMode) {
-                try {
-                    await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, newReservation.clientId, pts, 1);
-                } catch (e) {
-                    console.warn("Error crediting points on direct creation:", e);
-                }
-            }
+        let resultingReservation = newReservation;
 
-            if (this.currentBusiness.loyaltyDiscountType === 'ONCE') {
-                try {
-                    const playerObj = await authManager.getClientUsers().find(u => u.id === newReservation.clientId) || 
-                                     (isFirebaseAvailable && db ? (await getDoc(doc(db, COLLECTIONS.PLAYERS, newReservation.clientId))).data() : null);
-                    if (playerObj) {
-                        const bizLoyalty = (playerObj.loyalty && playerObj.loyalty[this.currentBusiness.id]) || { tier: 'Bronce' };
-                        const currentTierName = (bizLoyalty.tier || 'Bronce').toUpperCase();
-                        if (currentTierName !== 'BRONCE') {
-                            await loyaltyManager.claimOneTimeTierDiscount(this.currentBusiness.id, newReservation.clientId, currentTierName);
-                        }
-                    }
-                } catch (err) {
-                    console.warn("Error claiming one-time tier discount on creation:", err);
-                }
-            }
+        if (newReservation.status === 'CONFIRMED' || newReservation.totalCost > 0) {
+            assertFinancialOnline();
         }
 
+        // 1. TRANSACCIÓN ATÓMICA CON BLOQUEO CONCURRENTE DE SLOTS E IDEMPOTENCIA EN FIRESTORE
         if (isFirebaseAvailable && db) {
             try {
-                const reservationQuery = query(
-                    collection(db, COLLECTIONS.RESERVATIONS),
-                    where('businessId', '==', this.currentBusiness.id),
-                    where('date', '==', newReservation.date)
-                );
-                const snapshot = await getDocs(reservationQuery);
-                const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                const conflict = findReservationConflict(
-                    remoteReservations,
-                    newReservation.machineId,
-                    newReservation.date,
-                    newReservation.startTime,
-                    newReservation.endTime
-                );
-                if (conflict) {
-                    throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
-                }
-                await setDoc(doc(db, COLLECTIONS.RESERVATIONS, newReservation.id), newReservation);
+                await runTransaction(db, async (transaction) => {
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
+                    const resRef = doc(db, COLLECTIONS.RESERVATIONS, newReservation.id);
+                    const existingRes = await transaction.get(resRef);
+                    if (existingRes.exists()) {
+                        const existingData = existingRes.data();
+                        if (existingData.status !== 'CANCELLED' && existingData.status !== 'REJECTED') {
+                            console.warn(`[IDEMPOTENCY] Reservación ${newReservation.id} ya existe activa. Retornando registro original.`);
+                            resultingReservation = { id: existingRes.id, ...existingData };
+                            return;
+                        }
+                    }
+
+                    const machineRef = doc(db, COLLECTIONS.MACHINES, newReservation.machineId);
+                    const machineDoc = await transaction.get(machineRef);
+
+                    const businessRef = doc(db, COLLECTIONS.BUSINESSES, newReservation.businessId);
+                    const businessDoc = await transaction.get(businessRef);
+
+                    const scheduleKey = `${newReservation.businessId}_${newReservation.machineId}_${newReservation.date}`;
+                    const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
+                    const scheduleDoc = await transaction.get(scheduleRef);
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (newReservation.clientId) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, newReservation.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. VALIDACIONES Y CÁLCULOS
+                    const verifiedMachine = machineDoc.exists() ? machineDoc.data() : this.getMachineById(newReservation.machineId);
+                    const verifiedBusiness = businessDoc.exists() ? businessDoc.data() : (this.currentBusiness || {});
+
+                    const verifiedTotalCost = calculateBookingCost(
+                        newReservation.durationMinutes,
+                        newReservation.playersMode,
+                        verifiedMachine,
+                        verifiedBusiness
+                    );
+                    newReservation.totalCost = verifiedTotalCost;
+
+                    const currentSlots = scheduleDoc.exists() ? (scheduleDoc.data().slots || []) : [];
+                    const { openingTime, closingTime } = getBusinessHoursForDate(verifiedBusiness, newReservation.date);
+
+                    const overlappingSlot = currentSlots.find(slot => 
+                        slot.resId !== newReservation.id &&
+                        slot.status !== 'REJECTED' &&
+                        slot.status !== 'CANCELLED' &&
+                        isOverlapping(newReservation.startTime, newReservation.endTime, slot.startTime, slot.endTime, openingTime, closingTime)
+                    );
+
+                    if (overlappingSlot) {
+                        throw new Error(`Conflicto de horario: La máquina ya fue reservada por ${overlappingSlot.clientName || 'otro usuario'} (${overlappingSlot.startTime} - ${overlappingSlot.endTime})`);
+                    }
+
+                    // 3. TODAS LAS ESCRITURAS (WRITES)
+                    if (isStaff || newReservation.status === 'CONFIRMED') {
+                        const updatedSlots = currentSlots.filter(s => s.resId !== newReservation.id);
+                        updatedSlots.push({
+                            resId: newReservation.id,
+                            startTime: newReservation.startTime,
+                            endTime: newReservation.endTime,
+                            status: 'CONFIRMED',
+                            clientName: newReservation.clientName,
+                            clientId: newReservation.clientId,
+                            updatedAt: nowIso
+                        });
+
+                        transaction.set(scheduleRef, {
+                            businessId: newReservation.businessId,
+                            machineId: newReservation.machineId,
+                            date: newReservation.date,
+                            slots: updatedSlots,
+                            updatedAt: nowIso
+                        }, { merge: true });
+                    }
+
+                    // A. Escribir documento de reservación
+                    transaction.set(resRef, newReservation);
+
+                    // B. Acreditar puntos si es confirmada (Regla: Máximo 1 visita por día calendario)
+                    if (newReservation.status === 'CONFIRMED' && playerDoc && playerDoc.exists() && playerRef && verifiedBusiness?.loyaltyEnabled) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce', visitedDates: [] };
+                        const isVisitsMode = verifiedBusiness.loyaltyMode === 'VISITS';
+
+                        const visitedDates = Array.isArray(bizLoyalty.visitedDates) ? [...bizLoyalty.visitedDates] : (bizLoyalty.lastVisitDate ? [bizLoyalty.lastVisitDate] : []);
+                        const isNewVisitDay = !visitedDates.includes(newReservation.date);
+                        const visitsToAdd = isNewVisitDay ? 1 : 0;
+
+                        if (isNewVisitDay) {
+                            visitedDates.push(newReservation.date);
+                        }
+
+                        const ptsEarned = isVisitsMode ? 0 : Math.floor(newReservation.totalCost / (Number(verifiedBusiness.pointsRatio) || 10));
+                        const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? visitsToAdd : ptsEarned);
+                        const nextVisits = (bizLoyalty.visits || 0) + visitsToAdd;
+                        const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                        const nextTier = loyaltyManager.calculateTier(valForTier, verifiedBusiness.loyaltyMode || 'POINTS').name;
+
+                        loyaltyMap[this.currentBusiness.id] = {
+                            ...bizLoyalty,
+                            points: nextPoints,
+                            visits: nextVisits,
+                            tier: nextTier,
+                            lastVisitDate: newReservation.date,
+                            visitedDates: visitedDates.slice(-60) // Mantener últimos 60 días
+                        };
+                        transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
+                    }
+
+                    // C. Auditoría inmutable dentro de la misma transacción atómica (si fue creada por Staff autenticado)
+                    if (isStaff && auth && auth.currentUser) {
+                        auditLogger.appendTransactionAudit(transaction, {
+                            businessId: this.currentBusiness.id,
+                            action: newReservation.status === 'CONFIRMED' ? AUDIT_ACTIONS.RESERVATION_CLOSED : AUDIT_ACTIONS.RESERVATION_CREATED,
+                            target: { type: 'RESERVATION', id: newReservation.id, name: newReservation.clientName },
+                            financialData: { amount: newReservation.totalCost },
+                            details: `Reservación creada (${newReservation.status}) para ${newReservation.clientName} en fecha ${newReservation.date} (${newReservation.startTime} - ${newReservation.endTime}). Total: $${newReservation.totalCost}`
+                        });
+                    }
+                });
             } catch (err) {
-                console.error("Error guardando reservación en Firebase:", err);
-                throw err;
+                handleAppError(err, { context: "Error en creación atómica de reservación", showToast: true, rethrow: true });
             }
         }
 
-        if (!this.reservations.some(r => r.id === newReservation.id)) {
-            this.reservations.push(newReservation);
+        if (!this.reservations.some(r => r.id === resultingReservation.id)) {
+            this.reservations.push(resultingReservation);
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
 
         this.notify();
-        return newReservation;
+        return resultingReservation;
     }
 
     async getOrFetchReservation(reservationId) {
@@ -708,50 +871,106 @@ class Store {
                     const found = parsed.find(r => r.id === reservationId);
                     if (found) return found;
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.warn("Error leyendo reservaciones locales:", e);
+            }
         }
 
         return null;
     }
 
     async cancelReservationByClient(reservationId) {
+        assertFinancialOnline();
+        if (this.currentBusiness && this.currentBusiness.allowClientCancellation === false) {
+            throw new Error("Esta sucursal no permite cancelaciones directas por parte de clientes. Por favor contacta al encargado por mensaje.");
+        }
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
-        const wasConfirmed = res.status === 'CONFIRMED';
+        const nowIso = new Date().toISOString();
         res.status = 'CANCELLED';
         res.adminNotes = 'Cancelada por el jugador.';
-        res.updatedAt = new Date().toISOString();
+        res.updatedAt = nowIso;
 
         if (isFirebaseAvailable && db) {
             try {
-                await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), {
-                    status: 'CANCELLED',
-                    adminNotes: res.adminNotes,
-                    updatedAt: res.updatedAt
+                await runTransaction(db, async (transaction) => {
+                    // 1. Lecturas iniciales (READS)
+                    const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
+                    const resDoc = await transaction.get(resRef);
+                    if (!resDoc.exists()) throw new Error("Reservación no encontrada en Firestore.");
+
+                    const resData = resDoc.data();
+                    if (resData.status === 'CANCELLED') {
+                        console.warn(`[IDEMPOTENCY] Reservación ${reservationId} ya estaba CANCELLED.`);
+                        return;
+                    }
+
+                    const wasConfirmed = resData.status === 'CONFIRMED';
+                    const scheduleKey = `${resData.businessId}_${resData.machineId}_${resData.date}`;
+                    const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
+                    const scheduleDoc = await transaction.get(scheduleRef);
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (wasConfirmed && resData.clientId && this.currentBusiness?.loyaltyEnabled) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. Escrituras (WRITES)
+                    if (scheduleDoc.exists()) {
+                        const slots = (scheduleDoc.data().slots || []).map(s => 
+                            s.resId === reservationId ? { ...s, status: 'CANCELLED', updatedAt: nowIso } : s
+                        );
+                        transaction.set(scheduleRef, { slots, updatedAt: nowIso }, { merge: true });
+                    }
+
+                    transaction.update(resRef, {
+                        status: 'CANCELLED',
+                        adminNotes: res.adminNotes,
+                        updatedAt: nowIso
+                    });
+
+                    // Revertir puntos de lealtad si estaba confirmada
+                    if (playerDoc && playerDoc.exists() && playerRef) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce' };
+                        const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+                        const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
+
+                        const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? 0 : pts));
+                        const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - (isVisitsMode ? pts : 1));
+                        const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                        const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
+
+                        loyaltyMap[this.currentBusiness.id] = { ...bizLoyalty, points: nextPoints, visits: nextVisits, tier: nextTier };
+                        transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
+                    }
+
+                    // Inyectar auditoría atómica
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: resData.businessId,
+                        action: AUDIT_ACTIONS.RESERVATION_CANCELLED,
+                        target: { type: 'RESERVATION', id: reservationId, name: resData.clientName || 'Jugador' },
+                        financialData: { amount: resData.totalCost || 0 },
+                        details: `Cancelada reservación para ${resData.clientName} en fecha ${resData.date} (${resData.startTime} - ${resData.endTime}). Monto: $${resData.totalCost || 0}`
+                    });
                 });
-            } catch (e) {
-                console.error("Error cancelando reservación en Firestore:", e);
-                throw e;
+            } catch (err) {
+                handleAppError(err, { context: "Error cancelando reservación de forma atómica", showToast: true, rethrow: true });
             }
         }
 
         const inMemory = this.reservations.find(r => r.id === reservationId);
         if (inMemory) {
-            Object.assign(inMemory, res);
+            inMemory.status = 'CANCELLED';
+            inMemory.adminNotes = res.adminNotes;
+            inMemory.updatedAt = nowIso;
         }
         if (this.currentBusiness?.id) {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
-        }
-
-        if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-            const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
-            try {
-                await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, -pts, -1);
-            } catch (e) {
-                console.warn("Error reverting points on cancel:", e);
-            }
         }
 
         this.notify();
@@ -759,43 +978,132 @@ class Store {
     }
 
     async approveReservation(reservationId, adminNotes = '') {
+        assertFinancialOnline();
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
-        // Validar conflicto de disponibilidad consultando Firestore o local
+        const nowIso = new Date().toISOString();
+
         if (isFirebaseAvailable && db) {
-            const reservationQuery = query(
-                collection(db, COLLECTIONS.RESERVATIONS),
-                where('businessId', '==', this.currentBusiness?.id || res.businessId),
-                where('date', '==', res.date)
-            );
-            const snapshot = await getDocs(reservationQuery);
-            const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-            const conflict = findReservationConflict(remoteReservations, res.machineId, res.date, res.startTime, res.endTime, res.id);
-            if (conflict) {
-                throw new Error(`No se puede aprobar: Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    // 1. TODAS LAS LECTURAS (READS) ANTES DE CUALQUIER ESCRITURA
+                    const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
+                    const resDoc = await transaction.get(resRef);
+                    if (!resDoc.exists()) throw new Error("Reservación no encontrada en Firestore.");
+
+                    const resData = resDoc.data();
+                    // 🛡️ PREVENCIÓN ANTI-DOBLE APROBACIÓN
+                    if (resData.status === 'CONFIRMED') {
+                        console.warn(`[IDEMPOTENCY] Reservación ${reservationId} ya está aprobada previamente.`);
+                        return;
+                    }
+                    if (resData.status !== 'PENDING') {
+                        throw new Error(`No se puede aprobar una reservación en estado: ${resData.status}`);
+                    }
+
+                    // Validar conflicto de slot en calendario transaccional usando datos autoritativos de Firestore
+                    const scheduleKey = `${resData.businessId}_${resData.machineId}_${resData.date}`;
+                    const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
+                    const scheduleDoc = await transaction.get(scheduleRef);
+
+                    // Lectura previa del jugador para puntos de lealtad
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (resData.clientId && this.currentBusiness?.loyaltyEnabled) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. VALIDACIONES Y CÁLCULOS
+                    const currentSlots = scheduleDoc.exists() ? (scheduleDoc.data().slots || []) : [];
+                    const business = tenantManager.getActiveBusiness();
+                    const { openingTime, closingTime } = getBusinessHoursForDate(business, resData.date);
+
+                    const overlappingSlot = currentSlots.find(slot => 
+                        slot.resId !== reservationId &&
+                        slot.status === 'CONFIRMED' &&
+                        isOverlapping(resData.startTime, resData.endTime, slot.startTime, slot.endTime, openingTime, closingTime)
+                    );
+
+                    if (overlappingSlot) {
+                        throw new Error(`Conflicto: Ya existe una reservación confirmada de ${overlappingSlot.clientName || 'otro usuario'} (${overlappingSlot.startTime} - ${overlappingSlot.endTime})`);
+                    }
+
+                    // Actualizar estado del slot a CONFIRMED
+                    const updatedSlots = currentSlots.map(s => 
+                        s.resId === reservationId ? { ...s, status: 'CONFIRMED', updatedAt: nowIso } : s
+                    );
+                    if (!updatedSlots.some(s => s.resId === reservationId)) {
+                        updatedSlots.push({
+                            resId: reservationId,
+                            startTime: resData.startTime,
+                            endTime: resData.endTime,
+                            status: 'CONFIRMED',
+                            clientName: resData.clientName,
+                            clientId: resData.clientId,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    // 3. TODAS LAS ESCRITURAS (WRITES) DESPUÉS DE LAS LECTURAS
+                    transaction.set(scheduleRef, { slots: updatedSlots, updatedAt: nowIso }, { merge: true });
+
+                    transaction.update(resRef, {
+                        status: 'CONFIRMED',
+                        adminNotes: adminNotes || 'Aprobada por el encargado.',
+                        updatedAt: nowIso
+                    });
+
+                    // Acreditar puntos de lealtad atómicamente solo una vez (Máximo 1 visita por día)
+                    if (playerDoc && playerDoc.exists() && playerRef && this.currentBusiness?.loyaltyEnabled) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce', visitedDates: [] };
+                        const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+
+                        const visitedDates = Array.isArray(bizLoyalty.visitedDates) ? [...bizLoyalty.visitedDates] : (bizLoyalty.lastVisitDate ? [bizLoyalty.lastVisitDate] : []);
+                        const isNewVisitDay = !visitedDates.includes(resData.date);
+                        const visitsToAdd = isNewVisitDay ? 1 : 0;
+
+                        if (isNewVisitDay) {
+                            visitedDates.push(resData.date);
+                        }
+
+                        const ptsEarned = isVisitsMode ? 0 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
+                        const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? visitsToAdd : ptsEarned);
+                        const nextVisits = (bizLoyalty.visits || 0) + visitsToAdd;
+                        const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                        const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
+
+                        loyaltyMap[this.currentBusiness.id] = {
+                            ...bizLoyalty,
+                            points: nextPoints,
+                            visits: nextVisits,
+                            tier: nextTier,
+                            lastVisitDate: resData.date,
+                            visitedDates: visitedDates.slice(-60)
+                        };
+                        transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
+                    }
+
+                    // Inyectar auditoría atómica
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: resData.businessId,
+                        action: AUDIT_ACTIONS.RESERVATION_CLOSED,
+                        target: { type: 'RESERVATION', id: reservationId, name: resData.clientName || 'Jugador' },
+                        financialData: { amount: resData.totalCost || 0 },
+                        details: `Aprobada reservación de ${resData.clientName} en fecha ${resData.date} (${resData.startTime} - ${resData.endTime}). Monto: $${resData.totalCost || 0}`
+                    });
+                });
+            } catch (err) {
+                handleAppError(err, { context: "Error aprobando reservación de forma atómica", showToast: true, rethrow: true });
             }
-        } else {
-            const availability = this.checkAvailability(res.machineId, res.date, res.startTime, res.endTime, res.id);
-            if (!availability.available) throw new Error(`No se puede aprobar: ${availability.reason}`);
         }
 
         res.status = 'CONFIRMED';
         res.adminNotes = adminNotes || 'Aprobada por el encargado.';
-        res.updatedAt = new Date().toISOString();
-
-        if (isFirebaseAvailable && db) {
-            try {
-                await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), {
-                    status: 'CONFIRMED', 
-                    adminNotes: res.adminNotes, 
-                    updatedAt: res.updatedAt
-                });
-            } catch (e) {
-                console.error("Error aprobando reservación en Firestore:", e);
-                throw e;
-            }
-        }
+        res.updatedAt = nowIso;
 
         const inMemory = this.reservations.find(r => r.id === reservationId);
         if (inMemory) {
@@ -807,29 +1115,81 @@ class Store {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
 
-        if (res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-            const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
-            try {
-                await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, pts, 1);
-            } catch (e) {
-                console.warn("Error crediting points on approval:", e);
-            }
+        this.notify();
+        return res;
+    }
 
-            if (this.currentBusiness.loyaltyDiscountType === 'ONCE') {
-                try {
-                    const playerObj = await authManager.getClientUsers().find(u => u.id === res.clientId) || 
-                                     (isFirebaseAvailable && db ? (await getDoc(doc(db, COLLECTIONS.PLAYERS, res.clientId))).data() : null);
-                    if (playerObj) {
-                        const bizLoyalty = (playerObj.loyalty && playerObj.loyalty[this.currentBusiness.id]) || { tier: 'Bronce' };
-                        const currentTierName = (bizLoyalty.tier || 'Bronce').toUpperCase();
-                        if (currentTierName !== 'BRONCE') {
-                            await loyaltyManager.claimOneTimeTierDiscount(this.currentBusiness.id, res.clientId, currentTierName);
-                        }
+    async rejectReservation(reservationId, reason = '') {
+        assertFinancialOnline();
+        const res = await this.getOrFetchReservation(reservationId);
+        if (!res) throw new Error("Reservación no encontrada");
+
+        const nowIso = new Date().toISOString();
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
+                    const resDoc = await transaction.get(resRef);
+                    if (!resDoc.exists()) throw new Error("Reservación no encontrada en Firestore.");
+
+                    const resData = resDoc.data();
+                    // 🛡️ RECHAZO VÁLIDO ÚNICAMENTE DESDE PENDING (CONFIRMED se cancela vía deleteReservation)
+                    if (resData.status !== 'PENDING') {
+                        throw new Error(`Solo se pueden rechazar reservaciones en estado PENDING. Estado actual: ${resData.status}`);
                     }
-                } catch (err) {
-                    console.warn("Error claiming one-time tier discount on approval:", err);
-                }
+
+                    // Liberar slot en calendario usando datos autoritativos de Firestore exclusivamente
+                    const scheduleKey = `${resData.businessId}_${resData.machineId}_${resData.date}`;
+                    const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
+                    const scheduleDoc = await transaction.get(scheduleRef);
+                    if (scheduleDoc.exists()) {
+                        const slots = (scheduleDoc.data().slots || []).map(s => 
+                            s.resId === reservationId ? { ...s, status: 'REJECTED', updatedAt: nowIso } : s
+                        );
+                        transaction.set(scheduleRef, { slots, updatedAt: nowIso }, { merge: true });
+                    }
+
+                    transaction.update(resRef, {
+                        status: 'REJECTED',
+                        rejectionReason: reason || 'Horario no disponible / Cancelada por encargado.',
+                        updatedAt: nowIso
+                    });
+
+                    // Inyectar auditoría atómica
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: resData.businessId,
+                        action: AUDIT_ACTIONS.RESERVATION_CANCELLED,
+                        target: { type: 'RESERVATION', id: reservationId, name: resData.clientName || 'Jugador' },
+                        financialData: { amount: resData.totalCost || 0 },
+                        details: `Rechazada reservación de ${resData.clientName} para ${resData.date} (${resData.startTime} - ${resData.endTime}). Motivo: ${reason || 'Horario no disponible'}`
+                    });
+                });
+            } catch (err) {
+                handleAppError(err, { context: "Error rechazando reservación en Firestore", showToast: true, rethrow: true });
+            }
+        }
+
+        res.status = 'REJECTED';
+        res.rejectionReason = reason || 'Horario no disponible / Cancelada por encargado.';
+        res.updatedAt = nowIso;
+
+        const inMemory = this.reservations.find(r => r.id === reservationId);
+        if (inMemory) {
+            inMemory.status = 'REJECTED';
+            inMemory.rejectionReason = res.rejectionReason;
+            inMemory.updatedAt = nowIso;
+        }
+        if (this.currentBusiness?.id) {
+            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
+        }
+
+        if (res.isVersusMatch && res.challengeId) {
+            try {
+                const { challengeManager } = await import('./challengeManager.js');
+                await challengeManager.handleReservationRejectedOrCancelled(res.challengeId, reason || 'Rechazada por encargado');
+            } catch (e) {
+                console.warn("Error notificando rechazo a challengeManager:", e);
             }
         }
 
@@ -837,25 +1197,198 @@ class Store {
         return res;
     }
 
-    async rejectReservation(reservationId, reason = '') {
+    async modifyReservation(reservationId, updatedFields) {
+        assertFinancialOnline();
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
-        const wasConfirmed = res.status === 'CONFIRMED';
-        res.status = 'REJECTED';
-        res.rejectionReason = reason || 'Horario no disponible / Cancelada por encargado.';
-        res.updatedAt = new Date().toISOString();
+        const targetMachine = updatedFields.machineId || res.machineId;
+        const targetDate = updatedFields.date || res.date;
+        const targetStart = updatedFields.startTime || res.startTime;
+        const targetEnd = updatedFields.endTime || res.endTime;
+        const targetDuration = updatedFields.durationMinutes || res.durationMinutes || 60;
+        const targetPlayersMode = updatedFields.playersMode || res.playersMode || 1;
+
+        const nowIso = new Date().toISOString();
 
         if (isFirebaseAvailable && db) {
             try {
-                await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), {
-                    status: 'REJECTED', 
-                    rejectionReason: res.rejectionReason, 
-                    updatedAt: res.updatedAt
+                await runTransaction(db, async (transaction) => {
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
+                    const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
+                    const resDoc = await transaction.get(resRef);
+                    if (!resDoc.exists()) throw new Error("Reservación no encontrada.");
+
+                    const resData = resDoc.data();
+                    const isStaffUser = authManager.isStaff();
+
+                    if ((resData.status === 'CANCELLED' || resData.status === 'REJECTED') && !isStaffUser) {
+                        throw new Error(`Solo un encargado o administrador puede reactivar una reservación en estado: ${resData.status}`);
+                    }
+
+                    const machineRef = doc(db, COLLECTIONS.MACHINES, targetMachine);
+                    const machineDoc = await transaction.get(machineRef);
+
+                    const businessRef = doc(db, COLLECTIONS.BUSINESSES, resData.businessId);
+                    const businessDoc = await transaction.get(businessRef);
+
+                    const oldMachine = resData.machineId;
+                    const oldDate = resData.date;
+                    let oldScheduleDoc = null;
+                    let oldScheduleRef = null;
+                    if (oldMachine !== targetMachine || oldDate !== targetDate) {
+                        const oldScheduleKey = `${resData.businessId}_${oldMachine}_${oldDate}`;
+                        oldScheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, oldScheduleKey);
+                        oldScheduleDoc = await transaction.get(oldScheduleRef);
+                    }
+
+                    const targetScheduleKey = `${resData.businessId}_${targetMachine}_${targetDate}`;
+                    const targetScheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, targetScheduleKey);
+                    const targetScheduleDoc = await transaction.get(targetScheduleRef);
+
+                    const wasConfirmed = resData.status === 'CONFIRMED';
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (resData.clientId) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. VALIDACIONES Y CÁLCULOS
+                    let validatedStatus = updatedFields.status || (resData.status === 'CANCELLED' || resData.status === 'REJECTED' ? 'CONFIRMED' : resData.status);
+                    if (updatedFields.status && updatedFields.status !== resData.status) {
+                        const allowedTransitions = {
+                            'PENDING': ['CONFIRMED', 'REJECTED', 'CANCELLED'],
+                            'CONFIRMED': ['CANCELLED', 'CONFIRMED'],
+                            'REJECTED': isStaffUser ? ['CONFIRMED', 'PENDING'] : [],
+                            'CANCELLED': isStaffUser ? ['CONFIRMED', 'PENDING'] : []
+                        };
+                        const validNext = allowedTransitions[resData.status] || [];
+                        if (!validNext.includes(updatedFields.status)) {
+                            throw new Error(`Transición de estado no autorizada: de ${resData.status} a ${updatedFields.status}`);
+                        }
+                        validatedStatus = updatedFields.status;
+                    }
+
+                    const oldCostInDb = resData.totalCost || 0;
+                    const verifiedMachine = machineDoc.exists() ? machineDoc.data() : this.getMachineById(targetMachine);
+                    const verifiedBusiness = businessDoc.exists() ? businessDoc.data() : (this.currentBusiness || {});
+
+                    const verifiedNewTotalCost = calculateBookingCost(
+                        targetDuration,
+                        targetPlayersMode,
+                        verifiedMachine,
+                        verifiedBusiness
+                    );
+
+                    const isReactivating = (resData.status === 'CANCELLED' || resData.status === 'REJECTED') && (validatedStatus === 'CONFIRMED' || validatedStatus === 'PENDING');
+
+                    const persistedFields = {
+                        ...updatedFields,
+                        machineId: targetMachine,
+                        date: targetDate,
+                        startTime: targetStart,
+                        endTime: targetEnd,
+                        durationMinutes: targetDuration,
+                        playersMode: targetPlayersMode,
+                        totalCost: verifiedNewTotalCost,
+                        status: validatedStatus,
+                        cancellationReason: isReactivating ? '' : (updatedFields.cancellationReason ?? resData.cancellationReason ?? ''),
+                        cancelledAt: isReactivating ? null : (updatedFields.cancelledAt ?? resData.cancelledAt ?? null),
+                        cancelledBy: isReactivating ? null : (updatedFields.cancelledBy ?? resData.cancelledBy ?? null),
+                        rejectionReason: isReactivating ? '' : (updatedFields.rejectionReason ?? resData.rejectionReason ?? ''),
+                        updatedAt: nowIso
+                    };
+
+                    const currentSlots = targetScheduleDoc.exists() ? (targetScheduleDoc.data().slots || []) : [];
+                    const { openingTime, closingTime } = getBusinessHoursForDate(verifiedBusiness, targetDate);
+
+                    const overlapping = currentSlots.find(slot => 
+                        slot.resId !== reservationId &&
+                        slot.status !== 'REJECTED' &&
+                        slot.status !== 'CANCELLED' &&
+                        isOverlapping(targetStart, targetEnd, slot.startTime, slot.endTime, openingTime, closingTime)
+                    );
+
+                    if (overlapping) {
+                        throw new Error(`Conflicto de horario en fecha/máquina destino con ${overlapping.clientName || 'otra reserva'} (${overlapping.startTime} - ${overlapping.endTime})`);
+                    }
+
+                    // 3. TODAS LAS ESCRITURAS (WRITES)
+                    if (oldScheduleRef && oldScheduleDoc && oldScheduleDoc.exists()) {
+                        const cleanedOldSlots = (oldScheduleDoc.data().slots || []).filter(s => s.resId !== reservationId);
+                        transaction.set(oldScheduleRef, { slots: cleanedOldSlots, updatedAt: nowIso }, { merge: true });
+                    }
+
+                    const filteredSlots = currentSlots.filter(s => s.resId !== reservationId);
+                    if (validatedStatus !== 'CANCELLED' && validatedStatus !== 'REJECTED') {
+                        filteredSlots.push({
+                            resId: reservationId,
+                            startTime: targetStart,
+                            endTime: targetEnd,
+                            status: validatedStatus,
+                            clientName: persistedFields.clientName || resData.clientName,
+                            clientId: persistedFields.clientId !== undefined ? persistedFields.clientId : (resData.clientId || null),
+                            updatedAt: nowIso
+                        });
+                    }
+                    transaction.set(targetScheduleRef, { slots: filteredSlots, updatedAt: nowIso }, { merge: true });
+
+                    transaction.update(resRef, persistedFields);
+
+                    // Ajustar delta de puntos de lealtad si aplica
+                    if (playerDoc && playerDoc.exists() && playerRef && verifiedBusiness?.loyaltyEnabled) {
+                        const isVisitsMode = verifiedBusiness.loyaltyMode === 'VISITS';
+                        const ratio = Number(verifiedBusiness.pointsRatio) || 10;
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness?.id || resData.businessId] || { points: 0, visits: 0, tier: 'Bronce', visitedDates: [] };
+
+                        if (isReactivating && validatedStatus === 'CONFIRMED') {
+                            const visitedDates = Array.isArray(bizLoyalty.visitedDates) ? [...bizLoyalty.visitedDates] : (bizLoyalty.lastVisitDate ? [bizLoyalty.lastVisitDate] : []);
+                            const isNewVisitDay = !visitedDates.includes(persistedFields.date);
+                            const visitsToAdd = isNewVisitDay ? 1 : 0;
+                            if (isNewVisitDay) visitedDates.push(persistedFields.date);
+
+                            const pts = isVisitsMode ? 0 : Math.floor(verifiedNewTotalCost / ratio);
+                            const nextPoints = (bizLoyalty.points || 0) + (isVisitsMode ? visitsToAdd : pts);
+                            const nextVisits = (bizLoyalty.visits || 0) + visitsToAdd;
+                            const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                            const nextTier = loyaltyManager.calculateTier(valForTier, verifiedBusiness.loyaltyMode || 'POINTS').name;
+                            loyaltyMap[this.currentBusiness?.id || resData.businessId] = {
+                                ...bizLoyalty,
+                                points: nextPoints,
+                                visits: nextVisits,
+                                tier: nextTier,
+                                lastVisitDate: persistedFields.date,
+                                visitedDates: visitedDates.slice(-60)
+                            };
+                            transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
+                        } else if (wasConfirmed && validatedStatus === 'CONFIRMED' && !isVisitsMode) {
+                            const oldPts = Math.floor(oldCostInDb / ratio);
+                            const newPts = Math.floor(verifiedNewTotalCost / ratio);
+                            const diff = newPts - oldPts;
+                            if (diff !== 0) {
+                                const nextPoints = Math.max(0, (bizLoyalty.points || 0) + diff);
+                                const nextTier = loyaltyManager.calculateTier(nextPoints, 'POINTS').name;
+                                loyaltyMap[this.currentBusiness?.id || resData.businessId] = { ...bizLoyalty, points: nextPoints, tier: nextTier };
+                                transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
+                            }
+                        }
+                    }
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: resData.businessId,
+                        action: isReactivating ? AUDIT_ACTIONS.RESERVATION_CREATED : AUDIT_ACTIONS.RESERVATION_MODIFIED,
+                        target: { type: 'RESERVATION', id: reservationId, name: resData.clientName || 'Jugador' },
+                        financialData: { amount: verifiedNewTotalCost },
+                        details: `${isReactivating ? 'Reactivada' : 'Modificada'} reservación de ${resData.clientName} para ${persistedFields.date} (${persistedFields.startTime} - ${persistedFields.endTime}). Nuevo Total: $${verifiedNewTotalCost}`
+                    });
+
+                    Object.assign(res, persistedFields);
                 });
             } catch (e) {
-                console.error("Error rechazando reservación en Firestore:", e);
-                throw e;
+                handleAppError(e, { context: "Error modificando reservación en Firestore", showToast: true, rethrow: true });
             }
         }
 
@@ -867,120 +1400,118 @@ class Store {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
 
-        if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-            const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
-            try {
-                await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, -pts, -1);
-            } catch (e) {
-                console.warn("Error deducting points on reject:", e);
-            }
-        }
-
         this.notify();
         return res;
     }
 
-    async modifyReservation(reservationId, updatedFields) {
+    /**
+     * ELIMINACIÓN PERMANENTE DE RESERVACIÓN DE LA BASE DE DATOS.
+     * Elimina el documento definitivamente de Firestore para quitarlo de reportes y bandejas,
+     * remueve el slot de machine_schedules, revierte lealtad si fue confirmada y depura la memoria local.
+     */
+    async deleteReservation(reservationId, reason = 'Eliminada por el encargado') {
+        assertFinancialOnline();
         const res = await this.getOrFetchReservation(reservationId);
-        if (!res) throw new Error("Reservación no encontrada");
+        if (!res) throw new Error("Reservación no encontrada.");
 
-        const targetMachine = updatedFields.machineId || res.machineId;
-        const targetDate = updatedFields.date || res.date;
-        const targetStart = updatedFields.startTime || res.startTime;
-        const targetEnd = updatedFields.endTime || res.endTime;
-
-        if (isFirebaseAvailable && db) {
-            const reservationQuery = query(
-                collection(db, COLLECTIONS.RESERVATIONS),
-                where('businessId', '==', this.currentBusiness?.id || res.businessId),
-                where('date', '==', targetDate)
-            );
-            const snapshot = await getDocs(reservationQuery);
-            const remoteReservations = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-            const conflict = findReservationConflict(remoteReservations, targetMachine, targetDate, targetStart, targetEnd, reservationId);
-            if (conflict) {
-                throw new Error(`Conflicto con la reservación de ${conflict.clientName} (${conflict.startTime} - ${conflict.endTime})`);
-            }
-        } else {
-            const availability = this.checkAvailability(targetMachine, targetDate, targetStart, targetEnd, reservationId);
-            if (!availability.available) throw new Error(availability.reason);
-        }
-
-        const wasConfirmed = res.status === 'CONFIRMED';
-        const oldCost = res.totalCost || 0;
-
-        const persistedFields = {
-            ...updatedFields,
-            machineId: targetMachine,
-            date: targetDate,
-            startTime: targetStart,
-            endTime: targetEnd,
-            status: 'CONFIRMED',
-            updatedAt: new Date().toISOString()
-        };
-
-        if (isFirebaseAvailable && db) {
-            try {
-                await updateDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId), persistedFields);
-            } catch (e) {
-                console.error("Error modificando reservación en Firestore:", e);
-                throw e;
-            }
-        }
-
-        Object.assign(res, persistedFields);
-
-        const inMemory = this.reservations.find(r => r.id === reservationId);
-        if (inMemory) {
-            Object.assign(inMemory, persistedFields);
-        }
-        if (this.currentBusiness?.id) {
-            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
-        }
-
-        if (wasConfirmed && res.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-            if (!isVisitsMode) {
-                const ratio = Number(this.currentBusiness.pointsRatio) || 10;
-                const oldPts = Math.floor(oldCost / ratio);
-                const newPts = Math.floor(res.totalCost / ratio);
-                const diff = newPts - oldPts;
-                if (diff !== 0) {
-                    try {
-                        await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, diff, 0);
-                    } catch(e) {}
-                }
-            }
-        }
-
-        this.notify();
-        return res;
-    }
-
-    async deleteReservation(reservationId) {
-        const res = await this.getOrFetchReservation(reservationId);
-        const wasConfirmed = res && res.status === 'CONFIRMED';
-
-        this.reservations = this.reservations.filter(r => r.id !== reservationId);
-        if (this.currentBusiness?.id) {
-            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
-        }
+        const currentStaff = authManager.getCurrentUser()?.name || 'Encargado';
+        const nowIso = new Date().toISOString();
 
         if (isFirebaseAvailable && db) {
             try { 
-                await deleteDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId)); 
+                await runTransaction(db, async (transaction) => {
+                    // 1. TODAS LAS LECTURAS (READS) PRIMERO
+                    const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
+                    const resDoc = await transaction.get(resRef);
+                    if (!resDoc.exists()) return;
+
+                    const resData = resDoc.data();
+                    const wasConfirmed = resData.status === 'CONFIRMED';
+
+                    const scheduleKey = `${resData.businessId}_${resData.machineId}_${resData.date}`;
+                    const scheduleRef = doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey);
+                    const scheduleDoc = await transaction.get(scheduleRef);
+
+                    let playerRef = null;
+                    let playerDoc = null;
+                    if (wasConfirmed && resData.clientId && this.currentBusiness?.loyaltyEnabled) {
+                        playerRef = doc(db, COLLECTIONS.PLAYERS, resData.clientId);
+                        playerDoc = await transaction.get(playerRef);
+                    }
+
+                    // 2. TODAS LAS ESCRITURAS (WRITES)
+                    // Eliminar el slot del calendario de la máquina para liberar completamente el horario
+                    if (scheduleDoc.exists()) {
+                        const slots = (scheduleDoc.data().slots || []).filter(s => s.resId !== reservationId);
+                        transaction.set(scheduleRef, { slots, updatedAt: nowIso }, { merge: true });
+                    }
+
+                    // Eliminar permanentemente el documento de Firestore
+                    transaction.delete(resRef);
+
+                    // Revertir puntos de lealtad si la reservación estaba confirmada
+                    if (playerDoc && playerDoc.exists() && playerRef && this.currentBusiness?.loyaltyEnabled) {
+                        const playerData = playerDoc.data();
+                        const loyaltyMap = playerData.loyalty || {};
+                        const bizLoyalty = loyaltyMap[this.currentBusiness.id] || { points: 0, visits: 0, tier: 'Bronce', visitedDates: [] };
+                        const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
+
+                        // Verificar si el cliente tiene otras reservaciones activas en este mismo día
+                        const otherResSameDay = this.reservations.some(r => 
+                            r.id !== reservationId && 
+                            r.clientId === resData.clientId && 
+                            r.date === resData.date && 
+                            r.status === 'CONFIRMED'
+                        );
+
+                        const visitedDates = (Array.isArray(bizLoyalty.visitedDates) ? bizLoyalty.visitedDates : []).filter(d => otherResSameDay || d !== resData.date);
+                        const visitsToDeduct = (!otherResSameDay && (bizLoyalty.visits || 0) > 0) ? 1 : 0;
+
+                        const pts = isVisitsMode ? 0 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
+                        const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? visitsToDeduct : pts));
+                        const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - visitsToDeduct);
+                        const valForTier = isVisitsMode ? nextVisits : nextPoints;
+                        const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;
+
+                        loyaltyMap[this.currentBusiness.id] = {
+                            ...bizLoyalty,
+                            points: nextPoints,
+                            visits: nextVisits,
+                            tier: nextTier,
+                            visitedDates
+                        };
+                        transaction.update(playerRef, { loyalty: loyaltyMap, updatedAt: nowIso });
+                    }
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: resData.businessId,
+                        action: AUDIT_ACTIONS.RESERVATION_DELETED,
+                        target: { type: 'RESERVATION', id: reservationId, name: resData.clientName || 'Jugador' },
+                        financialData: { amount: resData.totalCost || 0 },
+                        details: `Eliminada definitivamente reservación ID ${reservationId} (${resData.clientName || 'Jugador'}) por ${currentStaff}. Motivo: "${reason.trim()}"`
+                    });
+                });
             } catch (e) {
-                console.error("Error eliminando reservación en Firestore:", e);
+                handleAppError(e, { context: "Error al eliminar reservación permanentemente en Firestore", showToast: true, rethrow: true });
             }
         }
 
-        if (wasConfirmed && res?.clientId && this.currentBusiness?.loyaltyEnabled) {
-            const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
-            const pts = isVisitsMode ? 1 : Math.floor(res.totalCost / (Number(this.currentBusiness.pointsRatio) || 10));
+        // Depurar completamente de la memoria local y caché
+        this.reservations = this.reservations.filter(r => r.id !== reservationId);
+        if (this.pendingReservations) {
+            this.pendingReservations = this.pendingReservations.filter(r => r.id !== reservationId);
+        }
+        if (this.currentBusiness?.id) {
+            this.saveLocalReservations(this.currentBusiness.id, this.reservations);
+        }
+
+        if (res.isVersusMatch && res.challengeId) {
             try {
-                await loyaltyManager.adjustPlayerPoints(this.currentBusiness.id, res.clientId, -pts, -1);
-            } catch(e) {}
+                const { challengeManager } = await import('./challengeManager.js');
+                await challengeManager.handleReservationRejectedOrCancelled(res.challengeId, reason || 'Eliminada por encargado');
+            } catch (e) {
+                console.warn("Error notificando cancelación a challengeManager:", e);
+            }
         }
 
         this.notify();
@@ -988,8 +1519,13 @@ class Store {
     }
 
     async addMachine(machineData) {
+        assertFinancialOnline();
+        const uniqueMachineId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+            ? 'mach_' + crypto.randomUUID() 
+            : 'mach_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+
         const newMachine = {
-            id: 'mach_' + Date.now(),
+            id: uniqueMachineId,
             businessId: this.currentBusiness.id,
             name: machineData.name.trim(),
             model: machineData.model.trim(),
@@ -1003,37 +1539,108 @@ class Store {
             createdAt: new Date().toISOString()
         };
 
+        if (isFirebaseAvailable && db) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const machineRef = doc(db, COLLECTIONS.MACHINES, newMachine.id);
+                    transaction.set(machineRef, newMachine);
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: this.currentBusiness.id,
+                        action: AUDIT_ACTIONS.MACHINE_CREATED,
+                        target: { type: 'MACHINE', id: newMachine.id, name: newMachine.name },
+                        financialData: { amount: newMachine.hourlyRate },
+                        details: `Agregada máquina: ${newMachine.name} (${newMachine.model} - ${newMachine.version}). Tarifa: $${newMachine.hourlyRate}/hr`
+                    });
+                });
+            } catch (e) {
+                handleAppError(e, { context: "Error creando máquina en Firestore", showToast: true, rethrow: true });
+            }
+        }
+
         this.machines.push(newMachine);
         this.saveLocalMachines(this.currentBusiness.id, this.machines);
 
-        if (isFirebaseAvailable && db) {
-            try { await setDoc(doc(db, COLLECTIONS.MACHINES, newMachine.id), newMachine); } catch (e) {}
-        }
         this.notify();
         return newMachine;
     }
 
     async updateMachine(machineId, updatedFields) {
+        assertFinancialOnline();
         const machine = this.machines.find(m => m.id === machineId);
         if (!machine) throw new Error("Máquina no encontrada");
 
-        Object.assign(machine, updatedFields, { updatedAt: new Date().toISOString() });
-        this.saveLocalMachines(this.currentBusiness.id, this.machines);
+        const updatedData = {
+            ...updatedFields,
+            updatedAt: new Date().toISOString()
+        };
 
         if (isFirebaseAvailable && db) {
-            try { await updateDoc(doc(db, COLLECTIONS.MACHINES, machineId), updatedFields); } catch (e) {}
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const machineRef = doc(db, COLLECTIONS.MACHINES, machineId);
+                    const machineDoc = await transaction.get(machineRef);
+                    if (!machineDoc.exists()) throw new Error("Máquina no encontrada.");
+
+                    transaction.update(machineRef, updatedData);
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: machine.businessId || this.currentBusiness.id,
+                        action: AUDIT_ACTIONS.MACHINE_UPDATED,
+                        target: { type: 'MACHINE', id: machineId, name: updatedFields.name || machine.name },
+                        financialData: { amount: Number(updatedFields.hourlyRate) || machine.hourlyRate },
+                        details: `Actualizada máquina ${updatedFields.name || machine.name} (${machineId})`
+                    });
+                });
+            } catch (e) {
+                handleAppError(e, { context: "Error actualizando máquina en Firestore", showToast: true, rethrow: true });
+            }
         }
+
+        Object.assign(machine, updatedData);
+        this.saveLocalMachines(this.currentBusiness.id, this.machines);
+
         this.notify();
         return machine;
     }
 
     async deleteMachine(machineId) {
+        assertFinancialOnline();
+        const machineToDelete = this.machines.find(m => m.id === machineId);
+        const currentStaff = authManager.getCurrentUser()?.name || 'Encargado';
+        const nowIso = new Date().toISOString();
+        
+        if (isFirebaseAvailable && db) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const machineRef = doc(db, COLLECTIONS.MACHINES, machineId);
+                    const machineDoc = await transaction.get(machineRef);
+                    if (!machineDoc.exists()) throw new Error("Máquina no encontrada.");
+
+                    // SOFT-DELETE: Preservar histórico administrativo y financiero
+                    transaction.update(machineRef, {
+                        status: 'DELETED',
+                        isDeleted: true,
+                        deletedAt: nowIso,
+                        deletedBy: currentStaff,
+                        updatedAt: nowIso
+                    });
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: this.currentBusiness.id,
+                        action: AUDIT_ACTIONS.MACHINE_DELETED,
+                        target: { type: 'MACHINE', id: machineId, name: machineToDelete?.name || 'Máquina' },
+                        details: `Máquina ID ${machineId} (${machineToDelete?.name || ''}) marcada como eliminada/archivada por ${currentStaff}`
+                    });
+                });
+            } catch (e) {
+                handleAppError(e, { context: "Error eliminando máquina en Firestore", showToast: true, rethrow: true });
+            }
+        }
+
         this.machines = this.machines.filter(m => m.id !== machineId);
         this.saveLocalMachines(this.currentBusiness.id, this.machines);
 
-        if (isFirebaseAvailable && db) {
-            try { await deleteDoc(doc(db, COLLECTIONS.MACHINES, machineId)); } catch (e) {}
-        }
         this.notify();
         return true;
     }

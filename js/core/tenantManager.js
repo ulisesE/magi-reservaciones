@@ -16,10 +16,26 @@ import {
     query,
     where 
 } from '../firebaseConfig.js';
+import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
 
 const TENANTS_STORAGE_KEY = 'piu_system_tenants_v1';
 const ACTIVE_TENANT_STORAGE_KEY = 'piu_active_tenant_id_v1';
 const SESSION_LOCKED_KEY = 'piu_session_local_locked_v1';
+
+export const DEFAULT_BUSINESS_MODULES = {
+    accounts: true,      // Cuenta Fácil (POS & Fiados)
+    clients: true,       // Directorio de Jugadores
+    loyalty: true,       // Programa de Lealtad y Recompensas
+    requests: true,      // Bandeja de Solicitudes
+    analytics: true,    // Rendimiento y Analítica
+    business: true,     // Ajustes de Sucursal por Encargado
+    catalogs: true,     // Catálogos en Sala & Productos
+    calendarWeek: true, // Vista Semanal
+    calendarMonth: true,// Vista Mensual
+    machines: true,     // Ficha de Máquinas
+    myProfile: true,    // Portal Mi Perfil (Gamer Pass)
+    versus: true        // Retas PVP & Arena Matchmaking
+};
 
 // Negocios iniciales predeterminados (Seed data)
 export const DEFAULT_BUSINESSES = [
@@ -51,6 +67,11 @@ export const DEFAULT_BUSINESSES = [
         rules: '1. Uso obligatorio de tenis deportivos limpios.\n2. No pisar las barras de soporte con las suelas descalzas.\n3. Tolerancia de espera de 10 minutos antes de liberar la máquina.',
         wifiNetwork: 'PumpZone_Clientes',
         wifiPassword: 'StepManiaPhoenix',
+        isActive: true,
+        status: 'ACTIVE',
+        allowClientCancellation: true,
+        blockedUsers: [],
+        enabledModules: { ...DEFAULT_BUSINESS_MODULES },
         operatingHours: {
             0: { open: '15:00', close: '04:00', closed: false }, // Domingo: 3 PM - 4 AM Lunes
             1: { open: '11:00', close: '22:00', closed: false }, // Lunes
@@ -106,6 +127,9 @@ export const DEFAULT_BUSINESSES = [
         rules: '1. Respetar el tiempo asignado de máquina.\n2. Cuidar los paneles acrílicos y sensores.\n3. Bebidas y alimentos sólo en el área de descanso.',
         wifiNetwork: 'Galaxy_Gaming_Free',
         wifiPassword: 'GalaxyPump2024',
+        isActive: true,
+        status: 'ACTIVE',
+        enabledModules: { ...DEFAULT_BUSINESS_MODULES },
         createdAt: new Date().toISOString()
     }
 ];
@@ -439,6 +463,9 @@ class TenantManager {
             rules: businessData.rules?.trim() || '',
             wifiNetwork: businessData.wifiNetwork?.trim() || '',
             wifiPassword: businessData.wifiPassword?.trim() || '',
+            isActive: businessData.isActive !== false,
+            status: businessData.status || (businessData.isActive === false ? 'INACTIVE' : 'ACTIVE'),
+            enabledModules: this.normalizeModules(businessData.enabledModules),
             operatingHours: (() => {
                 const oh = {};
                 for (let i = 0; i < 7; i++) {
@@ -493,6 +520,14 @@ class TenantManager {
                     throw new Error('La configuración cambió en otro dispositivo. Recarga la página antes de volver a guardar.');
                 }
                 transaction.update(businessRef, persistedFields);
+
+                // Inyectar auditoría de configuración en la misma transacción atómica
+                auditLogger.appendTransactionAudit(transaction, {
+                    businessId,
+                    action: AUDIT_ACTIONS.BUSINESS_SETTINGS_UPDATED,
+                    target: { type: 'BUSINESS', id: businessId, name: this.businesses[index].name },
+                    details: `Actualizada configuración de sucursal: ${this.businesses[index].name} (v${persistedFields.version})`
+                });
             });
         }
 
@@ -503,6 +538,7 @@ class TenantManager {
 
         this.saveLocally(this.businesses);
         syncMetadataToServer(this.businesses);
+
         this.notify();
         return this.businesses[index];
     }
@@ -574,6 +610,93 @@ class TenantManager {
         return true;
     }
 
+    /**
+     * Normaliza el objeto de módulos habilitados asegurando compatibilidad total (default true).
+     */
+    normalizeModules(rawModules) {
+        if (!rawModules || typeof rawModules !== 'object') {
+            return { ...DEFAULT_BUSINESS_MODULES };
+        }
+        return {
+            accounts: rawModules.accounts !== false,
+            clients: rawModules.clients !== false,
+            loyalty: rawModules.loyalty !== false,
+            requests: rawModules.requests !== false,
+            analytics: rawModules.analytics !== false,
+            business: rawModules.business !== false,
+            catalogs: rawModules.catalogs !== false,
+            calendarWeek: rawModules.calendarWeek !== false,
+            calendarMonth: rawModules.calendarMonth !== false,
+            machines: rawModules.machines !== false,
+            myProfile: rawModules.myProfile !== false,
+            versus: rawModules.versus !== false
+        };
+    }
+
+    /**
+     * Valida si un módulo o vista específica está habilitada para el negocio activo o especificado.
+     * Retorna true por defecto si no está restringido o el local no existe.
+     */
+    isModuleEnabled(moduleId, business = null) {
+        if (!moduleId) return true;
+        const biz = business || this.getActiveBusiness();
+        if (!biz) return true;
+
+        const modules = this.normalizeModules(biz.enabledModules);
+        const key = String(moduleId).toLowerCase().replace(/[^a-z]/g, '');
+
+        if (key === 'accounts' || key === 'pos') return modules.accounts !== false;
+        if (key === 'clients' || key === 'players') return modules.clients !== false;
+        if (key === 'loyalty' || key === 'rewards') return modules.loyalty !== false;
+        if (key === 'requests' || key === 'solicitudes') return modules.requests !== false;
+        if (key === 'analytics' || key === 'rendimiento') return modules.analytics !== false;
+        if (key === 'business' || key === 'settings' || key === 'ajustes') return modules.business !== false;
+        if (key === 'catalogs' || key === 'products' || key === 'catalogos') return modules.catalogs !== false;
+        if (key === 'week' || key === 'calendarweek') return modules.calendarWeek !== false;
+        if (key === 'month' || key === 'calendarmonth') return modules.calendarMonth !== false;
+        if (key === 'machines' || key === 'maquinas') return modules.machines !== false;
+        if (key === 'myprofile' || key === 'profile' || key === 'perfil') return modules.myProfile !== false;
+        if (key === 'versus' || key === 'retas' || key === 'matchmaking') return modules.versus !== false;
+
+        if (moduleId in modules) {
+            return modules[moduleId] !== false;
+        }
+        return true;
+    }
+
+    /**
+     * Valida si el local está operativo (Activo).
+     */
+    isBusinessActive(business = null) {
+        const biz = business || this.getActiveBusiness();
+        if (!biz) return true;
+        return biz.isActive !== false && biz.status !== 'INACTIVE';
+    }
+
+    /**
+     * Activa o Pausa una sucursal (Operación Superadmin).
+     */
+    async toggleBusinessStatus(businessId, isActive) {
+        const biz = this.businesses.find(b => b.id === businessId);
+        if (!biz) return null;
+        return await this.updateBusiness(businessId, {
+            isActive: !!isActive,
+            status: isActive ? 'ACTIVE' : 'INACTIVE'
+        });
+    }
+
+    /**
+     * Actualiza la matriz de Feature Toggles de una sucursal (Operación Superadmin).
+     */
+    async updateBusinessModules(businessId, modulesObj) {
+        const biz = this.businesses.find(b => b.id === businessId);
+        if (!biz) return null;
+        const normalized = this.normalizeModules(modulesObj);
+        return await this.updateBusiness(businessId, {
+            enabledModules: normalized
+        });
+    }
+
     async updateGlobalConfig(configData) {
         this.disableChangeLocalGlobally = !!configData.disableChangeLocalGlobally;
         localStorage.setItem('piu_global_config_v1', JSON.stringify({
@@ -591,6 +714,84 @@ class TenantManager {
             }
         }
         this.notify();
+    }
+
+    /**
+     * Comprueba si un cliente/jugador está bloqueado en una sucursal específica.
+     */
+    isClientBlocked(business, clientData = {}) {
+        if (!business || !Array.isArray(business.blockedUsers) || business.blockedUsers.length === 0) {
+            return false;
+        }
+
+        const clientId = (clientData.id || clientData.clientId || '').toLowerCase().trim();
+        const clientUsername = (clientData.username || clientData.clientUsername || '').toLowerCase().trim();
+        const clientPhone = (clientData.phone || clientData.clientPhone || '').replace(/\D/g, '');
+        const clientName = (clientData.name || clientData.clientName || '').toLowerCase().trim();
+
+        return business.blockedUsers.some(b => {
+            const bId = (b.id || '').toLowerCase().trim();
+            const bUsername = (b.username || '').toLowerCase().trim();
+            const bPhone = (b.phone || '').replace(/\D/g, '');
+            const bName = (b.name || '').toLowerCase().trim();
+
+            if (clientId && bId && clientId === bId) return true;
+            if (clientUsername && bUsername && (clientUsername === bUsername || clientUsername === bUsername.replace(/^@/, ''))) return true;
+            if (clientPhone && bPhone && clientPhone === bPhone) return true;
+            if (clientName && bName && clientName === bName) return true;
+            return false;
+        });
+    }
+
+    /**
+     * Bloquea a un cliente para impedirle reservar en una sucursal.
+     */
+    async blockClientInBusiness(businessId, clientData, reason = 'Bloqueado por locatario') {
+        const business = this.businesses.find(b => b.id === businessId);
+        if (!business) throw new Error("Sucursal no encontrada.");
+
+        const currentBlocked = Array.isArray(business.blockedUsers) ? [...business.blockedUsers] : [];
+        const alreadyBlocked = this.isClientBlocked(business, clientData);
+        if (alreadyBlocked) {
+            return business;
+        }
+
+        const newBlockEntry = {
+            id: clientData.id || '',
+            username: clientData.username || '',
+            name: clientData.name || 'Jugador',
+            phone: clientData.phone ? clientData.phone.replace(/\D/g, '') : '',
+            reason: (reason || 'Sin motivo especificado').trim(),
+            blockedAt: new Date().toISOString()
+        };
+
+        currentBlocked.push(newBlockEntry);
+        return await this.updateBusiness(businessId, { blockedUsers: currentBlocked });
+    }
+
+    /**
+     * Desbloquea a un cliente en una sucursal.
+     */
+    async unblockClientInBusiness(businessId, clientIdOrPhone) {
+        const business = this.businesses.find(b => b.id === businessId);
+        if (!business) throw new Error("Sucursal no encontrada.");
+
+        const currentBlocked = Array.isArray(business.blockedUsers) ? [...business.blockedUsers] : [];
+        const key = (clientIdOrPhone || '').toLowerCase().trim();
+        const cleanPhone = key.replace(/\D/g, '');
+
+        const filtered = currentBlocked.filter(b => {
+            const bId = (b.id || '').toLowerCase().trim();
+            const bUsername = (b.username || '').toLowerCase().trim();
+            const bPhone = (b.phone || '').replace(/\D/g, '');
+
+            if (bId && bId === key) return false;
+            if (bUsername && bUsername === key) return false;
+            if (cleanPhone && bPhone && bPhone === cleanPhone) return false;
+            return true;
+        });
+
+        return await this.updateBusiness(businessId, { blockedUsers: filtered });
     }
 
     subscribe(callback) {

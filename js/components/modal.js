@@ -15,6 +15,16 @@ class ModalManager {
             root.className = 'modal-root';
             document.body.appendChild(root);
         }
+
+        // Listener global de tecla Escape
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.activeModal) {
+                this.close();
+            }
+        });
+
+        // Helper global para botones inline
+        window.__closeCurrentModal = () => this.close();
     }
 
     /**
@@ -27,8 +37,10 @@ class ModalManager {
         
         const modalEl = document.createElement('div');
         modalEl.className = 'modal-backdrop animate-fade-in';
+        modalEl.setAttribute('role', 'dialog');
+        modalEl.setAttribute('aria-modal', 'true');
         modalEl.innerHTML = `
-            <div class="modal-card animate-scale-up" style="max-width: ${maxWidth}">
+            <div class="modal-card animate-scale-up" style="max-width: ${maxWidth}; width: 100%;">
                 <div class="modal-header">
                     <div class="modal-title">
                         <span class="modal-icon">${icon}</span>

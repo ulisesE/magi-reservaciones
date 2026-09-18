@@ -42,15 +42,20 @@ export function renderMonthView(container) {
     container.innerHTML = `
         <div class="month-view-wrapper animate-fade-in">
             <!-- Header de Navegación de Mes -->
-            <div class="view-header-bar">
-                <div class="date-navigator">
-                    <button class="btn btn-icon btn-secondary" id="btn-prev-month" title="Mes anterior">◀</button>
-                    <div class="current-date-info">
-                        <h2 class="friendly-date-title">${MONTH_NAMES[currentMonth]} ${currentYear}</h2>
-                        <span class="badge badge-primary">${totalMonthReservations} Reservaciones este mes</span>
+            <div class="view-header-bar month-view-header">
+                <div class="date-navigator month-date-nav">
+                    <div class="month-nav-controls">
+                        <button class="btn btn-icon btn-secondary" id="btn-prev-month" title="Mes anterior">◀</button>
+                        <div class="current-date-info">
+                            <h2 class="friendly-date-title">${MONTH_NAMES[currentMonth]} ${currentYear}</h2>
+                        </div>
+                        <button class="btn btn-icon btn-secondary" id="btn-next-month" title="Mes siguiente">▶</button>
                     </div>
-                    <button class="btn btn-icon btn-secondary" id="btn-next-month" title="Mes siguiente">▶</button>
-                    <button class="btn btn-secondary btn-sm" id="btn-current-month">Mes Actual</button>
+
+                    <div class="month-nav-actions">
+                        <span class="badge badge-primary total-month-badge">${totalMonthReservations} ${totalMonthReservations === 1 ? 'reserva' : 'reservas'}</span>
+                        <button class="btn btn-secondary btn-sm" id="btn-current-month">Mes Actual</button>
+                    </div>
                 </div>
 
                 <div class="month-legend">

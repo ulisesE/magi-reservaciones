@@ -26,13 +26,52 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         return;
     }
 
+    // Comprobar si el cliente actual está bloqueado en esta sucursal
+    if (isClientUser && tenantManager.isClientBlocked(business, currentUser)) {
+        modal.open({
+            title: 'Acceso Restringido en Sucursal',
+            icon: '🚫',
+            contentHtml: `
+                <div style="padding: 16px; text-align: center;">
+                    <div style="font-size: 3rem; margin-bottom: 12px;">🚫</div>
+                    <h3 style="color: var(--color-neon-red); margin-bottom: 12px;">Reservaciones Restringidas</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; margin-bottom: 16px;">
+                        Tu cuenta tiene restringidas las reservaciones en <strong>${escapeHTML(business?.name || 'esta sucursal')}</strong> por disposición de la administración.
+                    </p>
+                    <p style="color: var(--text-muted); font-size: 0.85rem;">
+                        Si consideras que se trata de un error o deseas aclarar tu situación, por favor ponte en contacto directamente con el encargado del local.
+                    </p>
+                </div>
+            `,
+            footerHtml: `<button type="button" class="btn btn-secondary" id="btn-close-blocked-modal">Cerrar</button>`,
+            maxWidth: '440px'
+        });
+        document.getElementById('btn-close-blocked-modal')?.addEventListener('click', () => modal.close());
+        return;
+    }
+
     if (machines.length === 0) {
         toast.warning("No hay máquinas disponibles en este momento para reservar.");
         return;
     }
 
-    // Cargar la lista de clientes si es encargado/superusuario para autocompletado
+    // Cargar la lista fresca de clientes si es encargado/superusuario para autocompletado
     let clients = [];
+    const getFreshClients = () => {
+        let list = (clientDirManager.allClients && clientDirManager.allClients.length > 0)
+            ? clientDirManager.allClients
+            : ((clientDirManager.clients && clientDirManager.clients.length > 0)
+                ? clientDirManager.clients
+                : (authManager.getClientUsers() || []));
+        if (list.length === 0) {
+            try {
+                const local = localStorage.getItem('piu_registered_players_cache');
+                if (local) list = JSON.parse(local);
+            } catch(e) {}
+        }
+        return list;
+    };
+
     if (isStaff) {
         clientDirManager.loadClients().then(list => {
             clients = list;
@@ -300,6 +339,8 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
 
         nameInput.addEventListener('input', (e) => {
             const queryText = e.target.value.trim().toLowerCase();
+            const queryClean = queryText.startsWith('@') ? queryText.substring(1) : queryText;
+            const queryPhone = queryText.replace(/\D/g, '');
             selectedClientRef = null;
             if (!queryText) {
                 suggestionsDiv.innerHTML = '';
@@ -307,11 +348,22 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 return;
             }
 
-            const matches = clients.filter(c => 
-                (c.name && c.name.toLowerCase().includes(queryText)) || 
-                (c.username && c.username.toLowerCase().includes(queryText)) ||
-                (c.phone && c.phone.includes(queryText))
-            ).slice(0, 5);
+            const freshList = getFreshClients();
+            const matches = freshList.filter(c => {
+                const cName = (c.name || '').toLowerCase();
+                const cUsername = (c.username || '').toLowerCase();
+                const cPiuId = (c.piuGameId || '').toLowerCase();
+                const cPhone = (c.phone || '').replace(/\D/g, '');
+                const cId = (c.id || '').toLowerCase();
+
+                return cName.includes(queryText) ||
+                    cUsername.includes(queryText) ||
+                    cUsername.includes(queryClean) ||
+                    cPiuId.includes(queryText) ||
+                    cPiuId.replace(/#/g, '').includes(queryClean.replace(/#/g, '')) ||
+                    (queryPhone && cPhone.includes(queryPhone)) ||
+                    cId.includes(queryText);
+            }).slice(0, 5);
 
             if (matches.length === 0) {
                 suggestionsDiv.innerHTML = '';
@@ -320,13 +372,14 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             }
 
             suggestionsDiv.innerHTML = matches.map(c => `
-                <div class="suggestion-item" data-id="${c.id}" data-username="${c.username || ''}" data-name="${c.name}" data-phone="${c.phone || ''}" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; transition: background 0.2s; color:#ffffff;">
+                <div class="suggestion-item" data-id="${c.id}" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; transition: background 0.2s; color:#ffffff;">
                     <div>
                         <span style="font-size:1.1rem; margin-right:6px;">${c.avatar || '🕺'}</span>
-                        <strong style="color:#ffffff;">${c.name}</strong>
-                        ${c.username ? `<span style="color:var(--piu-cyan); font-size:0.75rem; margin-left:6px;">@${c.username}</span>` : ''}
+                        <strong style="color:#ffffff;">${escapeHTML(c.name)}</strong>
+                        ${c.username ? `<span style="color:var(--piu-cyan); font-size:0.75rem; margin-left:6px;">@${escapeHTML(c.username)}</span>` : ''}
+                        ${c.piuGameId ? `<span class="badge" style="background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3); font-size:0.65rem; margin-left:4px; padding:1px 4px;">🎮 ${escapeHTML(c.piuGameId)}</span>` : ''}
                     </div>
-                    <span style="color:var(--text-muted); font-size:0.8rem;">${c.phone || ''}</span>
+                    <span style="color:var(--text-muted); font-size:0.8rem;">${escapeHTML(c.phone || '')}</span>
                 </div>
             `).join('');
 
@@ -341,14 +394,18 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 });
                 item.addEventListener('click', (evt) => {
                     evt.stopPropagation();
-                    nameInput.value = item.dataset.name;
-                    phoneInput.value = item.dataset.phone;
-                    selectedClientRef = {
-                        id: item.dataset.id,
-                        username: item.dataset.username,
-                        name: item.dataset.name,
-                        phone: item.dataset.phone
-                    };
+                    const targetId = item.dataset.id;
+                    const clientObj = freshList.find(c => c.id === targetId);
+                    if (clientObj) {
+                        nameInput.value = clientObj.name;
+                        phoneInput.value = clientObj.phone || '';
+                        selectedClientRef = {
+                            id: clientObj.id,
+                            username: clientObj.username,
+                            name: clientObj.name,
+                            phone: clientObj.phone
+                        };
+                    }
                     suggestionsDiv.innerHTML = '';
                     suggestionsDiv.classList.add('hidden');
                 });
@@ -393,19 +450,33 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             const enteredName = nameInput.value.trim();
             const enteredPhone = phoneInput.value.trim();
 
-            let targetClientId = selectedClientRef?.id || null;
-            let targetClientUsername = selectedClientRef?.username || null;
+            let targetClientId = selectedClientRef?.id || (isClientUser && currentUser ? currentUser.id : null);
+            let targetClientUsername = selectedClientRef?.username || (isClientUser && currentUser ? currentUser.username : null);
 
-            if (!targetClientId && isStaff && clients.length > 0) {
-                const found = clients.find(c => 
+            if (!targetClientId && isStaff) {
+                const freshList = getFreshClients();
+                const cleanPhone = enteredPhone.replace(/\D/g, '');
+                const found = freshList.find(c => 
                     (c.username && c.username.toLowerCase() === enteredName.toLowerCase()) ||
                     (c.name && c.name.toLowerCase() === enteredName.toLowerCase()) ||
-                    (enteredPhone && c.phone && c.phone.replace(/\D/g, '') === enteredPhone.replace(/\D/g, ''))
+                    (cleanPhone && c.phone && c.phone.replace(/\D/g, '') === cleanPhone)
                 );
                 if (found) {
                     targetClientId = found.id;
                     targetClientUsername = found.username;
                 }
+            }
+
+            // Validar bloqueo en la sucursal
+            if (tenantManager.isClientBlocked(business, {
+                id: targetClientId,
+                username: targetClientUsername,
+                phone: enteredPhone,
+                name: enteredName
+            })) {
+                errorMsg.textContent = 'Este usuario o número de teléfono tiene restringidas las reservaciones en esta sucursal.';
+                errorMsg.classList.remove('hidden');
+                return;
             }
 
             const booking = await store.requestReservation({
@@ -423,6 +494,10 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
             });
 
             modal.close();
+
+            if (booking && booking.date) {
+                store.setSelectedDate(booking.date);
+            }
 
             if (isStaff) {
                 toast.success(`Reservación asignada exitosamente para ${booking.clientName}`);

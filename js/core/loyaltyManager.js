@@ -17,6 +17,7 @@ import {
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { store } from './store.js';
+import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
 
 export const TIERS = {
     BRONCE: { name: 'Bronce', minPoints: 0, maxPoints: 99, minVisits: 0, maxVisits: 9, discount: 0.00, color: '#cd7f32', class: 'tier-bronce', badge: '🟫' },
@@ -208,6 +209,16 @@ class LoyaltyManager {
                 console.error("Error guardando premio en Firebase:", e);
             }
         }
+
+        // Auditoría inmutable de alta de recompensa
+        await auditLogger.logEvent({
+            businessId,
+            action: AUDIT_ACTIONS.PRODUCT_CREATED,
+            target: { type: 'REWARD', id: newReward.id, name: newReward.name },
+            financialData: { amount: newReward.costPoints, currency: 'PTS' },
+            details: `Creada recompensa de lealtad: ${newReward.name} (${newReward.costPoints} pts)`
+        });
+
         return newReward;
     }
 
@@ -226,11 +237,21 @@ class LoyaltyManager {
                 console.error("Error actualizando premio en Firebase:", e);
             }
         }
+
+        // Auditoría inmutable de edición de recompensa
+        await auditLogger.logEvent({
+            businessId,
+            action: AUDIT_ACTIONS.PRODUCT_UPDATED,
+            target: { type: 'REWARD', id: rewardId, name: catalog[idx].name },
+            details: `Actualizada recompensa de lealtad: ${catalog[idx].name}`
+        });
+
         return catalog[idx];
     }
 
     async deleteReward(businessId, rewardId) {
         let catalog = await this.getRewardsCatalog(businessId);
+        const rewardToDelete = catalog.find(r => r.id === rewardId);
         catalog = catalog.filter(r => r.id !== rewardId);
         localStorage.setItem(`piu_rewards_${businessId}`, JSON.stringify(catalog));
 
@@ -241,6 +262,15 @@ class LoyaltyManager {
                 console.error("Error eliminando premio en Firebase:", e);
             }
         }
+
+        // Auditoría inmutable de eliminación de recompensa
+        await auditLogger.logEvent({
+            businessId,
+            action: AUDIT_ACTIONS.PRODUCT_DELETED,
+            target: { type: 'REWARD', id: rewardId, name: rewardToDelete?.name || 'Recompensa' },
+            details: `Eliminada recompensa de lealtad ID: ${rewardId} (${rewardToDelete?.name || ''})`
+        });
+
         return true;
     }
 
@@ -367,6 +397,15 @@ class LoyaltyManager {
 
                     const redemptionRef = doc(db, COLLECTIONS.REDEMPTIONS, newRedemption.id);
                     transaction.set(redemptionRef, newRedemption);
+
+                    // Auditoría inmutable y atómica de canje de recompensa
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId,
+                        action: AUDIT_ACTIONS.REWARD_REDEEMED,
+                        target: { type: 'REWARD', id: reward.id, name: reward.name },
+                        financialData: { amount: pointsCost, currency: 'PTS' },
+                        details: `Canje de recompensa "${reward.name}" (${pointsCost} pts) para jugador ${name} (@${username}). Código: ${code}`
+                    });
                 });
             } catch (err) {
                 console.error("Transacción de canje fallida:", err);
@@ -613,6 +652,15 @@ class LoyaltyManager {
 
                     transaction.update(playerRef, {
                         loyalty: loyaltyMap
+                    });
+
+                    // Auditoría inmutable y atómica de ajuste de puntos/visitas
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: actualBusinessId,
+                        action: AUDIT_ACTIONS.POINTS_ADJUSTED,
+                        target: { type: 'PLAYER', id: actualPlayerId, name: playerData?.name || 'Jugador' },
+                        financialData: { amount: Math.abs(ptsChange), currency: 'PTS' },
+                        details: `Ajuste de puntos/visitas: ${ptsChange >= 0 ? '+' : ''}${ptsChange} pts, ${vtsChange >= 0 ? '+' : ''}${vtsChange} vts. Motivo: ${actualReason || 'Ajuste operativo'}`
                     });
                 });
             } catch (err) {

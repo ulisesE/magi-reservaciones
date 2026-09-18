@@ -805,7 +805,7 @@
 
 .month-weekdays-header {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     background: var(--bg-dark-800);
     border-bottom: 2px solid var(--border-color);
     text-align: center;
@@ -823,7 +823,7 @@
 
 .month-days-grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .month-day-cell {
@@ -1497,44 +1497,133 @@
     .view-header-bar {
         flex-direction: column;
         align-items: flex-start;
+        gap: 10px;
     }
     .date-navigator {
         width: 100%;
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
+        display: flex;
+        flex-wrap: wrap;
         gap: 8px;
         align-items: center;
     }
     .date-step-controls {
-        grid-column: 1;
-        grid-row: 1;
-    }
-    .date-navigator #btn-today-day {
-        grid-column: 3;
-        grid-row: 1;
-        white-space: nowrap;
-    }
-    .current-date-info {
-        grid-column: 1 / -1;
-        grid-row: 2;
-        min-width: 0;
-        justify-content: space-between;
-    }
-    .current-date-info .friendly-date-title {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
     .friendly-date-title {
         font-size: 1.1rem;
     }
+
+    /* Month View Responsive Refinements */
+    .month-view-wrapper .view-header-bar {
+        padding: 10px;
+        gap: 8px;
+    }
+    .month-date-nav {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        gap: 8px !important;
+    }
+    .month-nav-controls {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+    }
+    .month-nav-actions {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+    }
+    .month-view-wrapper .month-legend {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        width: 100% !important;
+        gap: 12px !important;
+        font-size: 0.72rem !important;
+    }
+    .month-view-wrapper .friendly-date-title {
+        font-size: 1.05rem !important;
+        text-align: center;
+    }
+    .calendar-month-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        border-radius: var(--radius-sm) !important;
+    }
+    .month-weekdays-header {
+        grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    }
+    .weekday-cell {
+        padding: 6px 1px !important;
+        font-size: 0.72rem !important;
+        letter-spacing: 0 !important;
+    }
+    .month-days-grid {
+        grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+        width: 100% !important;
+    }
     .month-day-cell {
-        min-height: 75px;
-        padding: 4px;
+        min-height: 52px !important;
+        height: auto !important;
+        padding: 3px 1px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
     }
-    .res-badge-text, .mini-players-list {
-        display: none;
+    .cell-day-header {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        position: relative !important;
+        margin-bottom: 2px !important;
     }
+    .day-num {
+        font-size: 0.75rem !important;
+        line-height: 1 !important;
+    }
+    .today-dot {
+        position: absolute !important;
+        top: 1px !important;
+        right: 2px !important;
+        width: 5px !important;
+        height: 5px !important;
+    }
+    .cell-day-body {
+        width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex: 1 !important;
+    }
+    .res-count-badge {
+        padding: 1px 4px !important;
+        margin: 0 auto !important;
+        border-radius: var(--radius-full) !important;
+        gap: 0 !important;
+    }
+    .res-badge-icon,
+    .res-badge-text,
+    .mini-players-list,
+    .no-bookings-hint {
+        display: none !important;
+    }
+    .res-badge-val {
+        font-size: 0.7rem !important;
+        font-weight: 800 !important;
+    }
+
     .req-main-row {
         flex-direction: column;
     }

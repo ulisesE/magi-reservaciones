@@ -166,14 +166,15 @@ export function getMinutesSinceOperationalMidnight(timeStr, openingTime, closing
  * Obtiene la configuración de horarios para una fecha específica del negocio.
  */
 export function getBusinessHoursForDate(business, dateStr) {
-    if (!business) return { openingTime: '11:00', closingTime: '22:00', closed: false };
+    if (!business) return { openingTime: '11:00', closingTime: '22:00', closed: false, isOpen: true };
     
     // Fallback standard fields if operatingHours is not set
     if (!business.operatingHours) {
         return { 
             openingTime: business.openingTime || '11:00', 
             closingTime: business.closingTime || '22:00', 
-            closed: false 
+            closed: false,
+            isOpen: true
         };
     }
     
@@ -184,10 +185,12 @@ export function getBusinessHoursForDate(business, dateStr) {
     
     const dayConfig = business.operatingHours[dayOfWeek] || business.operatingHours[String(dayOfWeek)];
     if (dayConfig) {
+        const isClosed = !!dayConfig.closed;
         return {
             openingTime: dayConfig.open || '11:00',
             closingTime: dayConfig.close || '22:00',
-            closed: !!dayConfig.closed
+            closed: isClosed,
+            isOpen: !isClosed
         };
     }
     
@@ -195,7 +198,8 @@ export function getBusinessHoursForDate(business, dateStr) {
     return {
         openingTime: business.openingTime || '11:00',
         closingTime: business.closingTime || '22:00',
-        closed: false
+        closed: false,
+        isOpen: true
     };
 }
 

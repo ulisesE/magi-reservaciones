@@ -8,6 +8,7 @@ import { openChangelogModal } from './changelogModal.js';
 import { modal } from './modal.js';
 import { toast } from './toast.js';
 import { navShortcutsManager } from '../core/navShortcutsManager.js';
+import { notificationManager } from '../core/notificationManager.js';
 
 export function renderHeader(container) {
     const isLocalSelected = tenantManager.isLocalSelected;
@@ -21,11 +22,19 @@ export function renderHeader(container) {
     const currentView = store.currentView;
 
     const userId = currentUser ? (currentUser.id || currentUser.username || 'staff') : 'default';
-    const availableStaffModules = isStaff ? navShortcutsManager.getAvailableModules(isSuperAdmin) : [];
-    const pinnedShortcutIds = isStaff ? navShortcutsManager.getPinnedShortcuts(userId, isSuperAdmin) : [];
+    const availableStaffModules = isStaff ? navShortcutsManager.getAvailableModules(isSuperAdmin, business) : [];
+    const pinnedShortcutIds = isStaff ? navShortcutsManager.getPinnedShortcuts(userId, isSuperAdmin, business) : [];
 
     const pinnedModules = availableStaffModules.filter(m => pinnedShortcutIds.includes(m.id));
     const unpinnedModules = availableStaffModules.filter(m => !pinnedShortcutIds.includes(m.id));
+
+    // Flags de visibilidad por Feature Toggles del local activo (Superadmin siempre ve todo)
+    const showHome = isSuperAdmin || tenantManager.isModuleEnabled('HOME', business);
+    const showWeek = isSuperAdmin || tenantManager.isModuleEnabled('calendarWeek', business);
+    const showMonth = isSuperAdmin || tenantManager.isModuleEnabled('calendarMonth', business);
+    const showMachines = isSuperAdmin || tenantManager.isModuleEnabled('machines', business);
+    const showMyProfile = isSuperAdmin || tenantManager.isModuleEnabled('myProfile', business);
+    const showVersus = isSuperAdmin || tenantManager.isModuleEnabled('versus', business);
 
     // Si estamos en la pantalla de bienvenida (sin local seleccionado)
     if (!isLocalSelected && !isSuperAdmin) {
@@ -40,7 +49,7 @@ export function renderHeader(container) {
                             </div>
                             <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                                 <span>Plataforma Modular de Reservaciones</span>
-                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.6.0">v1.6.0</button>
+                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.3">v1.7.3</button>
                             </div>
                         </div>
                     </div>
@@ -87,7 +96,7 @@ export function renderHeader(container) {
                 <div class="header-brand">
                     ${(!isManager && ((!business?.disableChangeLocal && !tenantManager.disableChangeLocalGlobally) || isSuperAdmin)) ? `
                         <button id="btn-back-to-index" class="btn btn-outline btn-sm btn-back-hub" title="Regresar al inicio para cambiar de sucursal">
-                            <span>← Cambiar de Local</span>
+                            <span class="btn-back-text">← Cambiar de Local</span>
                         </button>
                     ` : ''}
                     
@@ -98,14 +107,25 @@ export function renderHeader(container) {
                         </div>
                         <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                             <span>${business?.city || 'Arcade'}</span>
-                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.6.0">v1.6.0</button>
+                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.3">v1.7.3</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Control de Acceso y Acciones -->
-                <div class="header-actions" style="display:flex; align-items:center; gap:14px;">
-                    <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
+                <!-- Control de Acceso, Red y Acciones -->
+                <div class="header-actions">
+                    <!-- Indicador de Conexión de Red -->
+                    <div id="header-network-status" class="network-status-badge ${navigator.onLine ? 'online' : 'offline'}" style="display:flex; align-items:center; gap:5px; font-size:0.72rem; padding:3px 8px; border-radius:12px; background:${navigator.onLine ? 'rgba(104,242,5,0.1)' : 'rgba(255,184,0,0.15)'}; border:1px solid ${navigator.onLine ? 'rgba(104,242,5,0.3)' : 'rgba(255,184,0,0.4)'}; color:${navigator.onLine ? 'var(--color-neon-lime)' : 'var(--color-neon-gold)'}; font-weight:700;" title="${navigator.onLine ? 'Conectado a Firestore' : 'Modo Sin Conexión'}">
+                        <span style="font-size:0.6rem;">${navigator.onLine ? '🟢' : '🟡'}</span>
+                        <span class="network-status-text">${navigator.onLine ? 'En Línea' : 'Offline'}</span>
+                    </div>
+
+                    <!-- Botón de Notificaciones del Navegador -->
+                    <button id="btn-toggle-notifs" class="btn btn-outline btn-xs" style="border-radius:var(--radius-full); padding:4px 8px; font-size:0.85rem;" title="${notificationManager.getPermissionStatus() === 'granted' ? 'Notificaciones activadas (clic para probar)' : 'Activar notificaciones del navegador'}">
+                        ${notificationManager.getPermissionStatus() === 'granted' ? '🔔' : '🔕'}
+                    </button>
+
+                    <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" title="Ir al calendario de día para reservar" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
                         <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
                     </button>
 
@@ -142,13 +162,15 @@ export function renderHeader(container) {
                                     </div>
                                 </div>
 
-                                <button class="dropdown-item" data-view="MY_PROFILE">
-                                    <span class="item-icon">👤</span>
-                                    <div class="item-info">
-                                        <strong>${isClientUser ? 'Mi Perfil & Pase Digital' : 'Mi Cuenta'}</strong>
-                                        <small>Ver estadísticas y reservaciones</small>
-                                    </div>
-                                </button>
+                                ${showMyProfile ? `
+                                    <button class="dropdown-item" data-view="MY_PROFILE">
+                                        <span class="item-icon">👤</span>
+                                        <div class="item-info">
+                                            <strong>${isClientUser ? 'Mi Perfil & Pase Digital' : 'Mi Cuenta'}</strong>
+                                            <small>Ver estadísticas y reservaciones</small>
+                                        </div>
+                                    </button>
+                                ` : ''}
 
                                 ${isStaff ? `
                                     <button class="dropdown-item btn-customize-shortcuts" type="button">
@@ -163,7 +185,7 @@ export function renderHeader(container) {
                                 <button class="dropdown-item btn-open-changelog-header" type="button">
                                     <span class="item-icon">📜</span>
                                     <div class="item-info">
-                                        <strong>Novedades (v1.6.0)</strong>
+                                        <strong>Novedades (v1.7.3)</strong>
                                         <small>Ver registro de cambios</small>
                                     </div>
                                 </button>
@@ -191,10 +213,12 @@ export function renderHeader(container) {
             <div class="header-nav-row">
                 <nav class="view-nav-tabs">
                     <div class="nav-cluster">
-                        <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME" title="Inicio">
-                            <span class="tab-icon">🏠</span>
-                            <span class="tab-text">Inicio</span>
-                        </button>
+                        ${showHome ? `
+                            <button class="nav-tab ${currentView === 'HOME' ? 'active' : ''}" data-view="HOME" title="Inicio">
+                                <span class="tab-icon">🏠</span>
+                                <span class="tab-text">Inicio</span>
+                            </button>
+                        ` : ''}
 
                         <div class="nav-dropdown-wrapper">
                             <button class="nav-tab nav-dropdown-btn ${['DAY', 'WEEK', 'MONTH'].includes(currentView) ? 'active' : ''}" type="button" title="Vistas de Calendario y Horarios">
@@ -210,29 +234,42 @@ export function renderHeader(container) {
                                         <small>Cuadrícula de slots por máquina</small>
                                     </div>
                                 </button>
-                                <button class="dropdown-item ${currentView === 'WEEK' ? 'active' : ''}" data-view="WEEK">
-                                    <span class="item-icon">📊</span>
-                                    <div class="item-info">
-                                        <strong>Vista Semana</strong>
-                                        <small>Disponibilidad y afluencia 7 días</small>
-                                    </div>
-                                </button>
-                                <button class="dropdown-item ${currentView === 'MONTH' ? 'active' : ''}" data-view="MONTH">
-                                    <span class="item-icon">🗓️</span>
-                                    <div class="item-info">
-                                        <strong>Vista Mes</strong>
-                                        <small>Calendario mensual global</small>
-                                    </div>
-                                </button>
+                                ${showWeek ? `
+                                    <button class="dropdown-item ${currentView === 'WEEK' ? 'active' : ''}" data-view="WEEK">
+                                        <span class="item-icon">📊</span>
+                                        <div class="item-info">
+                                            <strong>Vista Semana</strong>
+                                            <small>Disponibilidad y afluencia 7 días</small>
+                                        </div>
+                                    </button>
+                                ` : ''}
+                                ${showMonth ? `
+                                    <button class="dropdown-item ${currentView === 'MONTH' ? 'active' : ''}" data-view="MONTH">
+                                        <span class="item-icon">🗓️</span>
+                                        <div class="item-info">
+                                            <strong>Vista Mes</strong>
+                                            <small>Calendario mensual global</small>
+                                        </div>
+                                    </button>
+                                ` : ''}
                             </div>
                         </div>
 
-                        <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES">
-                            <span class="tab-icon">🕹️</span>
-                            <span class="tab-text">Máquinas</span>
-                        </button>
+                        ${showMachines ? `
+                            <button class="nav-tab ${currentView === 'MACHINES' ? 'active' : ''}" data-view="MACHINES">
+                                <span class="tab-icon">🕹️</span>
+                                <span class="tab-text">Máquinas</span>
+                            </button>
+                        ` : ''}
 
-                        ${currentUser ? `
+                        ${showVersus ? `
+                            <button class="nav-tab ${currentView === 'VERSUS' ? 'active' : ''}" data-view="VERSUS" title="Arena Versus y Retas PVP">
+                                <span class="tab-icon">⚔️</span>
+                                <span class="tab-text">Retas</span>
+                            </button>
+                        ` : ''}
+
+                        ${(currentUser && showMyProfile) ? `
                             <button class="nav-tab ${currentView === 'MY_PROFILE' ? 'active' : ''}" data-view="MY_PROFILE">
                                 <span class="tab-icon">👤</span>
                                 <span class="tab-text">${isClientUser ? 'Mi Perfil' : 'Mi Cuenta'}</span>
@@ -341,7 +378,58 @@ export function renderHeader(container) {
     const quickBookBtn = container.querySelector('#btn-quick-book');
     if (quickBookBtn) {
         quickBookBtn.addEventListener('click', () => {
-            openBookingModal();
+            store.setCurrentView('DAY');
+            const dayTarget = document.querySelector('#day-view-container, .grid-container-card, .matrix-table-responsive');
+            if (dayTarget) {
+                dayTarget.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    }
+
+    // Botón de Notificaciones del Navegador
+    const notifsBtn = container.querySelector('#btn-toggle-notifs');
+    if (notifsBtn) {
+        notifsBtn.addEventListener('click', async () => {
+            const status = notificationManager.getPermissionStatus();
+            if (status !== 'granted') {
+                const granted = await notificationManager.requestPermission();
+                if (granted) {
+                    notifsBtn.textContent = '🔔';
+                    notifsBtn.title = 'Notificaciones activadas (clic para probar)';
+                }
+            } else {
+                const modalEl = modal.open({
+                    title: '🔔 NOTIFICACIONES DEL NAVEGADOR',
+                    icon: '🔔',
+                    contentHtml: `
+                        <div style="text-align:center; padding:10px 0;">
+                            <div style="font-size:2.8rem; margin-bottom:8px;">🔔</div>
+                            <h3 style="color:#ffffff; margin:0 0 4px 0;">Notificaciones Activas</h3>
+                            <span class="badge badge-success" style="font-size:0.75rem;">🟢 Permiso Concedido en el Navegador</span>
+                            <p style="color:var(--text-muted); font-size:0.85rem; margin:12px auto; max-width:380px;">
+                                Recibirás alertas flotantes del sistema cuando recibas retos PVP en la <strong>Arena Versus</strong> o cuando el encargado apruebe tus reservaciones.
+                            </p>
+                            <div style="margin-top:16px;">
+                                <button type="button" class="btn btn-primary btn-sm glow-red" id="btn-send-test-notif">
+                                    <span>🚀 Enviar Notificación de Prueba</span>
+                                </button>
+                            </div>
+                        </div>
+                    `,
+                    footerHtml: `<button class="btn btn-secondary btn-sm" id="btn-close-notif-modal">Cerrar</button>`,
+                    maxWidth: '440px'
+                });
+
+                modalEl.querySelector('#btn-close-notif-modal').onclick = () => modal.close();
+                modalEl.querySelector('#btn-send-test-notif').onclick = async () => {
+                    await notificationManager.sendNotification({
+                        title: '⚔️ Pump It Up Hub (Test)',
+                        body: '¡El Service Worker intermediario está funcionando al 100%!',
+                        tag: 'test-sw-notification'
+                    });
+                    toast.success("¡Notificación de prueba enviada al Service Worker!");
+                };
+            }
         });
     }
 
@@ -563,6 +651,13 @@ export function openLoginModal(initialTab = 'login') {
                             <input type="email" id="reg-email" class="cyber-input" placeholder="jugador@correo.com">
                         </div>
                         <div class="form-group">
+                            <label for="reg-piu-id"><span class="neon-arrow">◆</span> PIU ID (piugame.com) - Opcional</label>
+                            <input type="text" id="reg-piu-id" class="cyber-input" placeholder="Ej. megajefelink#1234">
+                        </div>
+                    </div>
+
+                    <div class="form-row grid-2">
+                        <div class="form-group">
                             <label for="reg-level"><span class="neon-arrow">◆</span> Nivel / Liga (Ligas Potosinas)</label>
                             <select id="reg-level" class="cyber-select">
                                 <option value="Liga D">Liga D</option>
@@ -574,11 +669,10 @@ export function openLoginModal(initialTab = 'login') {
                                 <option value="Liga SSS">Liga SSS</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="reg-mode"><span class="neon-arrow">◆</span> Modo Preferido</label>
-                        <input type="text" id="reg-mode" class="cyber-input" placeholder="Ej. Single Speed, Doubles, Freestyle" value="Single / Double">
+                        <div class="form-group">
+                            <label for="reg-mode"><span class="neon-arrow">◆</span> Modo Preferido</label>
+                            <input type="text" id="reg-mode" class="cyber-input" placeholder="Ej. Single Speed, Doubles, Freestyle" value="Single / Double">
+                        </div>
                     </div>
 
                     <div id="register-error" class="form-error-msg hidden"></div>
@@ -710,6 +804,7 @@ export function openLoginModal(initialTab = 'login') {
         const phone = modalEl.querySelector('#reg-phone').value.trim();
         const pin = modalEl.querySelector('#reg-pin').value.trim();
         const email = modalEl.querySelector('#reg-email').value.trim();
+        const piuGameId = modalEl.querySelector('#reg-piu-id').value.trim();
         const skillLevel = modalEl.querySelector('#reg-level').value;
         const preferredMode = modalEl.querySelector('#reg-mode').value.trim();
         const avatar = modalEl.querySelector('#reg-avatar').value;
@@ -729,7 +824,7 @@ export function openLoginModal(initialTab = 'login') {
 
         try {
             const newPlayer = await authManager.registerClient({
-                name, username, phone, pin, email, skillLevel, preferredMode, avatar
+                name, username, phone, pin, email, piuGameId, skillLevel, preferredMode, avatar
             });
             modal.close();
             toast.success(`¡Perfil de jugador creado con éxito! Bienvenido ${newPlayer.name}`);

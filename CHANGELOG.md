@@ -6,6 +6,73 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.7.3] - 2026-09-18
+
+### 🚀 Nuevas Características
+- **Control y Política de Cancelación de Reservas por Sucursal**:
+  - Nueva opción en la configuración del local (`js/views/businessView.js`): `allowClientCancellation` para permitir o denegar cancelaciones autónomas por parte de clientes.
+  - Al desactivarse, el botón de cancelar en el perfil del jugador (`js/views/clientProfileView.js`) se bloquea y se presenta una notificación con acceso directo a WhatsApp del encargado para acordar cancelaciones directamente con la administración del local.
+- **Bloqueo y Desbloqueo de Jugadores por Sucursal**:
+  - Capacidad para que los locatarios restrinjan a usuarios específicos e impidan que reserven turnos en su sucursal (`tenantManager.blockClientInBusiness` y `unblockClientInBusiness`).
+  - Validación en tiempo real en el modal de reservas (`js/views/clientBookingModal.js`): bloqueo inmediato si el jugador intenta agendar en un local donde está sancionado.
+  - Tabla de administración de jugadores bloqueados en la configuración de la sucursal (`js/views/businessView.js`) con motivos y fechas de bloqueo.
+  - Botones de acción rápida `🚫 Bloquear` y `🔓 Desbloquear` integrados directamente en las tarjetas de jugador en el Directorio (`js/views/clientsView.js`).
+- **Diseño Arcade Cyberpunk de Botones de Gestión**:
+  - Nuevas clases estilizadas `.btn-cyber-block` y `.btn-cyber-unblock` en `css/styles.css`, sustituyendo fondos blancos por defecto del navegador por estilos translúcidos neón (carmesí arcade y verde láser) con resplandores y animaciones hover fluidas.
+
+### 🛠️ Correcciones y Mejoras
+- **Eliminación Permanente de Reservaciones (Hard Delete)**:
+  - Corrección de la eliminación de reservaciones en `js/core/store.js`, `js/views/dayView.js` y `js/views/requestsView.js`.
+  - Ahora se realiza un borrado definitivo mediante `deleteDoc` en Firestore tanto de las colecciones activas como históricas, garantizando que no reaparezcan en reportes de caja, auditoría ni calendarios.
+- **Navegación del Botón Superior "Reservar"**:
+  - Al presionar `➕ Reservar` en la cabecera (`js/components/header.js`), la aplicación navega directamente a la **Vista Día (Calendario de Día)** con desplazamiento suave, optimizando la experiencia del usuario para consultar horarios antes de agendar.
+- **Optimización Integral de la Cabecera Móvil (Resolución 394 × 853 px)**:
+  - **Menú de usuario flotante**: `.nav-dropdown-menu` en la barra superior ahora cuenta con posicionamiento absoluto flotante (`z-index: 99999`) y `backdrop-filter`, evitando que empuje los elementos hacia abajo o incremente la altura del header.
+  - **Ajuste de bordes de pantalla**: La cabecera móvil no desborda bordes laterales gracias a la compactación del botón de locales (`← Locales`), indicador de red minimalista (`🟢`/`🟡`) y truncado seguro de nombres largos.
+- **Alineación de Cabecera en Pantallas de Escritorio (Desktop)**:
+  - Regla base `.header-actions` con `display: flex; align-items: center; gap: 12px;` en `css/components.css`, garantizando que toda la barra superior se mantenga en una sola línea horizontal sin quiebres de renglón.
+- **Ajuste Responsivo del Calendario Mensual (Vista Mes)**:
+  - Corrección del desbordamiento en columnas del calendario mensual aplicando `grid-template-columns: repeat(7, minmax(0, 1fr))` en encabezados y matriz.
+  - En móviles se ocultó el texto redundante y listas de nombres, dejando celdas simétricas e insignias neón centradas donde los 7 días de la semana encajan al 100% en 394px de ancho sin cortes.
+- **Corrección de ReferenceErrors de JavaScript**:
+  - Importación faltante de `tenantManager` en `js/views/clientsView.js`.
+  - Importación faltante de `escapeHTML` en `js/views/businessView.js`.
+
+---
+
+## [1.7.2] - 2026-09-03
+
+### 🚀 Nuevas Características
+- **Módulo de Control de Funciones por Sucursal (Feature Toggles)**:
+  - Consola central para que el **Superadministrador** pueda activar o desactivar módulos específicos de forma granular para cada sucursal desde la Consola Global (`js/views/superadminView.js`).
+  - Módulos configurables de forma independiente:
+    - 💳 **Cuenta Fácil (POS & Fiados)** (`ACCOUNTS`)
+    - 👥 **Directorio de Jugadores** (`CLIENTS`)
+    - 🎁 **Programa de Lealtad & Recompensas** (`LOYALTY`)
+    - 📥 **Bandeja de Solicitudes** (`REQUESTS`)
+    - 📈 **Rendimiento & Analítica** (`ANALYTICS`)
+    - ⚙️ **Ajustes de Sucursal por Encargado** (`BUSINESS`)
+    - 🛍️ **Catálogos en Sala & Productos** (`CATALOGS`)
+    - 📊 **Vista Semanal de Calendario** (`WEEK`)
+    - 🗓️ **Vista Mensual de Calendario** (`MONTH`)
+    - 🕹️ **Ficha Técnica de Máquinas** (`MACHINES`)
+    - 👤 **Portal Mi Perfil de Jugador** (`MY_PROFILE`)
+  - **Perfiles Rápidos (Presets)**:
+    - ⚡ *Modo Completo* (Todas las funciones encendidas).
+    - 🕹️ *Básico Arcade* (Solo reservaciones, catálogo de máquinas y directorio).
+    - 🔒 *Modo Estricto* (Sin cuenta fácil/fiados).
+- **Control de Estado Operativo de Sucursal (Activo / En Pausa)**:
+  - Botón de alternancia de estado (🟢 Activo / ⏸️ En Pausa) por sucursal en la Consola Global.
+  - **Pantalla Arcade Protectora (`js/app.js`)**: Si una sucursal está en pausa, los clientes y visitantes visualizan una pantalla amigable de mantenimiento/pausa, bloqueando nuevas reservaciones y compras.
+  - **Bypass Superadmin**: Los administradores globales conservan acceso permanente para entrar y reactivar cualquier sucursal.
+- **Router Guards & Adaptación Dinámica de UI**:
+  - El enrutador (`js/app.js`) y la barra superior (`js/components/header.js`) filtran y redirigen automáticamente si un usuario no autorizado intenta acceder a un módulo desactivado.
+  - La personalización de accesos directos de staff (`js/core/navShortcutsManager.js`) solo ofrece módulos activos en la sucursal.
+- **100% Retrocompatible (Safe Defaults)**:
+  - Las sucursales existentes sin campos de configuración previos mantienen todas sus funciones activas de forma transparente sin interrupción de servicio.
+
+---
+
 ## [1.6.0] - 2026-09-01
 
 ### 🚀 Nuevas Características

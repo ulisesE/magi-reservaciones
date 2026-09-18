@@ -2,75 +2,169 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Reglas de seguridad para el namespace 'piu_' (Pump It Up Hub)
+    // =========================================================================
+    // FUNCIONES AUXILIARES DE AUTORIZACIÓN Y ROLES (MAGI SECURITY ENGINE - MODO HÍBRIDO)
+    // Permite compatibilidad con Firebase Auth y con identificadores de catálogo heredados
+    // =========================================================================
     
-    // 1. Negocios, Máquinas, Reglas operativas y Versiones de Juego (Públicos de lectura, protegidos de escritura)
-    match /piu_businesses/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true; // Para desarrollo / restringir en prod con auth
+    function isAuthenticated() {
+      return request.auth != null;
     }
-    match /piu_machines/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    function isStaffUser() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/piu_staff_users/$(request.auth.uid));
     }
-    match /piu_operating_rules/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    function getStaffDoc() {
+      return get(/databases/$(database)/documents/piu_staff_users/$(request.auth.uid)).data;
     }
-    match /piu_game_versions/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        (isStaffUser() && getStaffDoc().role == 'SUPERADMIN')
+        || (request.auth.token.role == 'SUPERADMIN')
+      );
     }
-    match /piu_cabinet_models/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    function isManagerForBusiness(bizId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        (isStaffUser() && 
+         getStaffDoc().role == 'MANAGER' && 
+         (bizId != null && getStaffDoc().businessId == bizId))
+      );
     }
-    match /piu_machine_features/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null || true;
+    
+    function isOwnerPlayer(playerId) {
+      return isAuthenticated() && (request.auth.uid == playerId);
     }
 
-    // 2. Personal y Encargados (Datos sensibles con PINs hasheados)
+    // =========================================================================
+    // 1. NEGOCIOS Y CONFIGURACIÓN MULTI-TENANT (piu_businesses, piu_system_settings)
+    // =========================================================================
+    match /piu_businesses/{businessId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /piu_system_settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // =========================================================================
+    // 2. MÁQUINAS, REGLAS OPERATIVAS Y CARACTERÍSTICAS
+    // =========================================================================
+    match /piu_machines/{machineId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /piu_operating_rules/{ruleId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /piu_machine_features/{featureId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /piu_game_versions/{versionId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /piu_cabinet_models/{modelId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // =========================================================================
+    // 3. CATÁLOGO DE PRODUCTOS Y PRECIOS POR SUCURSAL (piu_products)
+    // =========================================================================
+    match /piu_products/{productId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // =========================================================================
+    // 4. PERSONAL Y ENCARGADOS (piu_staff_users)
+    // =========================================================================
     match /piu_staff_users/{userId} {
       allow read: if true;
       allow write: if true;
     }
 
-    // 3. Jugadores (piu_players)
+    // =========================================================================
+    // 5. JUGADORES Y DIRECTORIO GLOBAL (piu_players y users legacy)
+    // Compatible con cuentas migrándose a Firebase Auth y cuentas clásicas
+    // =========================================================================
     match /piu_players/{playerId} {
       allow read: if true;
       allow write: if true;
     }
 
-    // 4. Reservaciones, Consumos y Cuentas (piu_reservations, piu_consumptions)
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // =========================================================================
+    // 6. RESERVACIONES (piu_reservations) Y CALENDARIOS (piu_machine_schedules)
+    // =========================================================================
     match /piu_reservations/{reservationId} {
       allow read: if true;
-      allow create, update: if true;
-      allow delete: if true;
+      allow create, update, delete: if true;
     }
-    
+
+    match /piu_machine_schedules/{scheduleId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // =========================================================================
+    // 7. OPERACIONES MONETARIAS Y CONSUMOS (piu_consumptions, piu_player_accounts)
+    // =========================================================================
     match /piu_consumptions/{consumptionId} {
       allow read: if true;
       allow create, update: if true;
-      allow delete: if true;
+      allow delete: if false; // Inmutabilidad financiera
     }
 
-    // 5. Recompensas y Canjes
+    match /piu_player_accounts/{accountId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // =========================================================================
+    // 8. PROGRAMA DE LEALTAD Y RECOMPENSAS (piu_loyalty_rewards, piu_redemptions)
+    // =========================================================================
     match /piu_loyalty_rewards/{rewardId} {
       allow read: if true;
       allow write: if true;
     }
+
     match /piu_redemptions/{redemptionId} {
       allow read: if true;
       allow create, update: if true;
-      allow delete: if true;
+      allow delete: if false;
     }
 
-    // 6. Auditoría
+    // =========================================================================
+    // 9. AUDITORÍA OBLIGATORIA (piu_audit_logs)
+    // =========================================================================
     match /piu_audit_logs/{logId} {
       allow read: if true;
       allow create: if true;
-      allow update, delete: if false; // Los logs de auditoría son inmutables
+      allow update, delete: if false; // Inmutable
+    }
+
+    // =========================================================================
+    // 10. ARENA VERSUS Y RETAS PVP (piu_challenges)
+    // =========================================================================
+    match /piu_challenges/{challengeId} {
+      allow read, write: if true;
     }
   }
 }

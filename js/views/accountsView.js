@@ -8,6 +8,7 @@ import { accountManager, CONSUMPTION_TYPES } from '../core/accountManager.js';
 import { clientDirManager } from './clientsView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 let selectedFilterPlayerId = '';
 let selectedDateFilter = 'ALL'; // 'ALL', 'TODAY', 'WEEK', 'MONTH'
@@ -30,6 +31,7 @@ async function getAllAvailableClients() {
                     id: c.id,
                     name: c.name || 'Sin Nombre',
                     username: c.username || '',
+                    piuGameId: c.piuGameId || '',
                     phone: c.phone || '',
                     avatar: c.avatar || '🕺',
                     role: c.role || 'CLIENT'
@@ -50,6 +52,7 @@ async function getAllAvailableClients() {
                     id: c.id,
                     name: c.name || 'Sin Nombre',
                     username: c.username || '',
+                    piuGameId: c.piuGameId || '',
                     phone: c.phone || '',
                     avatar: c.avatar || '🕺',
                     role: c.role || 'CLIENT'
@@ -102,6 +105,7 @@ function getClientSearchScore(c, queryTerm) {
     if (!term) return 1;
 
     const user = clean(c.username);
+    const piuId = clean(c.piuGameId);
     const name = clean(c.name);
     const phone = String(c.phone || '').replace(/\D/g, '');
     const termDigits = raw.replace(/\D/g, '');
@@ -116,10 +120,13 @@ function getClientSearchScore(c, queryTerm) {
         return pIdx === pattern.length;
     };
 
-    // --- PRIORIDAD 1: USERNAME / GAMERTAG ---
+    // --- PRIORIDAD 1: PIU ID OFICIAL / USERNAME / GAMERTAG ---
+    if (piuId && (piuId === term || piuId.includes(term))) return 1000;
     if (user === term) return 1000;
+    if (piuId && piuId.startsWith(term)) return 900;
     if (user.startsWith(term)) return 850;
     if (user.includes(term)) return 700;
+    if (piuId && matchSubseq(piuId, term)) return 650;
     if (matchSubseq(user, term)) return 600;
 
     // --- PRIORIDAD 2: NOMBRE DEL CLIENTE ---
@@ -278,9 +285,9 @@ export async function renderAccountsView(container) {
                                                     ${avatar}
                                                 </div>
                                                 <div>
-                                                    <strong style="font-size:1.05rem; color:#ffffff; display:block;">${debtor.playerName}</strong>
-                                                    ${debtor.playerUsername ? `<span style="font-size:0.8rem; color:var(--color-neon-cyan); font-family:var(--font-mono);">@${debtor.playerUsername}</span>` : ''}
-                                                    ${phone ? `<small style="display:block; color:var(--text-muted); font-size:0.75rem;">📱 ${phone}</small>` : ''}
+                                                    <strong style="font-size:1.05rem; color:#ffffff; display:block;">${escapeHTML(debtor.playerName)}</strong>
+                                                    ${debtor.playerUsername ? `<span style="font-size:0.8rem; color:var(--color-neon-cyan); font-family:var(--font-mono);">@${escapeHTML(debtor.playerUsername)}</span>` : ''}
+                                                    ${phone ? `<small style="display:block; color:var(--text-muted); font-size:0.75rem;">📱 ${escapeHTML(phone)}</small>` : ''}
                                                 </div>
                                             </div>
                                             <div style="text-align:right;">
@@ -332,7 +339,7 @@ export async function renderAccountsView(container) {
                                 <option value="" ${!selectedFilterPlayerId ? 'selected' : ''}>Todos los clientes</option>
                                 ${clients.map(c => `
                                     <option value="${c.id}" ${selectedFilterPlayerId === c.id ? 'selected' : ''}>
-                                        ${c.name} (@${c.username || 'sin_tag'})
+                                        ${escapeHTML(c.name)} (@${escapeHTML(c.username || 'sin_tag')})
                                     </option>
                                 `).join('')}
                             </select>
@@ -390,60 +397,73 @@ export async function renderAccountsView(container) {
                                     </td>
                                 </tr>
                             ` : transactions.map(tx => {
-                                const isAbono = tx.type === 'ABONO';
-                                const isPending = tx.paymentStatus === 'PENDING';
-                                const isCancelled = tx.status === 'CANCELLED';
-
                                 const dateObj = tx.createdAt ? new Date(tx.createdAt) : new Date();
                                 const formattedDate = dateObj.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
                                 const formattedTime = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 
+                                const isCancelled = tx.status === 'CANCELLED' || tx.status === 'VOIDED';
+                                const isAbono = tx.type === 'ABONO' || tx.type === 'PAGO';
+                                const isPending = tx.type === 'CONSUMO' && tx.paymentStatus === 'PENDING';
+                                const paidAmount = Number(tx.paidAmount || 0);
+                                const totalAmount = Number(tx.totalAmount || 0);
+                                const remainingAmount = tx.remainingAmount !== undefined ? Number(tx.remainingAmount) : Math.max(0, totalAmount - paidAmount);
+                                const isPartial = isPending && paidAmount > 0;
+
                                 return `
-                                    <tr style="${isCancelled ? 'opacity:0.4; text-decoration:line-through;' : ''}">
+                                    <tr style="${isCancelled ? 'opacity:0.45; text-decoration:line-through; background:rgba(255,46,126,0.03);' : ''}">
                                         <td style="font-size:0.82rem; font-family:var(--font-mono);">
                                             <strong style="color:#ffffff;">${formattedDate}</strong>
                                             <small style="display:block; color:var(--text-muted);">${formattedTime}</small>
                                         </td>
                                         <td>
-                                            <strong style="color:#ffffff; font-size:0.9rem;">${tx.playerName || 'Venta Mostrador'}</strong>
-                                            ${tx.playerUsername ? `<small style="display:block; color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${tx.playerUsername}</small>` : ''}
+                                            <strong style="color:#ffffff; font-size:0.9rem;">${escapeHTML(tx.playerName || 'Venta Mostrador')}</strong>
+                                            ${tx.playerUsername ? `<small style="display:block; color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${escapeHTML(tx.playerUsername)}</small>` : ''}
                                         </td>
                                         <td>
                                             <div style="font-size:0.88rem; color:#ffffff;">
                                                 ${isAbono ? `
                                                     <span style="color:var(--color-neon-lime); font-weight:700;">💵 Abono / Pago a cuenta</span>
                                                 ` : `
-                                                    <span>${tx.concept || 'Consumo en sala'}</span>
+                                                    <span>${escapeHTML(tx.concept || 'Consumo en sala')}</span>
                                                 `}
                                             </div>
-                                            ${tx.notes ? `<small style="color:var(--text-muted); font-size:0.75rem;">Nota: ${tx.notes}</small>` : ''}
+                                            ${tx.voidReason ? `<small style="color:var(--color-neon-pink); font-size:0.75rem; display:block;">Motivo anulación: ${escapeHTML(tx.voidReason)} (por ${escapeHTML(tx.voidedBy || 'Encargado')})</small>` : ''}
+                                            ${tx.notes && !tx.voidReason ? `<small style="color:var(--text-muted); font-size:0.75rem;">Nota: ${escapeHTML(tx.notes)}</small>` : ''}
                                         </td>
                                         <td style="text-align:right; font-family:var(--font-mono); font-weight:900; font-size:1rem; color:${isAbono ? 'var(--color-neon-lime)' : isPending ? 'var(--color-neon-pink)' : '#ffffff'};">
-                                            ${isAbono ? '+' : ''}${currency}${Number(tx.totalAmount).toFixed(2)}
+                                            <div>${isAbono ? '+' : ''}${currency}${totalAmount.toFixed(2)}</div>
+                                            ${isPartial ? `
+                                                <small style="display:block; font-size:0.75rem; color:var(--color-neon-gold); font-weight:700;">Restan: ${currency}${remainingAmount.toFixed(2)}</small>
+                                            ` : ''}
                                         </td>
                                         <td style="text-align:center;">
                                             ${isCancelled ? `
-                                                <span class="badge badge-danger">ANULADO</span>
+                                                <span class="badge badge-danger" title="Motivo: ${tx.voidReason || 'Anulada'}">🚫 ANULADA</span>
                                             ` : isAbono ? `
                                                 <span class="badge badge-success">ABONO</span>
+                                            ` : isPartial ? `
+                                                <span class="badge" style="background:rgba(255,184,0,0.2); color:var(--color-neon-gold); border:1px solid var(--color-neon-gold);" title="Pagado: ${currency}${paidAmount.toFixed(2)} / Restan: ${currency}${remainingAmount.toFixed(2)}">
+                                                    ⏳ PARCIAL
+                                                </span>
                                             ` : isPending ? `
                                                 <span class="badge" style="background:rgba(255,46,126,0.2); color:var(--color-neon-pink); border:1px solid var(--color-neon-pink);">
                                                     ⏳ FIADO
                                                 </span>
                                             ` : `
                                                 <span class="badge badge-primary">🟢 PAGADO</span>
+                                                ${tx.paymentMethod === 'ACCOUNT_CREDIT' ? `<small style="display:block; font-size:0.68rem; color:var(--color-neon-lime);">Saldo a Favor</small>` : ''}
                                             `}
                                         </td>
                                         <td style="text-align:center;">
                                             <div style="display:flex; justify-content:center; gap:4px;">
                                                 ${!isCancelled && isPending && tx.playerId && tx.playerId !== 'guest_walkin' ? `
-                                                    <button class="btn btn-success btn-xs btn-settle-single" data-tx-id="${tx.id}" data-player-id="${tx.playerId}" title="Cobrar / Liquidar adeudo">
-                                                        <span>💵</span>
+                                                    <button class="btn btn-success btn-xs btn-settle-ticket" data-tx-id="${escapeHTML(tx.id)}" data-player-id="${escapeHTML(tx.playerId)}" title="Cobrar / Liquidar ticket">
+                                                        <span>💵 Liquidar</span>
                                                     </button>
                                                 ` : ''}
                                                 ${!isCancelled ? `
-                                                    <button class="btn btn-danger btn-xs btn-cancel-tx" data-tx-id="${tx.id}" data-player-id="${tx.playerId || ''}" title="Anular movimiento">
-                                                        <span>🗑️</span>
+                                                    <button class="btn btn-danger btn-xs btn-void-tx" data-tx-id="${escapeHTML(tx.id)}" data-player-id="${escapeHTML(tx.playerId || '')}" title="Anular transacción (inmutable en auditoría)">
+                                                        <span>🚫 Anular</span>
                                                     </button>
                                                 ` : ''}
                                             </div>
@@ -518,6 +538,16 @@ export async function renderAccountsView(container) {
     });
 
     // 5. Acciones de tabla
+    container.querySelectorAll('.btn-settle-ticket').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const txId = btn.dataset.txId;
+            const targetTx = transactions.find(t => t.id === txId);
+            if (targetTx) {
+                openSettleTicketModal(business, targetTx, container);
+            }
+        });
+    });
+
     container.querySelectorAll('.btn-settle-single').forEach(btn => {
         btn.addEventListener('click', () => {
             const playerId = btn.dataset.playerId;
@@ -525,18 +555,27 @@ export async function renderAccountsView(container) {
         });
     });
 
-    container.querySelectorAll('.btn-cancel-tx').forEach(btn => {
+    container.querySelectorAll('.btn-void-tx').forEach(btn => {
         btn.addEventListener('click', async () => {
             const txId = btn.dataset.txId;
             const playerId = btn.dataset.playerId;
-            if (confirm("⚠️ ¿Estás seguro de ELIMINAR PERMANENTEMENTE esta transacción de la base de datos? Se borrará de Firestore y se recalculará el saldo.")) {
-                try {
-                    await accountManager.deleteTransaction(business.id, playerId, txId);
-                    toast.success("Transacción eliminada de la base de datos.");
-                    renderAccountsView(container);
-                } catch (e) {
-                    toast.error(e.message);
-                }
+            const reason = prompt("⚠️ Ingresa el motivo obligatorio para anular esta transacción (se registrará en la auditoría inmutable):");
+            if (reason === null) return;
+            if (!reason.trim()) {
+                toast.error("Se requiere un motivo para anular la transacción.");
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.innerHTML = "<span>⏳ Anulando...</span>";
+                await accountManager.voidTransaction(business.id, playerId, txId, { reason: reason.trim() });
+                toast.success("Transacción anulada correctamente y saldo recalculado.");
+                renderAccountsView(container);
+            } catch (e) {
+                toast.error(e.message);
+                btn.disabled = false;
+                btn.innerHTML = "<span>🚫 Anular</span>";
             }
         });
     });
@@ -683,23 +722,60 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
     const clientDropdown = modalEl.querySelector('#pos-client-dropdown');
     const debtBadgeEl = modalEl.querySelector('#pos-player-debt-badge');
     const paymentStatusEl = modalEl.querySelector('#pos-payment-status');
+    const paymentMethodEl = modalEl.querySelector('#pos-payment-method');
 
-    // Actualizar badge de deuda del cliente
+    // Actualizar badge de deuda del cliente y métodos de pago disponibles
     const updateDebtBadge = async () => {
         if (!currentSelectedPlayerId || currentSelectedPlayerId === 'guest_walkin') {
             const displayName = currentSelectedPlayerName || 'Público General';
-            debtBadgeEl.innerHTML = `<span style="color:var(--text-muted);">👤 Venta Mostrador / General a nombre de: <strong>${displayName}</strong> (Sin cuenta fiada).</span>`;
+            debtBadgeEl.innerHTML = `<span style="color:var(--text-muted);">👤 Venta Mostrador / General a nombre de: <strong>${escapeHTML(displayName)}</strong> (Sin cuenta fiada).</span>`;
+            paymentMethodEl.innerHTML = `
+                <option value="CASH" selected>💵 Efectivo en Caja</option>
+                <option value="CARD">💳 Tarjeta Débito/Crédito</option>
+                <option value="TRANSFER">📱 Transferencia SPEI</option>
+            `;
         } else {
             const acc = await accountManager.getPlayerAccount(business.id, currentSelectedPlayerId);
-            if (acc.netDebt > 0) {
-                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-pink); font-weight:700;">⚠️ ${currentSelectedPlayerName} tiene una deuda pendiente de ${currency}${acc.netDebt.toFixed(2)}.</span>`;
+            const safeName = escapeHTML(currentSelectedPlayerName);
+            
+            if (acc.netDebt > 0 && acc.creditBalance > 0) {
+                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-gold); font-weight:700;">⚠️ ${safeName} tiene deuda fiada de ${currency}${acc.netDebt.toFixed(2)} y saldo a favor de ${currency}${acc.creditBalance.toFixed(2)}.</span>`;
+            } else if (acc.netDebt > 0) {
+                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-pink); font-weight:700;">⚠️ ${safeName} tiene una deuda fiada pendiente de ${currency}${acc.netDebt.toFixed(2)}.</span>`;
             } else if (acc.creditBalance > 0) {
-                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-lime); font-weight:700;">✅ ${currentSelectedPlayerName} tiene saldo a favor de ${currency}${acc.creditBalance.toFixed(2)}.</span>`;
+                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-lime); font-weight:700;">✅ ${safeName} tiene saldo a favor de ${currency}${acc.creditBalance.toFixed(2)} (Monedero).</span>`;
             } else {
-                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-lime);">✅ Cuenta de ${currentSelectedPlayerName} al corriente (Sin adeudos).</span>`;
+                debtBadgeEl.innerHTML = `<span style="color:var(--color-neon-lime);">✅ Cuenta de ${safeName} al corriente (Sin adeudos).</span>`;
+            }
+
+            let methodOptions = '';
+            if (acc.creditBalance > 0) {
+                methodOptions += `<option value="ACCOUNT_CREDIT" selected>💳 Pagar con Saldo a Favor (${currency}${acc.creditBalance.toFixed(2)} disponible)</option>`;
+                methodOptions += `<option value="CASH">💵 Efectivo en Caja</option>`;
+            } else {
+                methodOptions += `<option value="CASH" selected>💵 Efectivo en Caja</option>`;
+            }
+            methodOptions += `<option value="CARD">💳 Tarjeta Débito/Crédito</option>`;
+            methodOptions += `<option value="TRANSFER">📱 Transferencia SPEI</option>`;
+            paymentMethodEl.innerHTML = methodOptions;
+
+            if (acc.creditBalance > 0 && paymentMethodEl.value === 'ACCOUNT_CREDIT') {
+                paymentStatusEl.value = 'PAID';
             }
         }
     };
+
+    paymentMethodEl.addEventListener('change', (e) => {
+        if (e.target.value === 'ACCOUNT_CREDIT') {
+            paymentStatusEl.value = 'PAID';
+        }
+    });
+
+    paymentStatusEl.addEventListener('change', (e) => {
+        if (e.target.value === 'PENDING' && paymentMethodEl.value === 'ACCOUNT_CREDIT') {
+            paymentMethodEl.value = 'CASH';
+        }
+    });
 
     // Renderizar resultados del dropdown predictivo
     const renderClientDropdown = (queryTerm = '') => {
@@ -732,10 +808,10 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
         // Si el usuario escribió un término, ofrecer registrar bajo ese nombre público
         if (rawTerm) {
             html += `
-                <div class="pos-dropdown-item btn-select-custom-name" data-name="${rawTerm}" style="padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(255,184,0,0.05); cursor:pointer; display:flex; align-items:center; gap:10px; transition:background 0.15s ease;">
+                <div class="pos-dropdown-item btn-select-custom-name" data-custom-name="${escapeHTML(rawTerm)}" style="padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(255,184,0,0.05); cursor:pointer; display:flex; align-items:center; gap:10px; transition:background 0.15s ease;">
                     <span style="font-size:1.3rem;">📝</span>
                     <div>
-                        <strong style="color:var(--color-neon-gold); font-size:0.88rem; display:block;">Venta General a nombre de: "${rawTerm}"</strong>
+                        <strong style="color:var(--color-neon-gold); font-size:0.88rem; display:block;">Venta General a nombre de: "${escapeHTML(rawTerm)}"</strong>
                         <small style="color:var(--text-muted); font-size:0.75rem;">Registrar como cliente no registrado en catálogo</small>
                     </div>
                 </div>
@@ -746,13 +822,16 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
         if (matches.length > 0) {
             matches.forEach(c => {
                 html += `
-                    <div class="pos-dropdown-item btn-select-matched-client" data-id="${c.id}" data-name="${c.name}" data-username="${c.username || ''}" data-phone="${c.phone || ''}" data-avatar="${c.avatar || '🕺'}" style="padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; transition:background 0.15s ease;">
+                    <div class="pos-dropdown-item btn-select-matched-client" data-id="${c.id}" style="padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; transition:background 0.15s ease;">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <span style="font-size:1.3rem;">${c.avatar || '🕺'}</span>
                             <div>
-                                <strong style="color:#ffffff; font-size:0.9rem; display:block;">${c.name}</strong>
-                                <span style="color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${c.username || 'sin_tag'}</span>
-                                ${c.phone ? `<small style="color:var(--text-muted); font-size:0.75rem; margin-left:6px;">📱 ${c.phone}</small>` : ''}
+                                <strong style="color:#ffffff; font-size:0.9rem; display:block;">${escapeHTML(c.name)}</strong>
+                                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:2px;">
+                                    <span style="color:var(--color-neon-cyan); font-size:0.75rem; font-family:var(--font-mono);">@${escapeHTML(c.username || 'sin_tag')}</span>
+                                    ${c.piuGameId ? `<span class="badge" style="font-size:0.65rem; padding:1px 5px; background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3);">🎮 ${escapeHTML(c.piuGameId)}</span>` : ''}
+                                    ${c.phone ? `<small style="color:var(--text-muted); font-size:0.75rem;">📱 ${escapeHTML(c.phone)}</small>` : ''}
+                                </div>
                             </div>
                         </div>
                         <span class="badge badge-outline" style="font-size:0.7rem;">Seleccionar</span>
@@ -762,17 +841,17 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
         } else if (rawTerm) {
             html += `
                 <div style="padding:10px 14px; font-size:0.8rem; color:var(--text-muted);">
-                    No se encontró coincidencia exacta con "${rawTerm}". Puedes usar la opción de venta general arriba o seleccionar de los clientes registrados:
+                    No se encontró coincidencia exacta con "${escapeHTML(rawTerm)}". Puedes usar la opción de venta general arriba o seleccionar de los clientes registrados:
                 </div>
             `;
             sortedClients.slice(0, 5).forEach(c => {
                 html += `
-                    <div class="pos-dropdown-item btn-select-matched-client" data-id="${c.id}" data-name="${c.name}" data-username="${c.username || ''}" data-phone="${c.phone || ''}" data-avatar="${c.avatar || '🕺'}" style="padding:8px 14px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; opacity:0.85;">
+                    <div class="pos-dropdown-item btn-select-matched-client" data-id="${c.id}" style="padding:8px 14px; border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; opacity:0.85;">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <span style="font-size:1.1rem;">${c.avatar || '🕺'}</span>
                             <div>
-                                <strong style="color:#ffffff; font-size:0.85rem; display:block;">${c.name}</strong>
-                                <span style="color:var(--color-neon-cyan); font-size:0.7rem; font-family:var(--font-mono);">@${c.username || 'sin_tag'}</span>
+                                <strong style="color:#ffffff; font-size:0.85rem; display:block;">${escapeHTML(c.name)}</strong>
+                                <span style="color:var(--color-neon-cyan); font-size:0.7rem; font-family:var(--font-mono);">@${escapeHTML(c.username || 'sin_tag')}</span>
                             </div>
                         </div>
                         <span class="badge badge-outline" style="font-size:0.65rem;">Seleccionar</span>
@@ -796,13 +875,12 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
             updateDebtBadge();
         });
 
-        clientDropdown.querySelector('.btn-select-custom-name')?.addEventListener('click', (e) => {
-            const customN = e.currentTarget.dataset.name;
+        clientDropdown.querySelector('.btn-select-custom-name')?.addEventListener('click', () => {
             currentSelectedPlayerId = 'guest_walkin';
-            currentSelectedPlayerName = customN;
+            currentSelectedPlayerName = rawTerm;
             currentSelectedPlayerUsername = '';
             currentSelectedPlayerPhone = '';
-            clientSearchInput.value = customN;
+            clientSearchInput.value = rawTerm;
             paymentStatusEl.value = 'PAID';
             clientDropdown.style.display = 'none';
             updateDebtBadge();
@@ -810,11 +888,15 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
 
         clientDropdown.querySelectorAll('.btn-select-matched-client').forEach(item => {
             item.addEventListener('click', () => {
-                currentSelectedPlayerId = item.dataset.id;
-                currentSelectedPlayerName = item.dataset.name;
-                currentSelectedPlayerUsername = item.dataset.username;
-                currentSelectedPlayerPhone = item.dataset.phone;
-                clientSearchInput.value = `${item.dataset.name} (@${item.dataset.username || 'sin_tag'})`;
+                const targetId = item.dataset.id;
+                const found = sortedClients.find(c => c.id === targetId);
+                if (found) {
+                    currentSelectedPlayerId = found.id;
+                    currentSelectedPlayerName = found.name;
+                    currentSelectedPlayerUsername = found.username || '';
+                    currentSelectedPlayerPhone = found.phone || '';
+                    clientSearchInput.value = `${found.name} (@${found.username || 'sin_tag'})`;
+                }
                 paymentStatusEl.value = 'PENDING';
                 clientDropdown.style.display = 'none';
                 updateDebtBadge();
@@ -999,8 +1081,11 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
 
     modalEl.querySelector('#btn-cancel-pos').onclick = () => modal.close();
 
-    // Enviar venta
-    modalEl.querySelector('#btn-submit-pos').onclick = async () => {
+    // Enviar venta con protección contra doble clic e idempotencia
+    const submitBtn = modalEl.querySelector('#btn-submit-pos');
+    const modalIdempotencyKey = `pos_${business.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    submitBtn.onclick = async () => {
         const paymentStatus = modalEl.querySelector('#pos-payment-status').value;
         const paymentMethod = modalEl.querySelector('#pos-payment-method').value;
         const customC = modalEl.querySelector('#custom-concept-input')?.value.trim();
@@ -1022,6 +1107,11 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
             finalPlayerName = clientSearchInput.value.trim();
         }
 
+        // Bloqueo reactivo de interfaz contra dobles envíos
+        submitBtn.disabled = true;
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span>⏳ Procesando venta atómica...</span>';
+
         try {
             await accountManager.recordSale({
                 businessId: business.id,
@@ -1033,7 +1123,8 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
                 customConcept: customC,
                 customPrice: customP,
                 paymentStatus,
-                paymentMethod
+                paymentMethod,
+                idempotencyKey: modalIdempotencyKey
             });
 
             toast.success(`Venta / Consumo registrado a nombre de "${finalPlayerName}".`);
@@ -1041,6 +1132,131 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
             renderAccountsView(mainContainer);
         } catch (e) {
             toast.error(e.message);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    };
+}
+
+// =============================================================================
+// MODAL DE LIQUIDACIÓN / ABONO A TICKET FIADO INDIVIDUAL
+// =============================================================================
+async function openSettleTicketModal(business, tx, mainContainer) {
+    const currency = business.currencySymbol || '$';
+    const totalAmount = Number(tx.totalAmount || 0);
+    const paidAmount = Number(tx.paidAmount || 0);
+    const remainingAmount = tx.remainingAmount !== undefined ? Number(tx.remainingAmount) : Math.max(0, totalAmount - paidAmount);
+
+    let clientAccount = { creditBalance: 0, netDebt: 0 };
+    if (tx.playerId && tx.playerId !== 'guest_walkin') {
+        clientAccount = await accountManager.getPlayerAccount(business.id, tx.playerId);
+    }
+
+    const contentHtml = `
+        <form id="form-settle-ticket" class="cyber-form" style="display:flex; flex-direction:column; gap:14px;">
+            <div style="background:var(--bg-dark-700); border-left:4px solid var(--color-neon-pink); padding:12px; border-radius:4px;">
+                <strong style="font-size:1rem; color:#ffffff; display:block;">${escapeHTML(tx.playerName || 'Cliente')}</strong>
+                ${tx.playerUsername ? `<span style="color:var(--color-neon-cyan); font-size:0.78rem; font-family:var(--font-mono);">@${escapeHTML(tx.playerUsername)}</span>` : ''}
+                <div style="margin-top:6px; font-size:0.85rem; color:var(--text-muted);">
+                    Concepto: <strong style="color:#ffffff;">${escapeHTML(tx.concept || 'Consumo en sala')}</strong>
+                </div>
+            </div>
+
+            <div class="form-row grid-3" style="background:rgba(0,0,0,0.25); padding:10px; border-radius:4px; border:1px solid var(--border-color); text-align:center;">
+                <div>
+                    <small style="color:var(--text-muted); display:block; font-size:0.72rem;">TOTAL TICKET</small>
+                    <strong style="font-family:var(--font-mono); color:#ffffff; font-size:1rem;">${currency}${totalAmount.toFixed(2)}</strong>
+                </div>
+                <div>
+                    <small style="color:var(--text-muted); display:block; font-size:0.72rem;">PAGADO PREVIAMENTE</small>
+                    <strong style="font-family:var(--font-mono); color:var(--color-neon-lime); font-size:1rem;">${currency}${paidAmount.toFixed(2)}</strong>
+                </div>
+                <div>
+                    <small style="color:var(--text-muted); display:block; font-size:0.72rem;">RESTANTE A COBRAR</small>
+                    <strong style="font-family:var(--font-mono); color:var(--color-neon-pink); font-size:1.1rem;">${currency}${remainingAmount.toFixed(2)}</strong>
+                </div>
+            </div>
+
+            ${clientAccount.creditBalance > 0 ? `
+                <div style="background:rgba(104,242,5,0.08); border:1px solid rgba(104,242,5,0.3); padding:8px 12px; border-radius:4px; font-size:0.82rem; color:var(--color-neon-lime); display:flex; justify-content:space-between; align-items:center;">
+                    <span>💳 Saldo a favor disponible en monedero:</span>
+                    <strong style="font-family:var(--font-mono); font-size:0.95rem;">${currency}${clientAccount.creditBalance.toFixed(2)}</strong>
+                </div>
+            ` : ''}
+
+            <div class="form-group" style="margin:0;">
+                <label for="settle-amount" style="font-size:0.85rem;"><span class="neon-arrow">◆</span> Monto a Recibir / Liquidar ($) *</label>
+                <input type="number" id="settle-amount" class="cyber-input" value="${remainingAmount.toFixed(2)}" min="0.5" max="${remainingAmount}" step="0.5" style="font-size:1.15rem; font-weight:700; font-family:var(--font-mono);" required>
+                <small style="color:var(--text-muted); font-size:0.74rem;">Si el cliente paga menos del total restante, el ticket permanecerá como <strong>⏳ PARCIAL</strong>.</small>
+            </div>
+
+            <div class="form-group" style="margin:0;">
+                <label for="settle-method" style="font-size:0.85rem;"><span class="neon-arrow">◆</span> Método de Liquidación *</label>
+                <select id="settle-method" class="cyber-select">
+                    ${clientAccount.creditBalance > 0 ? `
+                        <option value="ACCOUNT_CREDIT" ${clientAccount.creditBalance >= remainingAmount ? 'selected' : ''}>💳 Usar Saldo a Favor / Monedero (${currency}${clientAccount.creditBalance.toFixed(2)} disp.)</option>
+                    ` : ''}
+                    <option value="CASH" ${clientAccount.creditBalance === 0 ? 'selected' : ''}>💵 Efectivo en Caja</option>
+                    <option value="CARD">💳 Tarjeta Débito / Crédito</option>
+                    <option value="TRANSFER">📱 Transferencia SPEI</option>
+                </select>
+            </div>
+
+            <div class="form-group" style="margin:0;">
+                <label for="settle-notes" style="font-size:0.85rem;"><span class="neon-arrow">◆</span> Notas de Liquidación (Opcional)</label>
+                <input type="text" id="settle-notes" class="cyber-input" placeholder="Ej. Pago parcial en efectivo o liquidación total">
+            </div>
+
+            <div id="settle-error" class="form-error-msg hidden"></div>
+        </form>
+    `;
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-settle">Cancelar</button>
+        <button type="button" class="btn btn-success glow-green" id="btn-submit-settle">💾 Confirmar Pago / Liquidación</button>
+    `;
+
+    const modalEl = modal.open({
+        title: 'Liquidar / Abonar a Ticket Fiado',
+        icon: '💵',
+        contentHtml,
+        footerHtml,
+        maxWidth: '480px'
+    });
+
+    modalEl.querySelector('#btn-cancel-settle').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-submit-settle').onclick = async () => {
+        const payAmount = parseFloat(modalEl.querySelector('#settle-amount').value) || 0;
+        const paymentMethod = modalEl.querySelector('#settle-method').value;
+        const notes = modalEl.querySelector('#settle-notes').value.trim();
+        const errorDiv = modalEl.querySelector('#settle-error');
+        const submitBtn = modalEl.querySelector('#btn-submit-settle');
+
+        if (payAmount <= 0) {
+            errorDiv.textContent = 'El monto debe ser mayor a 0.';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span>⏳ Procesando liquidación...</span>';
+
+        try {
+            await accountManager.settleConsumptionTicket(business.id, tx.playerId, tx.id, {
+                amountToPay: payAmount,
+                paymentMethod,
+                notes
+            });
+
+            toast.success(`Pago de ${currency}${payAmount.toFixed(2)} registrado correctamente en el ticket.`);
+            modal.close();
+            renderAccountsView(mainContainer);
+        } catch (e) {
+            errorDiv.textContent = e.message || 'Error al liquidar ticket';
+            errorDiv.classList.remove('hidden');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<span>💾 Confirmar Pago / Liquidación</span>';
         }
     };
 }
@@ -1059,10 +1275,11 @@ async function openPaymentModal(business, playerId, mainContainer) {
     const contentHtml = `
         <form id="form-quick-payment" class="cyber-form">
             <div style="background:var(--bg-dark-700); border-left:4px solid var(--color-neon-lime); padding:12px; border-radius:4px; margin-bottom:14px;">
-                <strong style="font-size:1.05rem; color:#ffffff; display:block;">${client.name}</strong>
-                ${client.username ? `<span style="color:var(--color-neon-cyan); font-size:0.8rem; font-family:var(--font-mono);">@${client.username}</span>` : ''}
-                <div style="margin-top:6px; font-size:0.85rem;">
-                    Saldo Pendiente Actual: <strong style="color:var(--color-neon-pink); font-family:var(--font-mono);">${currency}${account.netDebt.toFixed(2)}</strong>
+                <strong style="font-size:1.05rem; color:#ffffff; display:block;">${escapeHTML(client.name)}</strong>
+                ${client.username ? `<span style="color:var(--color-neon-cyan); font-size:0.8rem; font-family:var(--font-mono);">@${escapeHTML(client.username)}</span>` : ''}
+                <div style="margin-top:6px; font-size:0.85rem; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                    <span>Deuda Fiada Pendiente: <strong style="color:var(--color-neon-pink); font-family:var(--font-mono);">${currency}${account.netDebt.toFixed(2)}</strong></span>
+                    ${account.creditBalance > 0 ? `<span>Saldo a Favor: <strong style="color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${account.creditBalance.toFixed(2)}</strong></span>` : ''}
                 </div>
             </div>
 
@@ -1074,6 +1291,9 @@ async function openPaymentModal(business, playerId, mainContainer) {
             <div class="form-group">
                 <label for="pay-method"><span class="neon-arrow">◆</span> Forma de Pago *</label>
                 <select id="pay-method" class="cyber-select">
+                    ${account.creditBalance > 0 && account.netDebt > 0 ? `
+                        <option value="ACCOUNT_CREDIT">💳 Amortizar con Saldo a Favor (${currency}${account.creditBalance.toFixed(2)} disp.)</option>
+                    ` : ''}
                     <option value="CASH" selected>💵 Efectivo en Caja</option>
                     <option value="CARD">💳 Tarjeta Débito / Crédito</option>
                     <option value="TRANSFER">📱 Transferencia SPEI</option>
@@ -1082,7 +1302,7 @@ async function openPaymentModal(business, playerId, mainContainer) {
 
             <div class="form-group">
                 <label for="pay-notes"><span class="neon-arrow">◆</span> Notas / Observaciones (Opcional)</label>
-                <input type="text" id="pay-notes" class="cyber-input" placeholder="Ej. Liquidación de cuenta o anticipo">
+                <input type="text" id="pay-notes" class="cyber-input" placeholder="Ej. Anticipo o abono a monedero">
             </div>
         </form>
     `;
@@ -1102,7 +1322,10 @@ async function openPaymentModal(business, playerId, mainContainer) {
 
     modalEl.querySelector('#btn-cancel-pay').onclick = () => modal.close();
 
-    modalEl.querySelector('#btn-save-pay').onclick = async () => {
+    const savePayBtn = modalEl.querySelector('#btn-save-pay');
+    const payIdempotencyKey = `pay_${business.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    savePayBtn.onclick = async () => {
         const amount = parseFloat(modalEl.querySelector('#pay-amount').value) || 0;
         const paymentMethod = modalEl.querySelector('#pay-method').value;
         const notes = modalEl.querySelector('#pay-notes').value.trim();
@@ -1112,22 +1335,36 @@ async function openPaymentModal(business, playerId, mainContainer) {
             return;
         }
 
-        try {
-            await accountManager.recordPayment({
-                businessId: business.id,
-                playerId: playerId,
-                playerName: client.name,
-                playerUsername: client.username,
-                amount,
-                paymentMethod,
-                notes: notes || 'Abono / Liquidación de saldo'
-            });
+        savePayBtn.disabled = true;
+        const origPayText = savePayBtn.innerHTML;
+        savePayBtn.innerHTML = '<span>⏳ Registrando abono...</span>';
 
-            toast.success(`Abono de ${currency}${amount.toFixed(2)} registrado exitosamente.`);
+        try {
+            if (paymentMethod === 'ACCOUNT_CREDIT') {
+                await accountManager.liquidatePlayerDebt(business.id, playerId, {
+                    paymentMethod: 'ACCOUNT_CREDIT',
+                    notes: notes || 'Liquidación usando saldo a favor'
+                });
+                toast.success(`Deuda liquidada usando saldo a favor de ${client.name}.`);
+            } else {
+                await accountManager.recordPayment({
+                    businessId: business.id,
+                    playerId: playerId,
+                    playerName: client.name,
+                    playerUsername: client.username,
+                    amount,
+                    paymentMethod,
+                    notes: notes || 'Abono / Pago a cuenta',
+                    idempotencyKey: payIdempotencyKey
+                });
+                toast.success(`Abono de ${currency}${amount.toFixed(2)} registrado exitosamente.`);
+            }
             modal.close();
             renderAccountsView(mainContainer);
         } catch (e) {
             toast.error(e.message);
+            savePayBtn.disabled = false;
+            savePayBtn.innerHTML = origPayText;
         }
     };
 }
@@ -1143,22 +1380,26 @@ async function openStatementModal(business, playerId) {
 
     const contentHtml = `
         <div style="display:flex; flex-direction:column; gap:14px;">
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:10px; text-align:center;">
                 <div style="background:var(--bg-dark-900); padding:10px; border-radius:4px; border:1px solid rgba(255,255,255,0.08);">
-                    <small style="color:var(--text-muted); font-size:0.75rem; text-transform:uppercase;">Total Consumido</small>
-                    <strong style="display:block; font-size:1.1rem; color:#ffffff; font-family:var(--font-mono);">${currency}${account.totalConsumed.toFixed(2)}</strong>
+                    <small style="color:var(--text-muted); font-size:0.72rem; text-transform:uppercase;">Consumido</small>
+                    <strong style="display:block; font-size:1.05rem; color:#ffffff; font-family:var(--font-mono);">${currency}${account.totalConsumed.toFixed(2)}</strong>
                 </div>
                 <div style="background:var(--bg-dark-900); padding:10px; border-radius:4px; border:1px solid rgba(255,255,255,0.08);">
-                    <small style="color:var(--color-neon-lime); font-size:0.75rem; text-transform:uppercase;">Total Abonado</small>
-                    <strong style="display:block; font-size:1.1rem; color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${account.totalAbonos.toFixed(2)}</strong>
+                    <small style="color:var(--color-neon-lime); font-size:0.72rem; text-transform:uppercase;">Abonado</small>
+                    <strong style="display:block; font-size:1.05rem; color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${account.totalAbonos.toFixed(2)}</strong>
+                </div>
+                <div style="background:var(--bg-dark-900); padding:10px; border-radius:4px; border:1px solid rgba(104,242,5,0.3);">
+                    <small style="color:var(--color-neon-lime); font-size:0.72rem; text-transform:uppercase;">Saldo a Favor</small>
+                    <strong style="display:block; font-size:1.05rem; color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${account.creditBalance.toFixed(2)}</strong>
                 </div>
                 <div style="background:var(--bg-dark-900); padding:10px; border-radius:4px; border:1px solid ${account.netDebt > 0 ? 'var(--color-neon-pink)' : 'rgba(255,255,255,0.08)'};">
-                    <small style="color:var(--color-neon-pink); font-size:0.75rem; text-transform:uppercase;">Saldo Pendiente</small>
-                    <strong style="display:block; font-size:1.1rem; color:var(--color-neon-pink); font-family:var(--font-mono);">${currency}${account.netDebt.toFixed(2)}</strong>
+                    <small style="color:var(--color-neon-pink); font-size:0.72rem; text-transform:uppercase;">Deuda Fiada</small>
+                    <strong style="display:block; font-size:1.05rem; color:var(--color-neon-pink); font-family:var(--font-mono);">${currency}${account.netDebt.toFixed(2)}</strong>
                 </div>
             </div>
 
-            <div style="max-height:260px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px;">
+            <div class="table-responsive" style="max-height:260px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px;">
                 <table class="catalogs-table" style="margin:0; font-size:0.85rem;">
                     <thead>
                         <tr>
@@ -1171,20 +1412,27 @@ async function openStatementModal(business, playerId) {
                     <tbody>
                         ${account.transactions.length === 0 ? `
                             <tr><td colspan="4" style="text-align:center; padding:16px; color:var(--text-muted);">Sin movimientos registrados.</td></tr>
-                        ` : account.transactions.map(t => `
-                            <tr style="${t.status === 'CANCELLED' ? 'opacity:0.4; text-decoration:line-through;' : ''}">
-                                <td style="font-family:var(--font-mono); font-size:0.78rem;">${(t.createdAt || '').slice(0, 10)}</td>
-                                <td>${t.type === 'ABONO' ? '💵 Abono a cuenta' : t.concept}</td>
-                                <td style="text-align:right; font-family:var(--font-mono); font-weight:700; color:${t.type === 'ABONO' ? 'var(--color-neon-lime)' : '#ffffff'};">
-                                    ${t.type === 'ABONO' ? '+' : ''}${currency}${Number(t.totalAmount).toFixed(2)}
-                                </td>
-                                <td>
-                                    <span class="badge ${t.status === 'CANCELLED' ? 'badge-danger' : t.type === 'ABONO' ? 'badge-success' : t.paymentStatus === 'PAID' ? 'badge-primary' : 'badge-warning'}">
-                                        ${t.status === 'CANCELLED' ? 'ANULADO' : t.type === 'ABONO' ? 'ABONO' : t.paymentStatus === 'PAID' ? 'PAGADO' : 'FIADO'}
-                                    </span>
-                                </td>
-                            </tr>
-                        `).join('')}
+                        ` : account.transactions.map(t => {
+                            const isCancelled = t.status === 'CANCELLED' || t.status === 'VOIDED';
+                            const isAbono = t.type === 'ABONO' || t.type === 'PAGO';
+                            const isPending = t.type === 'CONSUMO' && t.paymentStatus === 'PENDING';
+                            const paid = Number(t.paidAmount || 0);
+                            const isPartial = isPending && paid > 0;
+                            return `
+                                <tr style="${isCancelled ? 'opacity:0.4; text-decoration:line-through;' : ''}">
+                                    <td style="font-family:var(--font-mono); font-size:0.78rem;">${(t.createdAt || '').slice(0, 10)}</td>
+                                    <td>${isAbono ? '💵 Abono a cuenta' : escapeHTML(t.concept || 'Consumo')}</td>
+                                    <td style="text-align:right; font-family:var(--font-mono); font-weight:700; color:${isAbono ? 'var(--color-neon-lime)' : '#ffffff'};">
+                                        ${isAbono ? '+' : ''}${currency}${Number(t.totalAmount).toFixed(2)}
+                                    </td>
+                                    <td>
+                                        <span class="badge ${isCancelled ? 'badge-danger' : isAbono ? 'badge-success' : isPartial ? 'badge-warning' : t.paymentStatus === 'PAID' ? 'badge-primary' : 'badge-danger'}">
+                                            ${isCancelled ? 'ANULADO' : isAbono ? 'ABONO' : isPartial ? 'PARCIAL' : t.paymentStatus === 'PAID' ? 'PAGADO' : 'FIADO'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
@@ -1192,10 +1440,10 @@ async function openStatementModal(business, playerId) {
     `;
 
     modal.open({
-        title: `Estado de Cuenta: ${client.name}`,
+        title: `Estado de Cuenta: ${escapeHTML(client.name)}`,
         icon: '📜',
         contentHtml,
         footerHtml: `<button type="button" class="btn btn-primary" onclick="window.__closeCurrentModal()">Cerrar</button>`,
-        maxWidth: '540px'
+        maxWidth: '560px'
     });
 }

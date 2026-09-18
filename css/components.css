@@ -68,6 +68,12 @@
     display: none !important;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .header-action-divider {
     width: 1px;
     height: 28px;
@@ -364,7 +370,7 @@
 }
 
 /* ==========================================================================
-   MODAL SYSTEM
+   MODAL SYSTEM & RESPONSIVE CONTAINMENT
    ========================================================================== */
 .modal-root {
     position: relative;
@@ -383,9 +389,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 16px;
     z-index: 1000;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
 }
 
 .modal-card {
@@ -394,37 +402,49 @@
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85), 0 0 30px rgba(104, 242, 5, 0.2);
     border-radius: var(--radius-md);
     width: 100%;
+    max-width: min(100%, 94vw);
     max-height: 90vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    box-sizing: border-box;
+    position: relative;
 }
 
 .modal-header {
-    padding: 16px 20px;
+    flex-shrink: 0;
+    padding: 14px 20px;
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: var(--bg-dark-700);
+    gap: 12px;
 }
 
 .modal-title {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-width: 0;
+    flex: 1;
 }
 
 .modal-title h3 {
-    font-size: 1.15rem;
+    font-size: clamp(0.95rem, 2.5vw, 1.15rem);
     margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .modal-icon {
     font-size: 1.3rem;
+    flex-shrink: 0;
 }
 
 .modal-close-btn {
+    flex-shrink: 0;
     background: transparent;
     border: none;
     color: var(--text-muted);
@@ -441,18 +461,124 @@
 }
 
 .modal-body {
+    flex: 1 1 auto;
     padding: 20px;
     overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(104, 242, 5, 0.4) rgba(0, 0, 0, 0.2);
+}
+
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.modal-body::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+.modal-body::-webkit-scrollbar-thumb {
+    background: rgba(104, 242, 5, 0.35);
+    border-radius: 4px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(104, 242, 5, 0.6);
 }
 
 .modal-footer {
-    padding: 14px 20px;
+    flex-shrink: 0;
+    padding: 12px 20px;
     border-top: 1px solid var(--border-color);
     background: var(--bg-dark-700);
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 10px;
+    flex-wrap: wrap;
+    box-sizing: border-box;
+}
+
+/* Contenedores con scroll horizontal controlado dentro de modales */
+.modal-body .table-responsive {
+    overflow-x: auto;
+    overflow-y: visible;
+    max-width: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(104, 242, 5, 0.3) rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.modal-body .table-responsive::-webkit-scrollbar {
+    height: 6px;
+}
+
+.modal-body .table-responsive::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.modal-body .table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(104, 242, 5, 0.35);
+    border-radius: 4px;
+}
+
+/* Control responsivo de grids dentro de modal */
+.modal-card .form-row,
+.modal-card .grid-2,
+.modal-card .grid-3 {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.modal-card .form-row > *,
+.modal-card .grid-2 > *,
+.modal-card .grid-3 > * {
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.modal-card .grid-2 {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.modal-card .grid-3 {
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+}
+
+@media (max-width: 580px) {
+    .modal-backdrop {
+        padding: 8px;
+    }
+    .modal-card {
+        max-height: 95vh;
+        border-radius: var(--radius-sm);
+    }
+    .modal-header {
+        padding: 10px 14px;
+    }
+    .modal-body {
+        padding: 12px 14px;
+    }
+    .modal-footer {
+        padding: 10px 14px;
+        justify-content: stretch;
+    }
+    .modal-footer > * {
+        flex: 1 1 auto;
+        min-width: 120px;
+        text-align: center;
+        justify-content: center;
+    }
+    .modal-card .grid-2,
+    .modal-card .grid-3 {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
 }
 
 /* ==========================================================================
@@ -634,12 +760,22 @@
 
 /* Responsive Header (2 Renglones Claros: Renglón 1 = Local, Renglón 2 = Usuario, Reserva, Menú) */
 @media (max-width: 860px) {
+    .app-header {
+        max-width: 100vw;
+        overflow-x: clip;
+        box-sizing: border-box;
+    }
+
     .header-top-row {
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        padding: 10px 14px 8px 14px;
-        gap: 8px;
+        padding: 8px 10px;
+        gap: 6px;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100vw;
+        overflow: visible;
     }
 
     /* Renglón 1: Identidad y Nombre del Local */
@@ -647,12 +783,16 @@
         width: 100%;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        padding-bottom: 8px;
+        padding-bottom: 6px;
+        box-sizing: border-box;
+        overflow: hidden;
     }
     .brand-badge-icon {
-        font-size: 1.4rem;
+        font-size: 1.2rem;
+        width: 34px;
+        height: 34px;
         flex-shrink: 0;
     }
     .brand-text {
@@ -660,22 +800,29 @@
         min-width: 0;
     }
     .brand-title {
-        font-size: 1.05rem !important;
+        font-size: 0.95rem !important;
         font-weight: 800;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
     .brand-subtitle {
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         color: var(--text-muted);
     }
     .btn-back-hub {
-        margin-left: auto;
-        padding: 4px 9px;
-        font-size: 0.75rem;
+        padding: 3px 8px;
+        font-size: 0.72rem;
         white-space: nowrap;
         flex-shrink: 0;
+    }
+    .btn-back-text {
+        font-size: 0;
+    }
+    .btn-back-text::after {
+        content: '← Locales';
+        font-size: 0.72rem;
+        font-weight: 700;
     }
 
     /* Ocultar selector redundante en móviles */
@@ -686,82 +833,147 @@
     /* Renglón 2: Usuario / Login + Botón Reservar + Menú Hamburguesa */
     .header-actions {
         width: 100%;
+        max-width: 100%;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 5px !important;
+        box-sizing: border-box;
+    }
+
+    #header-network-status {
+        padding: 3px 6px !important;
+        font-size: 0.7rem !important;
+        flex-shrink: 0;
+        border-radius: var(--radius-full) !important;
+    }
+    #header-network-status .network-status-text {
+        display: none !important;
+    }
+
+    #btn-toggle-notifs {
+        padding: 4px 6px !important;
+        font-size: 0.8rem !important;
+        flex-shrink: 0;
+        min-width: 28px;
+    }
+
+    .header-action-divider {
+        display: none !important;
     }
 
     #btn-open-login {
         flex: 1;
-        font-size: 0.8rem;
-        padding: 6px 10px;
+        min-width: 0;
+        font-size: 0.75rem;
+        padding: 5px 8px !important;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .login-action-label {
+        font-size: 0;
+    }
+    .login-action-label::after {
+        content: '🔐 Ingresar';
+        font-size: 0.75rem;
+        font-weight: 700;
     }
 
-    .user-session-pill {
-        flex: 1;
-        min-width: 0;
-        max-width: none;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 4px 8px !important;
+    /* Dropdown de usuario en la barra de header */
+    .header-actions .nav-dropdown-wrapper {
+        position: relative !important;
+        display: inline-flex !important;
+        width: auto !important;
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        max-width: 155px !important;
+        flex-direction: row !important;
+    }
+
+    .header-actions .user-session-pill {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 155px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        padding: 3px 6px !important;
+        gap: 4px !important;
         background: var(--bg-dark-700);
         border: 1px solid var(--border-color);
         border-radius: var(--radius-full);
     }
-    .user-session-clickable {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        align-items: center;
-        gap: 6px;
+    .header-actions .user-session-pill span {
+        font-size: 1rem !important;
+        flex-shrink: 0;
     }
-    .user-session-clickable strong {
-        max-width: 110px;
+    .header-actions .user-session-pill strong {
+        max-width: 65px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        font-size: 0.8rem !important;
+        font-size: 0.75rem !important;
         color: #fff;
     }
-    .user-session-clickable small {
-        font-size: 0.62rem !important;
+    .header-actions .user-session-pill small {
+        font-size: 0.58rem !important;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        max-width: 65px;
     }
-    #btn-logout {
-        padding: 2px 7px !important;
-        font-size: 0.68rem !important;
+    .header-actions .dropdown-caret {
+        font-size: 0.65rem;
         flex-shrink: 0;
     }
 
+    /* Menú flotante del usuario: NO es static, NO crece la cabecera ni avienta el contenedor */
+    .header-actions .nav-dropdown-menu {
+        position: absolute !important;
+        top: calc(100% + 6px) !important;
+        right: 0 !important;
+        left: auto !important;
+        width: 270px !important;
+        max-width: calc(100vw - 20px) !important;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.95), 0 0 25px rgba(104, 242, 5, 0.3) !important;
+        background: rgba(1, 24, 22, 0.98) !important;
+        border: 1px solid rgba(104, 242, 5, 0.4) !important;
+        border-radius: var(--radius-md) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        margin-top: 0 !important;
+        z-index: 99999 !important;
+    }
+
     .btn-quick-book, #btn-quick-book {
-        padding: 6px 12px !important;
-        font-size: 0.8rem !important;
+        padding: 5px 10px !important;
+        font-size: 0.75rem !important;
         flex-shrink: 0;
+        white-space: nowrap;
     }
     .quick-book-label {
         font-size: 0;
     }
     .quick-book-label::after {
         content: '➕ Reservar';
-        font-size: 0.78rem;
+        font-size: 0.75rem;
         font-weight: 800;
     }
 
     .btn-mobile-nav {
         display: inline-flex;
-        min-width: 36px;
-        height: 36px;
+        min-width: 34px !important;
+        width: 34px !important;
+        height: 34px !important;
         align-items: center;
         justify-content: center;
-        font-size: 1.15rem;
-        padding: 4px;
+        font-size: 1.1rem;
+        padding: 2px;
         flex-shrink: 0;
     }
+
+    /* Cajón de navegación lateral / desplegable */
     .view-nav-tabs {
         padding: 0 12px;
         flex-direction: column;
@@ -813,12 +1025,14 @@
         background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(8, 140, 79, 0.3));
         border-color: var(--piu-cyan);
     }
-    .nav-dropdown-wrapper {
+
+    /* Acordeón para dropdowns DENTRO de la barra de navegación móvil (Calendario ▾, Gestión ▾) */
+    .view-nav-tabs .nav-dropdown-wrapper {
         width: 100%;
         display: flex;
         flex-direction: column;
     }
-    .nav-dropdown-menu {
+    .view-nav-tabs .nav-dropdown-menu {
         position: static;
         width: 100%;
         box-shadow: none;
