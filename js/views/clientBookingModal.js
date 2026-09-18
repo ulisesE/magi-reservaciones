@@ -5,7 +5,7 @@ import { tenantManager } from '../core/tenantManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { authManager } from '../core/authManager.js';
-import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes, calculateBookingCost } from '../core/timeUtils.js';
+import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes, calculateBookingCost, isOverlapping } from '../core/timeUtils.js';
 import { clientDirManager } from './clientsView.js';
 import { openLoginModal } from '../components/header.js';
 import { escapeHTML } from '../core/securityUtils.js';
@@ -105,6 +105,12 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     const closeMinutes = timeToMinutes(closingTime);
     const isOvernight = closeMinutes < openMinutes;
 
+    const getSlotLabel = (timeStr) => {
+        if (isOvernight && timeToMinutes(timeStr) < openMinutes) {
+            return `${format12Hour(timeStr)} (Sig. día)`;
+        }
+        return format12Hour(timeStr);
+    };
     // 🛡️ CANDADO FRONTEND: Obtener reservaciones activas del día para esta máquina
     const dayReservations = store.getReservations({ date: defaultDate, machineId: defaultMachineId, excludeRejectedCancelled: true });
 
