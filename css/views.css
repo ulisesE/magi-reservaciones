@@ -366,37 +366,79 @@
 }
 
 .matrix-table-responsive {
-    overflow-x: auto;
+    overflow: auto;
     width: 100%;
+    max-height: min(78vh, 720px);
+    position: relative;
+    border-radius: var(--radius-md);
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Scrollbars estilizadas para la matriz arcade */
+.matrix-table-responsive::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.matrix-table-responsive::-webkit-scrollbar-track {
+    background: rgba(1, 24, 22, 0.85);
+    border-radius: 4px;
+}
+
+.matrix-table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(104, 242, 5, 0.25);
+    border-radius: 4px;
+    border: 1px solid rgba(104, 242, 5, 0.4);
+}
+
+.matrix-table-responsive::-webkit-scrollbar-thumb:hover {
+    background: rgba(104, 242, 5, 0.5);
+    box-shadow: 0 0 8px rgba(104, 242, 5, 0.6);
+}
+
+.matrix-table-responsive::-webkit-scrollbar-corner {
+    background: var(--bg-dark-800);
 }
 
 .grid-matrix-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    min-width: 720px;
 }
 
+/* Esquina superior izquierda fija: Horario (Fijo en eje X e Y) */
 .col-time-header {
-    width: 130px;
-    min-width: 130px;
+    width: 120px;
+    min-width: 120px;
     background: var(--bg-dark-800);
     color: var(--text-muted);
     font-size: 0.8rem;
     font-weight: 800;
     letter-spacing: 1px;
-    padding: 16px 12px;
+    padding: 14px 12px;
     border-bottom: 2px solid var(--border-color);
-    border-right: 1px solid var(--border-color);
+    border-right: 2px solid var(--border-color);
     text-align: center;
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 40;
+    box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.6);
 }
 
+/* Encabezado superior fijo: Máquinas (Fijo en eje Y) */
 .col-machine-header {
     background: var(--bg-dark-800);
     padding: 14px 16px;
     border-bottom: 2px solid var(--border-color);
     border-right: 1px solid var(--border-color);
     text-align: left;
+    min-width: 145px;
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
 }
 
 .machine-header-card .mach-name {
@@ -404,6 +446,9 @@
     font-weight: 700;
     color: #ffffff;
     margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .mach-badge-row {
@@ -416,13 +461,29 @@
     transition: background-color 0.15s ease;
 }
 
+/* Columna lateral izquierda fija: Horas (Fijo en eje X) */
 .cell-time-label {
     background: var(--bg-dark-800);
     border-bottom: 1px solid var(--border-color);
-    border-right: 1px solid var(--border-color);
-    padding: 12px 14px;
+    border-right: 2px solid var(--border-color);
+    padding: 10px 12px;
     text-align: center;
     vertical-align: middle;
+    position: sticky;
+    left: 0;
+    z-index: 20;
+    box-shadow: 3px 0 8px rgba(0, 0, 0, 0.45);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Resaltar hora de la fila activa */
+.grid-time-row:hover .cell-time-label {
+    background: rgba(8, 140, 79, 0.28);
+}
+
+.grid-time-row:hover .cell-time-label strong {
+    color: var(--color-neon-lime);
+    text-shadow: 0 0 8px rgba(104, 242, 5, 0.45);
 }
 
 .time-block-label strong {
@@ -588,6 +649,68 @@
 .dot-pending { background: var(--color-chartreuse); }
 .dot-confirmed { background: var(--color-neon-lime); }
 .dot-maintenance { background: var(--color-deep-blue); }
+
+/* ==========================================================================
+   BARRA DE FILTRO RÁPIDO DE MÁQUINAS (CHIPS SELECTOR)
+   ========================================================================== */
+.machine-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    padding: 2px 2px 8px 2px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.machine-filter-bar::-webkit-scrollbar {
+    height: 4px;
+}
+.machine-filter-bar::-webkit-scrollbar-thumb {
+    background: rgba(104, 242, 5, 0.2);
+    border-radius: 2px;
+}
+
+.machine-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 20px;
+    background: var(--bg-dark-800);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.machine-filter-chip:hover {
+    color: #ffffff;
+    border-color: rgba(104, 242, 5, 0.4);
+    background: rgba(1, 38, 35, 0.8);
+}
+
+.machine-filter-chip.active {
+    background: rgba(104, 242, 5, 0.12);
+    border-color: var(--color-neon-lime);
+    color: var(--color-neon-lime);
+    box-shadow: 0 0 10px rgba(104, 242, 5, 0.25);
+}
+
+.machine-filter-chip .chip-count {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+}
+.machine-filter-chip.active .chip-count {
+    background: rgba(104, 242, 5, 0.2);
+    color: #ffffff;
+}
 
 .res-detail-dialog {
     display: flex;
@@ -1513,6 +1636,41 @@
     }
     .friendly-date-title {
         font-size: 1.1rem;
+    }
+
+    /* Day View Mobile Matrix Refinements (Sticky & Compact) */
+    .matrix-table-responsive {
+        max-height: calc(100dvh - 210px);
+    }
+    .col-time-header,
+    .cell-time-label {
+        width: 85px !important;
+        min-width: 85px !important;
+        padding: 8px 4px !important;
+    }
+    .col-time-header {
+        font-size: 0.7rem !important;
+        letter-spacing: 0.5px !important;
+    }
+    .time-block-label strong {
+        font-size: 0.8rem !important;
+    }
+    .time-block-label small {
+        font-size: 0.68rem !important;
+    }
+    .col-machine-header {
+        min-width: 130px !important;
+        padding: 10px 10px !important;
+    }
+    .machine-header-card .mach-name {
+        font-size: 0.95rem !important;
+    }
+    .cell-slot {
+        height: 60px !important;
+        padding: 6px 6px !important;
+    }
+    .slot-book-btn {
+        font-size: 0.78rem !important;
     }
 
     /* Month View Responsive Refinements */

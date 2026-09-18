@@ -105,105 +105,182 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
     const closeMinutes = timeToMinutes(closingTime);
     const isOvernight = closeMinutes < openMinutes;
 
-    const getSlotLabel = (slotStart) => {
-        const slotStartMins = timeToMinutes(slotStart);
-        if (isOvernight && slotStartMins < openMinutes) {
-            return `${format12Hour(slotStart)} (Siguiente día)`;
+    // 🛡️ CANDADO FRONTEND: Obtener reservaciones activas del día para esta máquina
+    const dayReservations = store.getReservations({ date: defaultDate, machineId: defaultMachineId, excludeRejectedCancelled: true });
+
+    const getSafeAvailableDurations = (slotStart) => {
+        const startMins = timeToMinutes(slotStart);
+        let closeMins = timeToMinutes(closingTime);
+        if (closeMins < startMins) closeMins += 24 * 60; // Overnight
+
+        // 1. ¿El slotStart ya cae DENTRO de una reservación activa?
+        const directConflict = dayReservations.find(r => 
+            isOverlapping(slotStart, addMinutesToTime(slotStart, 1), r.startTime, r.endTime, openingTime, closingTime)
+        );
+        if (directConflict) {
+            return { durations: [], conflict: directConflict, maxAllowedMins: 0 };
         }
-        return format12Hour(slotStart);
+
+        // 2. Buscar la siguiente reservación que inicie DESPUÉS de slotStart
+        let maxAllowedMins = closeMins - startMins;
+        let nextConflict = null;
+
+        for (const r of dayReservations) {
+            let rStart = timeToMinutes(r.startTime);
+            if (closeMins > 24 * 60 && rStart < openMinutes) {
+                rStart += 24 * 60;
+            }
+            if (rStart > startMins) {
+                const diff = rStart - startMins;
+                if (diff < maxAllowedMins) {
+                    maxAllowedMins = diff;
+                    nextConflict = r;
+                }
+            }
+        }
+
+        const durations = [];
+        for (let dur = slotDuration; dur <= maxAllowedMins; dur += slotDuration) {
+            durations.push(dur);
+        }
+
+        return { durations, nextConflict, maxAllowedMins };
     };
 
-    const timesOptions = slots.map(s => `
-        <option value="${s.start}" ${s.start === selectedSlot?.start ? 'selected' : ''}>
-            ${getSlotLabel(s.start)}
-        </option>
-    `).join('');
+    const timesOptions = slots.map(s => {
+        const occupant = dayReservations.find(r => 
+            isOverlapping(s.start, s.end, r.startTime, r.endTime, openingTime, closingTime)
+        );
+        if (occupant) {
+            return `<option value="${s.start}" disabled style="color:var(--text-muted); background:#1a0005;">❌ ${getSlotLabel(s.start)} (Ocupado por ${escapeHTML(occupant.clientName)})</option>`;
+        }
+        return `<option value="${s.start}" ${s.start === selectedSlot?.start ? 'selected' : ''}>${getSlotLabel(s.start)}</option>`;
+    }).join('');
     
-    const durationOptions = selectedSlot 
-        ? getAvailableDurations(selectedSlot.start, closingTime || '22:00', slotDuration)
-        : [];
+    const initialSafe = getSafeAvailableDurations(selectedSlot?.start || defaultStartTime);
+    const durationOptions = initialSafe.durations.length > 0 ? initialSafe.durations : [slotDuration];
+    const selectedDuration = durationOptions.includes(60) ? 60 : (durationOptions[0] || slotDuration);
+    const selectedMachine = machines.find(m => m.id === defaultMachineId) || machines[0];
 
-    const modalTitle = isStaff ? 'Asignar Reservación Directa' : 'Solicitar Reservación de Máquina';
+    const modalTitle = isStaff ? 'Asignar Reservación Directa' : 'Solicitar Reservación';
     const modalIcon = isStaff ? '👑' : '🕹️';
 
     const clientNameVal = isClientUser ? currentUser.name : (isStaff ? '' : '');
     const clientPhoneVal = isClientUser ? (currentUser.phone || '') : '';
 
     const contentHtml = `
-        <form id="form-booking" class="cyber-form">
-            ${isClientUser ? `
-                <div style="background:rgba(104,242,5,0.08); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-sm); padding:8px 12px; font-size:0.82rem; color:var(--color-neon-lime); display:flex; align-items:center; gap:8px;">
-                    <span>${currentUser.avatar || '🕺'}</span>
-                    <span>Reservando con tu perfil de jugador: <strong>${currentUser.name}</strong> (@${currentUser.username})</span>
+        <form id="form-booking" class="cyber-form" style="display:flex; flex-direction:column; gap:14px;">
+            <!-- 1. HUD INMUTABLE: MÁQUINA Y FECHA SELECCIONADAS EN EL CALENDARIO -->
+            <div style="background:var(--bg-dark-700); border:1px solid rgba(0,240,255,0.25); border-radius:var(--radius-sm); padding:12px 14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <span style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; font-weight:700; display:block;">🕹️ Máquina</span>
+                    <strong style="font-size:1.05rem; color:#ffffff;">${escapeHTML(selectedMachine?.name || 'Gabinete PIU')}</strong>
+                    ${selectedMachine?.model ? `<span class="badge badge-dark" style="font-size:0.68rem; margin-left:4px;">${escapeHTML(selectedMachine.model)}</span>` : ''}
                 </div>
-            ` : ''}
-
-            <div class="form-row grid-2">
-                <div class="form-group">
-                    <label for="book-machine"><span class="neon-arrow">◆</span> Máquina Pump It Up</label>
-                    <select id="book-machine" class="cyber-select" required>
-                        ${machinesOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="book-players-mode"><span class="neon-arrow">◆</span> Modo / Cantidad de Jugadores</label>
-                    <select id="book-players-mode" class="cyber-select" required>
-                        <option value="1" selected>👤 1 Jugador</option>
-                        <option value="2">👥 2 Jugadores</option>
-                    </select>
+                <div style="text-align:right;">
+                    <span style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; font-weight:700; display:block;">📅 Fecha</span>
+                    <strong style="font-size:0.95rem; color:var(--piu-cyan); font-family:var(--font-heading);">${formatFriendlyDate(defaultDate)}</strong>
                 </div>
             </div>
+            <!-- Valores inmutables fijados del grid -->
+            <input type="hidden" id="book-machine" value="${defaultMachineId}">
+            <input type="hidden" id="book-date" value="${defaultDate}">
 
-            <div class="form-row grid-2">
-                <div class="form-group">
-                    <label for="book-date"><span class="neon-arrow">◆</span> Fecha</label>
-                    <input type="date" id="book-date" class="cyber-input" value="${defaultDate}" required>
-                </div>
-                <div class="form-group">
-                    <label for="book-time"><span class="neon-arrow">◆</span> Hora de inicio</label>
-                    <select id="book-time" class="cyber-select" required>
+            <!-- 2. HORA DE INICIO Y MODO DE JUEGO (1P / 2P) -->
+            <div class="form-row grid-2" style="margin:0;">
+                <div class="form-group" style="margin:0;">
+                    <label for="book-time" style="font-size:0.82rem;"><span class="neon-arrow">◆</span> Hora de Inicio</label>
+                    <select id="book-time" class="cyber-select" required style="font-weight:bold; font-family:var(--font-mono); color:var(--piu-cyan); font-size:0.95rem;">
                         ${timesOptions}
                     </select>
                 </div>
-            </div>
-
-            <div class="form-row grid-2">
-                <div class="form-group">
-                    <label for="book-duration"><span class="neon-arrow">◆</span> Duración</label>
-                    <select id="book-duration" class="cyber-select" required>
-                        ${durationOptions.map(duration => `<option value="${duration}">${formatDuration(duration)}</option>`).join('')}
+                <div class="form-group" style="margin:0;">
+                    <label style="font-size:0.82rem;"><span class="neon-arrow">◆</span> Modo de Juego</label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                        <button type="button" class="btn btn-sm btn-mode-pill active-pill" data-mode="1" style="padding:6px 4px; font-weight:bold; font-size:0.82rem; border:2px solid var(--piu-cyan); background:rgba(0,240,255,0.2); color:#ffffff;">
+                            👤 1 Jugador
+                        </button>
+                        <button type="button" class="btn btn-sm btn-mode-pill" data-mode="2" style="padding:6px 4px; font-weight:bold; font-size:0.82rem; border:1px solid rgba(255,255,255,0.15); background:var(--bg-dark-700); color:var(--text-secondary);">
+                            👥 2 Jugadores
+                        </button>
+                    </div>
+                    <select id="book-players-mode" style="display:none;" required>
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label><span class="neon-arrow">◆</span> Tarifa Estimada</label>
-                    <div id="booking-cost-preview" class="cost-badge-preview">
+            </div>
+
+            <!-- 3. DURACIÓN INTUITIVA CON CHIPS VISUALES DE 1 CLIC -->
+            <div class="form-group" style="margin:0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <label style="font-size:0.82rem; font-weight:700; color:#ffffff; margin:0;">
+                        <span class="neon-arrow">◆</span> ¿Cuánto tiempo deseas jugar?
+                    </label>
+                    <span id="label-selected-duration" style="font-size:0.82rem; color:var(--color-neon-lime); font-weight:bold; font-family:var(--font-mono);">${formatDuration(selectedDuration)}</span>
+                </div>
+                <div id="duration-chips-container" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(80px, 1fr)); gap:6px;">
+                    <!-- Se llena con renderDurationChips -->
+                </div>
+                <select id="book-duration" style="display:none;" required>
+                    ${durationOptions.map(d => `<option value="${d}" ${d === selectedDuration ? 'selected' : ''}>${d}</option>`).join('')}
+                </select>
+            </div>
+
+            <!-- 4. TARIFA ESTIMADA Y ANTICIPO -->
+            <div style="background:rgba(2, 56, 89, 0.35); border:1px solid rgba(0, 229, 255, 0.25); border-radius:var(--radius-sm); padding:10px 14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <div>
+                    <span style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; display:block;">Tarifa Estimada:</span>
+                    <strong id="booking-cost-preview" style="font-size:1.35rem; color:var(--color-neon-lime); font-family:var(--font-heading);">
                         ${business.currencySymbol}0 ${business.currency}
+                    </strong>
+                </div>
+                <div id="booking-deposit-info" style="font-size:0.8rem; text-align:right;"></div>
+            </div>
+
+            <!-- 5. IDENTIFICACIÓN DEL JUGADOR -->
+            ${isClientUser ? `
+                <div style="background:var(--bg-dark-700); border:1px solid rgba(104,242,5,0.25); border-radius:var(--radius-sm); padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:1.5rem;">${currentUser.avatar || '🕺'}</span>
+                        <div>
+                            <strong style="color:#ffffff; font-size:0.88rem; display:block;">${escapeHTML(currentUser.name)}</strong>
+                            <small style="color:var(--piu-cyan); font-family:var(--font-mono); font-size:0.72rem;">@${escapeHTML(currentUser.username || 'jugador')}</small>
+                            ${currentUser.phone ? `<small style="color:var(--text-muted); font-size:0.72rem; margin-left:6px;">📱 ${escapeHTML(currentUser.phone)}</small>` : ''}
+                        </div>
+                    </div>
+                    <span class="badge badge-success" style="font-size:0.68rem;">✓ Identificado</span>
+                </div>
+                <input type="hidden" id="book-name" value="${escapeHTML(clientNameVal)}">
+                <input type="hidden" id="book-phone" value="${escapeHTML(clientPhoneVal)}">
+
+                <!-- Notas colapsables opcionales -->
+                <div>
+                    <button type="button" id="btn-toggle-notes" style="background:none; border:none; color:var(--text-muted); font-size:0.75rem; cursor:pointer; padding:0;">
+                        📝 Agregar notas opcionales ▼
+                    </button>
+                    <div id="notes-collapsible" style="display:none; margin-top:6px;">
+                        <textarea id="book-notes" class="cyber-textarea" rows="2" placeholder="Ej. Práctica Single S21, uso de barra...">${currentUser.preferredMode ? `Modo: ${currentUser.preferredMode}` : ''}</textarea>
                     </div>
                 </div>
-            </div>
-
-            <div id="booking-deposit-info" style="margin-top: 10px; padding: 10px; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); border-radius: var(--radius-sm); font-size: 0.8rem; margin-bottom: 12px;">
-                <!-- Se actualiza dinámicamente -->
-            </div>
-
-            <div class="form-divider"></div>
-
-            <div class="form-row grid-2">
-                <div class="form-group" style="position: relative;">
-                    <label for="book-name"><span class="neon-arrow">◆</span> Nombre / GamerTag *</label>
-                    <input type="text" id="book-name" class="cyber-input" value="${escapeHTML(clientNameVal)}" placeholder="Ej. Alex Step / PIU_Pro99" required autocomplete="off">
-                    <div id="book-name-suggestions" class="hidden" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; background: var(--bg-dark-800, #1a1f29); border: 1px solid var(--piu-cyan, #00e5ff); border-radius: var(--radius-sm); max-height: 180px; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.8);"></div>
+            ` : `
+                <!-- Para el encargado / staff: búsqueda de clientes -->
+                <div class="form-row grid-2" style="margin:0;">
+                    <div class="form-group" style="position: relative; margin:0;">
+                        <label for="book-name" style="font-size:0.8rem;"><span class="neon-arrow">◆</span> Jugador / GamerTag *</label>
+                        <input type="text" id="book-name" class="cyber-input" value="${escapeHTML(clientNameVal)}" placeholder="Buscar cliente..." required autocomplete="off" style="font-size:0.85rem;">
+                        <div id="book-name-suggestions" class="hidden" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; background: var(--bg-dark-800); border: 1px solid var(--piu-cyan); border-radius: var(--radius-sm); max-height: 160px; overflow-y: auto;"></div>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label for="book-phone" style="font-size:0.8rem;"><span class="neon-arrow">◆</span> Teléfono</label>
+                        <input type="tel" id="book-phone" class="cyber-input" value="${escapeHTML(clientPhoneVal)}" placeholder="5512345678" style="font-size:0.85rem;">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="book-phone"><span class="neon-arrow">◆</span> Teléfono / WhatsApp (Opcional)</label>
-                    <input type="tel" id="book-phone" class="cyber-input" value="${escapeHTML(clientPhoneVal)}" placeholder="Ej. 5512345678">
+                <div class="form-group" style="margin:0;">
+                    <label for="book-notes" style="font-size:0.8rem;"><span class="neon-arrow">◆</span> Notas (Opcional)</label>
+                    <input type="text" id="book-notes" class="cyber-input" placeholder="Ej. Reserva en mostrador" style="font-size:0.85rem;">
                 </div>
-            </div>
-
-            <div class="form-group">
-                <label for="book-notes"><span class="neon-arrow">◆</span> Notas / Nivel / Modo (Opcional)</label>
-                <textarea id="book-notes" class="cyber-textarea" rows="2" placeholder="Ej. Práctica Single S21, uso de barra, stream...">${isClientUser && currentUser.preferredMode ? `Modo: ${currentUser.preferredMode}` : ''}</textarea>
-            </div>
+            `}
 
             <div id="booking-error" class="form-error-msg hidden"></div>
         </form>
@@ -221,15 +298,15 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         icon: modalIcon,
         contentHtml,
         footerHtml,
-        maxWidth: '560px'
+        maxWidth: '520px'
     });
 
     // Actualizar costo estimado
     const updateCost = () => {
-        const selectedMachId = modalEl.querySelector('#book-machine').value;
-        const durationMinutes = parseInt(modalEl.querySelector('#book-duration').value, 10) || slotDuration;
+        const selectedMachId = modalEl.querySelector('#book-machine')?.value || defaultMachineId;
+        const durationMinutes = parseInt(modalEl.querySelector('#book-duration')?.value, 10) || slotDuration;
         const playersMode = parseInt(modalEl.querySelector('#book-players-mode')?.value, 10) || 1;
-        const mach = store.getMachineById(selectedMachId);
+        const mach = store.getMachineById(selectedMachId) || selectedMachine;
         const total = calculateBookingCost(durationMinutes, playersMode, mach, business);
         const costPreview = modalEl.querySelector('#booking-cost-preview');
         if (costPreview) {
@@ -242,91 +319,119 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 const depositPct = business.depositPercentage || 50;
                 const depositAmount = Math.round(total * (depositPct / 100));
                 depositInfo.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; color:var(--color-neon-lime);">
-                        <span>💰 Anticipo Requerido (${depositPct}%):</span>
+                    <div style="color:var(--color-neon-lime);">
+                        <span>Anticipo (${depositPct}%):</span>
                         <strong>${business.currencySymbol}${depositAmount} ${business.currency}</strong>
-                    </div>
-                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:6px; border-top:1px dashed rgba(0,229,255,0.15); padding-top:4px;">
-                        <em>Esta sucursal requiere pago previo de anticipo para confirmar el espacio.</em>
                     </div>
                 `;
             } else {
                 depositInfo.innerHTML = `
-                    <span style="color:var(--piu-cyan);">✓ Pago total en mostrador (No se requiere depósito previo).</span>
+                    <span style="color:var(--piu-cyan); font-size:0.75rem;">✓ Pago total en mostrador</span>
                 `;
             }
         }
     };
 
-    const updateDurationOptions = () => {
+    // Renderizado reactivo de chips de duración con candado inteligente de horarios
+    const renderDurationChips = (currentTime, currentDuration) => {
+        const chipsContainer = modalEl.querySelector('#duration-chips-container');
+        const labelSelected = modalEl.querySelector('#label-selected-duration');
         const durationSelect = modalEl.querySelector('#book-duration');
-        const selectedDate = modalEl.querySelector('#book-date').value;
-        const { closingTime } = getBusinessHoursForDate(business, selectedDate);
-        const durations = getAvailableDurations(
-            modalEl.querySelector('#book-time').value,
-            closingTime || '22:00',
-            slotDuration
-        );
-        durationSelect.innerHTML = durations.map(duration => `<option value="${duration}">${formatDuration(duration)}</option>`).join('');
+        const submitBtn = modalEl.querySelector('#btn-submit-book');
+        const errorMsg = modalEl.querySelector('#booking-error');
+        if (!chipsContainer) return;
+
+        const { durations, conflict, nextConflict, maxAllowedMins } = getSafeAvailableDurations(currentTime);
+
+        if (durations.length === 0) {
+            chipsContainer.innerHTML = `
+                <div style="grid-column: 1/-1; background:rgba(255, 0, 85, 0.15); border:1px solid var(--color-neon-red); border-radius:var(--radius-sm); padding:10px 14px; color:#ffffff; font-size:0.85rem;">
+                    <div style="color:var(--color-neon-red); font-weight:700; margin-bottom:4px;">⚠️ Horario Ocupado</div>
+                    <span>Este horario ya se encuentra apartado por <strong>${escapeHTML(conflict?.clientName || 'otro usuario')}</strong> (${conflict?.startTime || ''} - ${conflict?.endTime || ''}). Por favor selecciona otra hora libre en el calendario.</span>
+                </div>
+            `;
+            if (durationSelect) durationSelect.innerHTML = '';
+            if (labelSelected) labelSelected.textContent = '❌ Sin disponibilidad';
+            if (submitBtn) submitBtn.disabled = true;
+            return;
+        }
+
+        if (submitBtn) submitBtn.disabled = false;
+        if (errorMsg) errorMsg.classList.add('hidden');
+
+        let activeDur = currentDuration;
+        if (!durations.includes(activeDur)) {
+            activeDur = durations.includes(60) ? 60 : (durations[0] || slotDuration);
+        }
+
+        if (durationSelect) {
+            durationSelect.innerHTML = durations.map(d => `<option value="${d}" ${d === activeDur ? 'selected' : ''}>${d}</option>`).join('');
+            durationSelect.value = String(activeDur);
+        }
+
+        if (labelSelected) {
+            labelSelected.textContent = formatDuration(activeDur) + (nextConflict ? ` (Máx. hasta ${format12Hour(nextConflict.startTime)})` : '');
+        }
+
+        // Mostrar chips ordenados y accesibles (máx 6)
+        chipsContainer.innerHTML = durations.slice(0, 6).map(dur => {
+            const isSelected = dur === activeDur;
+            return `
+                <button type="button" class="btn-duration-chip ${isSelected ? 'active-duration' : ''}" data-duration="${dur}" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:9px 4px; border-radius:var(--radius-sm); cursor:pointer; background:${isSelected ? 'rgba(0, 240, 255, 0.22)' : 'var(--bg-dark-700)'}; border:${isSelected ? '2px solid var(--piu-cyan)' : '1px solid rgba(255,255,255,0.12)'}; color:${isSelected ? '#ffffff' : 'var(--text-secondary)'}; font-weight:700; transition:all 0.15s ease; box-shadow:${isSelected ? '0 0 10px rgba(0,240,255,0.35)' : 'none'};">
+                    <span style="font-size:0.9rem; font-family:var(--font-mono);">${formatDuration(dur)}</span>
+                </button>
+            `;
+        }).join('');
+
+        chipsContainer.querySelectorAll('.btn-duration-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const chosen = parseInt(chip.dataset.duration, 10);
+                renderDurationChips(currentTime, chosen);
+                updateCost();
+            });
+        });
+    };
+
+    // Modo de juego (1P / 2P)
+    modalEl.querySelectorAll('.btn-mode-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+            modalEl.querySelectorAll('.btn-mode-pill').forEach(p => {
+                p.style.background = 'var(--bg-dark-700)';
+                p.style.border = '1px solid rgba(255,255,255,0.15)';
+                p.style.color = 'var(--text-secondary)';
+            });
+            pill.style.background = 'rgba(0, 240, 255, 0.2)';
+            pill.style.border = '2px solid var(--piu-cyan)';
+            pill.style.color = '#ffffff';
+            const hiddenMode = modalEl.querySelector('#book-players-mode');
+            if (hiddenMode) hiddenMode.value = pill.dataset.mode;
+            updateCost();
+        });
+    });
+
+    // Toggle de notas colapsables
+    const btnToggleNotes = modalEl.querySelector('#btn-toggle-notes');
+    const notesCollapsible = modalEl.querySelector('#notes-collapsible');
+    if (btnToggleNotes && notesCollapsible) {
+        btnToggleNotes.addEventListener('click', () => {
+            const isHidden = notesCollapsible.style.display === 'none';
+            notesCollapsible.style.display = isHidden ? 'block' : 'none';
+            btnToggleNotes.innerHTML = isHidden 
+                ? '<span>📝 Ocultar notas opcionales ▲</span>' 
+                : '<span>📝 Agregar notas opcionales ▼</span>';
+        });
+    }
+
+    const updateDurationOptions = () => {
+        const timeVal = modalEl.querySelector('#book-time').value;
+        const currentDur = parseInt(modalEl.querySelector('#book-duration')?.value, 10) || selectedDuration;
+        renderDurationChips(timeVal, currentDur);
         updateCost();
     };
 
-    modalEl.querySelector('#book-machine').addEventListener('change', updateCost);
-    modalEl.querySelector('#book-players-mode')?.addEventListener('change', updateCost);
     modalEl.querySelector('#book-time').addEventListener('change', updateDurationOptions);
-    modalEl.querySelector('#book-duration').addEventListener('change', updateCost);
 
-    // Dynamic date change slots updating
-    modalEl.querySelector('#book-date').addEventListener('change', (e) => {
-        const newDate = e.target.value;
-        if (!newDate) return;
-        
-        const { openingTime: opt, closingTime: clt, closed: isCl } = getBusinessHoursForDate(business, newDate);
-        const timeSelect = modalEl.querySelector('#book-time');
-        const durationSelect = modalEl.querySelector('#book-duration');
-        const errorMsg = modalEl.querySelector('#booking-error');
-        const submitBtn = modalEl.querySelector('#btn-submit-book');
-        
-        if (isCl) {
-            errorMsg.textContent = 'La sucursal está cerrada en la fecha seleccionada. Por favor, elige otro día.';
-            errorMsg.classList.remove('hidden');
-            timeSelect.innerHTML = '<option value="">Cerrado</option>';
-            durationSelect.innerHTML = '<option value="">-</option>';
-            timeSelect.disabled = true;
-            durationSelect.disabled = true;
-            submitBtn.disabled = true;
-            return;
-        }
-        
-        timeSelect.disabled = false;
-        durationSelect.disabled = false;
-        submitBtn.disabled = false;
-        errorMsg.classList.add('hidden');
-        
-        const newSlots = generateTimeSlots(opt, clt, slotDuration);
-        if (newSlots.length === 0) {
-            timeSelect.innerHTML = '<option value="">No hay slots disponibles</option>';
-            durationSelect.innerHTML = '<option value="">-</option>';
-            return;
-        }
-        
-        const openMinutes = timeToMinutes(opt);
-        const closeMinutes = timeToMinutes(clt);
-        const isOvernight = closeMinutes < openMinutes;
-        
-        timeSelect.innerHTML = newSlots.map(s => {
-            const label = (isOvernight && timeToMinutes(s.start) < openMinutes) 
-                ? `${format12Hour(s.start)} (Siguiente día)` 
-                : format12Hour(s.start);
-            return `<option value="${s.start}">${label}</option>`;
-        }).join('');
-        
-        const durations = getAvailableDurations(newSlots[0].start, clt, slotDuration);
-        durationSelect.innerHTML = durations.map(d => `<option value="${d}">${formatDuration(d)}</option>`).join('');
-        
-        updateCost();
-    });
-
+    renderDurationChips(selectedSlot?.start || defaultStartTime, selectedDuration);
     updateCost();
 
     // Autocompletado de Clientes para el Encargado/Superusuario
@@ -479,6 +584,19 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                 return;
             }
 
+            // 🛡️ CANDADO FRONTEND PREVIO A SUBMIT
+            const availability = await store.checkAvailabilityAsync(
+                machineSelect.value,
+                dateInput.value,
+                startTimeVal,
+                endTimeVal
+            );
+            if (!availability.available) {
+                errorMsg.textContent = availability.reason;
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+
             const booking = await store.requestReservation({
                 machineId: machineSelect.value,
                 date: dateInput.value,
@@ -516,8 +634,22 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
  * Muestra el comprobante o pase digital de la reservación
  */
 export function showReservationTicket(reservation) {
-    const business = store.currentBusiness;
-    const machine = store.getMachineById(reservation.machineId);
+    const business = (reservation.businessId && tenantManager.getBusinessById)
+        ? (tenantManager.getBusinessById(reservation.businessId) || store.currentBusiness)
+        : store.currentBusiness;
+
+    let machine = store.getMachineById(reservation.machineId);
+    if (!machine && reservation.businessId) {
+        const cached = JSON.parse(localStorage.getItem(`piu_machines_${reservation.businessId}`) || '[]');
+        machine = cached.find(m => m.id === reservation.machineId);
+    }
+    if (!machine && business?.machines) {
+        machine = business.machines.find(m => m.id === reservation.machineId);
+    }
+    if (!machine && reservation.machineName) {
+        machine = { name: reservation.machineName, model: '' };
+    }
+
     const friendlyDate = formatFriendlyDate(reservation.date);
     const timeFormatted = `${format12Hour(reservation.startTime)} - ${format12Hour(reservation.endTime)}`;
 

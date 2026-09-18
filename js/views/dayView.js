@@ -19,12 +19,23 @@ import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { escapeHTML } from '../core/securityUtils.js';
 
+let currentMachineFilter = 'ALL';
+
 export function renderDayView(container) {
     const business = store.currentBusiness;
     const machines = store.getMachines();
     const activeMachines = machines.filter(m => m.status !== 'OUT_OF_ORDER');
     const selectedDate = store.selectedDate || formatDateKey(new Date());
     const isStaff = authManager.isStaff();
+
+    // Validar si el filtro actual sigue existiendo en las máquinas activas
+    if (currentMachineFilter !== 'ALL' && !activeMachines.some(m => m.id === currentMachineFilter)) {
+        currentMachineFilter = 'ALL';
+    }
+
+    const displayedMachines = currentMachineFilter === 'ALL'
+        ? activeMachines
+        : activeMachines.filter(m => m.id === currentMachineFilter);
 
     // Actualizar suscripción de reservas en el store
     store.updateReservationsSubscription(selectedDate, selectedDate);
@@ -76,6 +87,21 @@ export function renderDayView(container) {
                 </div>
             </div>
 
+            <!-- Selector Rápido de Máquinas (Filtro por Chips) -->
+            ${activeMachines.length > 1 ? `
+                <div class="machine-filter-bar" role="toolbar" aria-label="Filtrar por máquina">
+                    <button class="machine-filter-chip ${currentMachineFilter === 'ALL' ? 'active' : ''}" data-filter="ALL" title="Ver todas las máquinas con columnas fijas">
+                        <span>🕹️ Todas</span>
+                        <span class="chip-count">${activeMachines.length}</span>
+                    </button>
+                    ${activeMachines.map(m => `
+                        <button class="machine-filter-chip ${currentMachineFilter === m.id ? 'active' : ''}" data-filter="${m.id}" title="Ver solo ${escapeHTML(m.name)}">
+                            <span>${escapeHTML(m.name)}</span>
+                        </button>
+                    `).join('')}
+                </div>
+            ` : ''}
+
             <!-- Grid Horas x Máquinas -->
             <div class="grid-container-card">
                 ${closed ? `
@@ -103,12 +129,12 @@ export function renderDayView(container) {
                                             <span>⏰ HORARIO</span>
                                         </div>
                                     </th>
-                                    ${activeMachines.map(m => `
+                                    ${displayedMachines.map(m => `
                                         <th class="col-machine-header">
                                             <div class="machine-header-card">
-                                                <div class="mach-name">${m.name}</div>
+                                                <div class="mach-name">${escapeHTML(m.name)}</div>
                                                 <div class="mach-badge-row">
-                                                    <span class="badge badge-dark">${m.model}</span>
+                                                    <span class="badge badge-dark">${escapeHTML(m.model)}</span>
                                                     <span class="badge ${m.status === 'AVAILABLE' ? 'badge-success' : 'badge-warning'}">
                                                         ${m.status === 'AVAILABLE' ? `${business.currencySymbol}${m.hourlyRate}/h` : 'Mantenimiento'}
                                                     </span>
@@ -122,7 +148,7 @@ export function renderDayView(container) {
                                 ${slots.map(slot => {
                                     return `
                                         <tr class="grid-time-row">
-                                            <!-- Columna de Hora -->
+                                            <!-- Columna de Hora (Sticky Izquierda) -->
                                             <td class="cell-time-label">
                                                 <div class="time-block-label">
                                                     <strong>${format12Hour(slot.start)}</strong>
@@ -131,10 +157,12 @@ export function renderDayView(container) {
                                             </td>
 
                                             <!-- Columnas de Cada Máquina -->
-                                            ${activeMachines.map(machine => {
+                                            ${displayedMachines.map(machine => {
                                                 if (machine.status === 'MAINTENANCE') {
                                                     return `
-                                                        <td class="cell-slot cell-maintenance">
+                                                        <td class="cell-slot cell-maintenance"
+                                                            data-machine-name="${escapeHTML(machine.name)}"
+                                                            title="${escapeHTML(machine.name)} • En Mantenimiento">
                                                             <div class="slot-content slot-locked">
                                                                 <span class="lock-icon">🔧</span>
                                                                 <span class="lock-text">Mantenimiento</span>
@@ -156,7 +184,10 @@ export function renderDayView(container) {
                                                     const isFirstSlotOfBooking = reservation.startTime === slot.start;
 
                                                     return `
-                                                        <td class="cell-slot ${statusClass}" data-res-id="${reservation.id}">
+                                                        <td class="cell-slot ${statusClass}" 
+                                                            data-res-id="${reservation.id}"
+                                                            data-machine-name="${escapeHTML(machine.name)}"
+                                                            title="${escapeHTML(machine.name)} • ${reservation.startTime} a ${reservation.endTime} • ${escapeHTML(reservation.clientName)} (${isPending ? 'Pendiente' : 'Confirmada'})">
                                                             <div class="slot-content occupied-slot" title="Click para ver detalles o gestionar">
                                                                 <div class="slot-occupant">
                                                                     <span class="status-indicator-dot"></span>
@@ -176,8 +207,10 @@ export function renderDayView(container) {
                                                     <td class="cell-slot cell-available" 
                                                         data-machine-id="${machine.id}" 
                                                         data-slot-start="${slot.start}" 
-                                                        data-date="${selectedDate}">
-                                                        <button class="slot-book-btn" title="Click para reservar en este horario">
+                                                        data-date="${selectedDate}"
+                                                        data-machine-name="${escapeHTML(machine.name)}"
+                                                        title="${escapeHTML(machine.name)} • ${format12Hour(slot.start)} a ${format12Hour(slot.end)} (Click para apartar)">
+                                                        <button class="slot-book-btn" title="Click para reservar en ${escapeHTML(machine.name)} de ${format12Hour(slot.start)} a ${format12Hour(slot.end)}">
                                                             <span class="plus-icon">＋</span>
                                                             <span class="book-text">Disponible</span>
                                                         </button>
@@ -212,6 +245,14 @@ export function renderDayView(container) {
         if (e.target.value) {
             store.setSelectedDate(e.target.value);
         }
+    });
+
+    // Eventos de Filtro Rápido de Máquinas (Chips)
+    container.querySelectorAll('.machine-filter-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            currentMachineFilter = chip.dataset.filter;
+            renderDayView(container);
+        });
     });
 
     // Evento Click en Slot Libre -> Abrir Modal de Reservación con máquina, fecha y hora precargadas

@@ -2,6 +2,7 @@
 // Vista de Arena Versus, Matchmaking PVP, Bandeja de Retos, Mini-Calendario, Selección de Máquina y Horarios en 2 Secciones Responsivas (v1.9.9)
 import { challengeManager, CHALLENGE_STATUS, CHALLENGE_MODES, LIGA_ORDER } from '../core/challengeManager.js';
 import { tenantManager } from '../core/tenantManager.js';
+import { store } from '../core/store.js';
 import { authManager } from '../core/authManager.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
@@ -1061,6 +1062,16 @@ export function openMatchmakingModal({
     let filterModalLeague = 'ALL';
     let modalSearchQuery = '';
 
+    // Priorizar el local actualmente activo/seleccionado en el sistema
+    const activeBiz = store.currentBusiness || tenantManager.getActiveBusiness();
+    const activeBizId = activeBiz?.id || tenantManager.getActiveBusinessId();
+    const businessesPool = (allBusinesses && allBusinesses.length > 0) ? allBusinesses : tenantManager.getAllBusinesses();
+    const sortedBusinesses = [...businessesPool].sort((a, b) => {
+        if (a.id === activeBizId) return -1;
+        if (b.id === activeBizId) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+
     // Estado de configuración del encuentro
     let matchMode = 'SAME_LOCAL'; // 'SAME_LOCAL' o 'DIFFERENT_LOCALS'
     const todayStr = formatDateKey(new Date());
@@ -1068,7 +1079,7 @@ export function openMatchmakingModal({
     let selectedDurationMinutes = 60;
     let selectedStartTime = null;
     let selectedEndTime = null;
-    let selectedBusinessIdA = allBusinesses[0]?.id || null;
+    let selectedBusinessIdA = activeBizId || sortedBusinesses[0]?.id || null;
     let selectedMachineIdA = null;
     let selectedMachineNameA = '';
 
@@ -1258,9 +1269,9 @@ export function openMatchmakingModal({
                             <span class="neon-arrow">◆</span> 2. Tu Sucursal (Donde tú vas a jugar)
                         </label>
                         <select id="chal-biz-a" class="cyber-select" required>
-                            ${allBusinesses.map(b => `
+                            ${sortedBusinesses.map(b => `
                                 <option value="${b.id}" ${b.id === selectedBusinessIdA ? 'selected' : ''}>
-                                    ${escapeHTML(b.name)} (${escapeHTML(b.city)})
+                                    ${b.id === activeBizId ? '⭐ ' : ''}${escapeHTML(b.name)} (${escapeHTML(b.city)})${b.id === activeBizId ? ' [Tu Local Seleccionado]' : ''}
                                 </option>
                             `).join('')}
                         </select>
@@ -1330,7 +1341,7 @@ export function openMatchmakingModal({
                 const summaryEl = bodyEl.querySelector('#chal-live-summary strong');
                 if (summaryEl) {
                     if (selectedStartTime && selectedEndTime) {
-                        const bizNameA = allBusinesses.find(b => b.id === selectedBusinessIdA)?.name || 'Tu Sucursal';
+                        const bizNameA = sortedBusinesses.find(b => b.id === selectedBusinessIdA)?.name || 'Tu Sucursal';
                         const machText = selectedMachineNameA ? ` • 🕹️ ${selectedMachineNameA}` : '';
                         const modeText = matchMode === 'DIFFERENT_LOCALS' 
                             ? `⚡ Duelo Remoto • 📍 Tu local: ${bizNameA}${machText}` 
@@ -1378,7 +1389,7 @@ export function openMatchmakingModal({
                     return;
                 }
 
-                const businessNameA = allBusinesses.find(b => b.id === selectedBusinessIdA)?.name || '';
+                const businessNameA = sortedBusinesses.find(b => b.id === selectedBusinessIdA)?.name || '';
                 const notes = bodyEl.querySelector('#chal-notes').value;
 
                 submitBtn.disabled = true;
@@ -1437,8 +1448,17 @@ export function openAcceptChallengeModal(challenge, currentUser, allBusinesses, 
     const bizA = allBusinesses.find(b => b.id === challenge.location?.businessId);
     const bizNameA = challenge.location?.businessName || bizA?.name || 'Local A';
 
-    let bizB = allBusinesses.find(b => b.id === challenge.location?.businessIdB);
-    let selectedBizIdB = challenge.location?.businessIdB || allBusinesses[0]?.id;
+    const activeBiz = store.currentBusiness || tenantManager.getActiveBusiness();
+    const activeBizId = activeBiz?.id || tenantManager.getActiveBusinessId();
+    const businessesPool = (allBusinesses && allBusinesses.length > 0) ? allBusinesses : tenantManager.getAllBusinesses();
+    const sortedBusinesses = [...businessesPool].sort((a, b) => {
+        if (a.id === activeBizId) return -1;
+        if (b.id === activeBizId) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+
+    let bizB = sortedBusinesses.find(b => b.id === challenge.location?.businessIdB);
+    let selectedBizIdB = challenge.location?.businessIdB || activeBizId || sortedBusinesses[0]?.id;
     let bizNameB = challenge.location?.businessNameB || bizB?.name || '';
 
     // Solo si es remoto y aún no se había elegido la sucursal B
@@ -1496,7 +1516,7 @@ export function openAcceptChallengeModal(challenge, currentUser, allBusinesses, 
                 <div class="form-group">
                     <label for="accept-biz-b"><span class="neon-arrow">◆</span> Selecciona TU Sucursal para este duelo:</label>
                     <select id="accept-biz-b" class="cyber-select">
-                        ${allBusinesses.map(b => `<option value="${b.id}" ${b.id === selectedBizIdB ? 'selected' : ''}>${escapeHTML(b.name)} (${escapeHTML(b.city)})</option>`).join('')}
+                        ${sortedBusinesses.map(b => `<option value="${b.id}" ${b.id === selectedBizIdB ? 'selected' : ''}>${b.id === activeBizId ? '⭐ ' : ''}${escapeHTML(b.name)} (${escapeHTML(b.city)})${b.id === activeBizId ? ' [Tu Local Seleccionado]' : ''}</option>`).join('')}
                     </select>
                     <div id="accept-remote-check-status" style="margin-top:6px; font-size:0.8rem;"></div>
                 </div>
@@ -1625,6 +1645,15 @@ function openCounterOfferModal(challenge, currentUser, allBusinesses, parentCont
     let coDate = challenge.schedule?.date || todayStr;
     let coMode = challenge.mode || 'SAME_LOCAL';
 
+    const activeBiz = store.currentBusiness || tenantManager.getActiveBusiness();
+    const activeBizId = activeBiz?.id || tenantManager.getActiveBusinessId();
+    const businessesPool = (allBusinesses && allBusinesses.length > 0) ? allBusinesses : tenantManager.getAllBusinesses();
+    const sortedBusinesses = [...businessesPool].sort((a, b) => {
+        if (a.id === activeBizId) return -1;
+        if (b.id === activeBizId) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+
     // Determinar la sucursal y máquina inicial según quién está abriendo el modal
     let coBusinessId;
     let coMachineId;
@@ -1632,11 +1661,11 @@ function openCounterOfferModal(challenge, currentUser, allBusinesses, parentCont
 
     if (!isChallenger && coMode === 'DIFFERENT_LOCALS') {
         // Para el rival en duelo remoto, su local inicial es businessIdB
-        coBusinessId = challenge.location?.businessIdB || allBusinesses[0]?.id;
+        coBusinessId = challenge.location?.businessIdB || activeBizId || sortedBusinesses[0]?.id;
         coMachineId = challenge.location?.machineIdB || null;
         coMachineName = challenge.location?.machineNameB || '';
     } else {
-        coBusinessId = challenge.location?.businessId || allBusinesses[0]?.id;
+        coBusinessId = challenge.location?.businessId || activeBizId || sortedBusinesses[0]?.id;
         coMachineId = challenge.location?.machineId || null;
         coMachineName = challenge.location?.machineName || '';
     }
@@ -1695,9 +1724,9 @@ function openCounterOfferModal(challenge, currentUser, allBusinesses, parentCont
             <div class="form-group">
                 <label id="lbl-co-business" for="co-business"><span class="neon-arrow">◆</span> <span id="txt-co-business-label">${businessLabelText()}</span></label>
                 <select id="co-business" class="cyber-select">
-                    ${allBusinesses.map(b => `
+                    ${sortedBusinesses.map(b => `
                         <option value="${b.id}" ${b.id === coBusinessId ? 'selected' : ''}>
-                            ${escapeHTML(b.name)} (${escapeHTML(b.city)})
+                            ${b.id === activeBizId ? '⭐ ' : ''}${escapeHTML(b.name)} (${escapeHTML(b.city)})${b.id === activeBizId ? ' [Tu Local Seleccionado]' : ''}
                         </option>
                     `).join('')}
                 </select>
@@ -1789,9 +1818,9 @@ function openCounterOfferModal(challenge, currentUser, allBusinesses, parentCont
 
             const selectEl = m.querySelector('#co-business');
             if (coMode === 'DIFFERENT_LOCALS' && !isChallenger) {
-                coBusinessId = challenge.location?.businessIdB || allBusinesses[0]?.id;
+                coBusinessId = challenge.location?.businessIdB || activeBizId || sortedBusinesses[0]?.id;
             } else {
-                coBusinessId = challenge.location?.businessId || allBusinesses[0]?.id;
+                coBusinessId = challenge.location?.businessId || activeBizId || sortedBusinesses[0]?.id;
             }
             if (selectEl) selectEl.value = coBusinessId;
             coStartTime = null;

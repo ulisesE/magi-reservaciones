@@ -68,8 +68,16 @@ export function format12Hour(time24) {
  */
 export function timeToMinutes(timeStr) {
     if (!timeStr) return 0;
-    const [h, m] = timeStr.split(':').map(Number);
-    return (h * 60) + (m || 0);
+    const str = String(timeStr).trim();
+    const isPM = /pm/i.test(str);
+    const isAM = /am/i.test(str);
+    const clean = str.replace(/[^\d:]/g, '');
+    const [hRaw, mRaw] = clean.split(':').map(Number);
+    let h = hRaw || 0;
+    const m = mRaw || 0;
+    if (isPM && h < 12) h += 12;
+    if (isAM && h === 12) h = 0;
+    return (h * 60) + m;
 }
 
 /**
@@ -335,4 +343,26 @@ export function calculateBookingCost(durationMinutes, numPlayers, machine, busin
     }
 
     return price;
+}
+
+/**
+ * Determina si una reservación ya pasó de fecha y hora actual
+ */
+export function isReservationPast(dateStr, timeStr = null) {
+    if (!dateStr) return false;
+    const cleanDateStr = String(dateStr).trim().replace(/\//g, '-');
+    const now = new Date();
+    const todayKey = formatDateKey(now);
+
+    if (cleanDateStr < todayKey) return true;
+    if (cleanDateStr > todayKey) return false;
+
+    // Si la fecha es hoy y se proporciona la hora de inicio o fin
+    if (timeStr) {
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const targetMinutes = timeToMinutes(timeStr);
+        return targetMinutes <= currentMinutes;
+    }
+
+    return false;
 }

@@ -195,8 +195,8 @@ export async function renderAccountsView(container) {
                     <button class="btn btn-secondary" id="btn-open-catalogs-shortcut" title="Administrar productos y precios">
                         <span>🛍️ Catálogo Productos</span>
                     </button>
-                    <button class="btn btn-primary glow-red" id="btn-open-quick-sale" style="font-weight:700;">
-                        <span>➕ Cargar a Cuenta / Venta</span>
+                    <button class="btn btn-primary glow-red" id="btn-open-quick-sale" style="font-weight:800; background:linear-gradient(135deg, #088C4F, #68F205); color:#000; border:none; padding:8px 18px; font-size:0.92rem; box-shadow:0 0 14px rgba(104,242,5,0.4);" title="Registrar consumos de jugadores, ventas y cargos a cuenta">
+                        <span>➕ Registrar Consumo</span>
                     </button>
                 </div>
             </div>
@@ -299,8 +299,8 @@ export async function renderAccountsView(container) {
                                         </div>
 
                                         <div style="display:flex; gap:6px; border-top:1px solid rgba(255,255,255,0.06); padding-top:10px;">
-                                            <button class="btn btn-primary btn-xs glow-red btn-charge-player" data-player-id="${debtor.playerId}" style="flex:1;">
-                                                <span>➕ Cargar</span>
+                                            <button class="btn btn-primary btn-xs glow-red btn-charge-player" data-player-id="${debtor.playerId}" style="flex:1; background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:800; border:none;" title="Registrar consumo para este jugador">
+                                                <span>➕ Consumo</span>
                                             </button>
                                             <button class="btn btn-success btn-xs btn-pay-player" data-player-id="${debtor.playerId}" style="flex:1;">
                                                 <span>💵 Liquidar</span>
@@ -588,6 +588,7 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
     const currency = business.currencySymbol || '$';
     const sortedClients = await getAllAvailableClients();
     const products = await accountManager.getProducts(business.id);
+    const quickTypes = accountManager.getQuickTypes();
 
     // Estado del cliente seleccionado
     const preselectedClient = preselectedPlayerId && preselectedPlayerId !== 'guest_walkin' 
@@ -629,6 +630,23 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
                 </div>
 
                 <div id="pos-player-debt-badge" style="margin-top:6px; font-size:0.82rem;"></div>
+            </div>
+
+            <!-- Consumos Rápidos Preset (Chips de 1 Clic) -->
+            <div style="background:rgba(104,242,5,0.04); border:1px solid rgba(104,242,5,0.25); border-radius:6px; padding:10px 12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <label style="font-weight:700; font-size:0.85rem; color:var(--color-neon-lime); margin:0;">
+                        <span class="neon-arrow">◆</span> Consumos Rápidos (1 Clic):
+                    </label>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">Haz clic para agregar a la cuenta</small>
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    ${quickTypes.map(t => `
+                        <button type="button" class="btn btn-outline btn-xs btn-add-quick-chip" data-name="${escapeHTML(t.defaultConcept)}" data-price="${t.defaultPrice}" data-icon="${t.icon}" style="border-color:rgba(104,242,5,0.35); font-size:0.78rem; padding:4px 9px; background:rgba(0,0,0,0.3); color:#ffffff; font-weight:600;" title="Agregar ${escapeHTML(t.label)} ($${t.defaultPrice})">
+                            <span>${t.icon} ${escapeHTML(t.label)} <strong style="color:var(--color-neon-lime); font-family:var(--font-mono);">$${t.defaultPrice}</strong></span>
+                        </button>
+                    `).join('')}
+                </div>
             </div>
 
             <!-- Catálogo y Buscador de Productos -->
@@ -707,11 +725,11 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
 
     const footerHtml = `
         <button type="button" class="btn btn-secondary" id="btn-cancel-pos">Cancelar</button>
-        <button type="button" class="btn btn-primary glow-red" id="btn-submit-pos">💾 Registrar Venta / Consumo</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-submit-pos" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:800; border:none;">💾 Registrar Consumo</button>
     `;
 
     const modalEl = modal.open({
-        title: 'Cargar a Cuenta / Punto de Venta',
+        title: 'Registrar Consumo / Cargar a Cuenta',
         icon: '🛒',
         contentHtml,
         footerHtml,
@@ -1034,6 +1052,33 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
             };
         });
     };
+
+    // Eventos de click en chips de consumo rápido
+    modalEl.querySelectorAll('.btn-add-quick-chip').forEach(btn => {
+        btn.onclick = () => {
+            const name = btn.dataset.name;
+            const price = parseFloat(btn.dataset.price) || 0;
+            const icon = btn.dataset.icon || '🥤';
+            const id = `quick_${name.toLowerCase().replace(/\s+/g, '_')}`;
+
+            if (cart.has(id)) {
+                const existing = cart.get(id);
+                existing.quantity += 1;
+                existing.subtotal = existing.quantity * existing.unitPrice;
+            } else {
+                cart.set(id, {
+                    id,
+                    name,
+                    category: 'CONSUMO',
+                    icon,
+                    unitPrice: price,
+                    quantity: 1,
+                    subtotal: price
+                });
+            }
+            updateCartUI();
+        };
+    });
 
     // Eventos de click en productos del grid
     modalEl.querySelectorAll('.btn-add-pos-item').forEach(btn => {
