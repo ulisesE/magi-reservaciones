@@ -21,7 +21,7 @@ import { authManager } from './authManager.js';
 import { store } from './store.js';
 import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
 import { handleAppError } from './errorHandler.js';
-import { formatDateKey, format12Hour, getBusinessHoursForDate, timeToMinutes, minutesToTime, getMinutesSinceOperationalMidnight, isOverlapping } from './timeUtils.js';
+import { formatDateKey, format12Hour, getBusinessHoursForDate, timeToMinutes, minutesToTime, getMinutesSinceOperationalMidnight, isOverlapping, calculateBookingCost } from './timeUtils.js';
 
 /**
  * Limpia recursivamente campos undefined de objetos antes de enviar a Firestore
@@ -756,6 +756,8 @@ class ChallengeManager {
         businessId,
         machineId,
         machineName,
+        machine = null,
+        totalCost = null,
         date,
         startTime,
         endTime,
@@ -778,11 +780,33 @@ class ChallengeManager {
         const endM = timeToMinutes(endTime);
         let dur = (startM !== null && endM !== null && endM > startM) ? (endM - startM) : 60;
 
+        // Resolver negocio y máquina para cálculo de costo exacto
+        let biz = tenantManager.getBusinessById ? tenantManager.getBusinessById(businessId) : null;
+        if (!biz && store.currentBusiness?.id === businessId) biz = store.currentBusiness;
+
+        let mach = machine;
+        if (!mach) {
+            if (store.getMachineById) mach = store.getMachineById(machineId);
+            if (!mach && businessId) {
+                const cachedMachines = JSON.parse(localStorage.getItem(`piu_machines_${businessId}`) || '[]');
+                mach = cachedMachines.find(m => m.id === machineId) || null;
+            }
+        }
+
+        let calculatedCost = totalCost;
+        if (calculatedCost === null || calculatedCost === undefined || calculatedCost === 0) {
+            calculatedCost = calculateBookingCost(dur, playersCount, mach, biz);
+        }
+
+        const resolvedBizName = biz?.name || '';
+        const resolvedMachName = machineName || mach?.name || 'Gabinete Pump It Up';
+
         const reservationPayload = {
             id: resId,
             businessId,
+            businessName: resolvedBizName,
             machineId: machineId || 'mach_1',
-            machineName: machineName || 'Gabinete Pump It Up',
+            machineName: resolvedMachName,
             clientId: clientId || null,
             clientName: clientName || 'Jugador PVP',
             clientUsername: clientUsername || '',
@@ -793,9 +817,9 @@ class ChallengeManager {
             durationMinutes: dur,
             playersMode: playersCount,
             status: 'PENDING', // Enviada como pendiente para que el encargado la apruebe
-            totalCost: 0,
+            totalCost: Number(calculatedCost) || 0,
             notes: notes || '⚔️ Reta PVP Oficial pactada en Arena Versus',
-            adminNotes: '⚔️ Solicitud de Reta PVP generada desde Arena Versus',
+            adminNotes: `⚔️ Solicitud de Reta PVP generada desde Arena Versus (${playersCount === 2 ? 'Modo 2P' : 'Modo 1P'})`,
             isVersusMatch: true,
             challengeId: challengeId || null,
             opponentId: opponentId || null,
@@ -805,6 +829,14 @@ class ChallengeManager {
         };
 
         const cleanRes = cleanFirestorePayload(reservationPayload);
+
+        // 🛡️ CANDADO: Verificar que no haya conflicto de horario previo
+        if (store.checkAvailabilityAsync) {
+            const avail = await store.checkAvailabilityAsync(machineId || 'mach_1', date, startTime, endTime);
+            if (!avail.available) {
+                throw new Error(avail.reason);
+            }
+        }
 
         // 1. Guardar en Firestore COLLECTIONS.RESERVATIONS
         if (isFirebaseAvailable && db) {
@@ -992,6 +1024,7 @@ class ChallengeManager {
                     businessId: bizId,
                     machineId: availableMachine.id,
                     machineName: availableMachine.name,
+                    machine: availableMachine,
                     date: challenge.schedule.date,
                     startTime: challenge.schedule.startTime,
                     endTime: challenge.schedule.endTime,
@@ -1045,6 +1078,7 @@ class ChallengeManager {
                         businessId: bizA,
                         machineId: machA.id,
                         machineName: machA.name,
+                        machine: machA,
                         date: challenge.schedule.date,
                         startTime: challenge.schedule.startTime,
                         endTime: challenge.schedule.endTime,
@@ -1091,6 +1125,7 @@ class ChallengeManager {
                         businessId: bizB,
                         machineId: machB.id,
                         machineName: machB.name,
+                        machine: machB,
                         date: challenge.schedule.date,
                         startTime: challenge.schedule.startTime,
                         endTime: challenge.schedule.endTime,

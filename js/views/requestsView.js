@@ -3,7 +3,7 @@
 import { store } from '../core/store.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
-import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes, calculateBookingCost } from '../core/timeUtils.js';
+import { addMinutesToTime, formatFriendlyDate, format12Hour, formatDuration, generateTimeSlots, getAvailableDurations, getBusinessHoursForDate, timeToMinutes, calculateBookingCost, isOverlapping } from '../core/timeUtils.js';
 import { showReservationTicket } from './clientBookingModal.js';
 import { escapeHTML } from '../core/securityUtils.js';
 import { clientDirManager } from './clientsView.js';
@@ -199,10 +199,20 @@ export function renderRequestsView(container) {
                 return;
             }
 
+            const confirmedList = allReservations.filter(c => c.status === 'CONFIRMED');
+
             tbody.innerHTML = pageReservations.map(r => {
                 const machine = store.getMachineById(r.machineId);
                 const isPending = r.status === 'PENDING';
                 const isConfirmed = r.status === 'CONFIRMED';
+                
+                const { openingTime, closingTime } = getBusinessHoursForDate(business, r.date);
+                const conflictWithConfirmed = confirmedList.find(c => 
+                    c.id !== r.id &&
+                    c.machineId === r.machineId &&
+                    c.date === r.date &&
+                    isOverlapping(r.startTime, r.endTime, c.startTime, c.endTime, openingTime, closingTime)
+                );
                 
                 let badgeClass = 'badge-warning';
                 let badgeText = 'Pendiente';
@@ -222,12 +232,15 @@ export function renderRequestsView(container) {
                         <td style="padding:12px; white-space:nowrap;">
                             <div style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-muted);">#${r.id.slice(-6).toUpperCase()}</div>
                             <span class="badge ${badgeClass}" style="font-size:0.7rem; padding:2px 6px;">${badgeText}</span>
+                            ${conflictWithConfirmed ? `
+                                <div><span class="badge badge-danger pulse-glow" style="font-size:0.65rem; padding:1px 5px; margin-top:3px; display:inline-block;" title="¡Atención! Este horario choca con #${conflictWithConfirmed.id.slice(-6).toUpperCase()} (${escapeHTML(conflictWithConfirmed.clientName)})">⚠️ Traslape</span></div>
+                            ` : ''}
                         </td>
                         <td style="padding:12px;">
                             <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                                 <strong style="color:#ffffff;">${escapeHTML(r.clientName)}</strong>
                                 ${r.clientId ? `
-                                    <span class="badge" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); font-size:0.65rem; padding:1px 5px;" title="Jugador Registrado Vinculado">🟢 Registrado</span>
+                                     <span class="badge" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); font-size:0.65rem; padding:1px 5px;" title="Jugador Registrado Vinculado">🟢 Registrado</span>
                                 ` : `
                                     <span class="badge" style="background:rgba(255,184,0,0.12); color:var(--color-neon-gold); border:1px solid rgba(255,184,0,0.3); font-size:0.65rem; padding:1px 5px;" title="Cliente No Registrado / Invitado">⚪ No Registrado</span>
                                 `}
@@ -245,15 +258,23 @@ export function renderRequestsView(container) {
                         <td style="padding:12px; white-space:nowrap;">
                             <div>${formatFriendlyDate(r.date)}</div>
                             <div style="font-size:0.8rem; color:var(--piu-cyan); font-family:var(--font-mono); font-weight:700;">${format12Hour(r.startTime)} - ${format12Hour(r.endTime)}</div>
+                            ${conflictWithConfirmed ? `
+                                <div style="font-size:0.7rem; color:var(--color-neon-red); font-weight:600; margin-top:2px;">⚠️ Choca con #${conflictWithConfirmed.id.slice(-6).toUpperCase()} (${format12Hour(conflictWithConfirmed.startTime)} - ${format12Hour(conflictWithConfirmed.endTime)})</div>
+                            ` : ''}
                         </td>
                         <td style="padding:12px; font-weight:700; font-family:var(--font-mono); color:var(--color-chartreuse);">${business.currencySymbol}${r.totalCost}</td>
                         <td style="padding:12px; text-align:right; white-space:nowrap;">
                             <div style="display:flex; gap:6px; justify-content:flex-end;">
                                 <button class="btn btn-outline btn-xs btn-view-ticket" data-id="${escapeHTML(r.id)}" title="Ver Comprobante">🎟️ Ticket</button>
-                                ${isPending ? `
-                                    <button class="btn btn-success btn-xs btn-approve-res" data-id="${escapeHTML(r.id)}">✔️ Aprobar</button>
-                                    <button class="btn btn-danger btn-xs btn-reject-res" data-id="${escapeHTML(r.id)}">❌ Rechazar</button>
-                                ` : ''}
+                                ${isPending ? (
+                                    conflictWithConfirmed ? `
+                                        <button class="btn btn-secondary btn-xs" disabled style="opacity:0.6; cursor:not-allowed;" title="No se puede aprobar: este horario se traslapa con #${conflictWithConfirmed.id.slice(-6).toUpperCase()} (${escapeHTML(conflictWithConfirmed.clientName)})">⚠️ Traslape</button>
+                                        <button class="btn btn-danger btn-xs btn-reject-res" data-id="${escapeHTML(r.id)}">❌ Rechazar</button>
+                                    ` : `
+                                        <button class="btn btn-success btn-xs btn-approve-res" data-id="${escapeHTML(r.id)}">✔️ Aprobar</button>
+                                        <button class="btn btn-danger btn-xs btn-reject-res" data-id="${escapeHTML(r.id)}">❌ Rechazar</button>
+                                    `
+                                ) : ''}
                                 <button class="btn btn-outline btn-xs btn-edit-res" data-id="${escapeHTML(r.id)}" title="Reprogramar / Reasignar Jugador">✏️</button>
                                 <button class="btn btn-danger btn-xs btn-del-res" data-id="${escapeHTML(r.id)}" title="Eliminar de historial">🗑️</button>
                             </div>
@@ -867,6 +888,16 @@ export async function openModifyModal(reservation, mainContainer = null) {
             errorDiv.textContent = 'Por favor selecciona una fecha y horario válidos.';
             errorDiv.classList.remove('hidden');
             return;
+        }
+
+        // 🛡️ CANDADO EN MODIFICACIÓN: Verificar disponibilidad autoritativa antes de guardar
+        if (selectedStatus !== 'CANCELLED' && selectedStatus !== 'REJECTED') {
+            const avail = await store.checkAvailabilityAsync(machineId, date, startTime, endTime, reservation.id);
+            if (!avail.available) {
+                errorDiv.textContent = avail.reason;
+                errorDiv.classList.remove('hidden');
+                return;
+            }
         }
 
         try {

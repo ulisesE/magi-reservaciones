@@ -405,13 +405,10 @@ export async function renderClientsView(container, queryVal = '') {
                                 </div>
                             ` : ''}
 
-                            <!-- Fila Principal de Acciones (Consumo + Cuenta) -->
+                            <!-- Fila Principal de Acciones (Cuenta del Jugador) -->
                             <div class="gamer-action-row">
-                                <button class="btn btn-primary btn-xs btn-open-quick-consumption" data-id="${escapeHTML(c.id)}" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:800; border:none; padding:7px 10px; font-size:0.8rem;" title="Registrar consumo con tipos rápidos">
-                                    ➕ Consumo
-                                </button>
-                                <button class="btn btn-outline btn-xs btn-open-account" data-id="${escapeHTML(c.id)}" style="border-color:var(--piu-cyan); color:var(--piu-cyan); font-weight:700; padding:7px 10px; font-size:0.8rem;" title="Ver estado de cuenta, historial y abonos">
-                                    💳 Cuenta
+                                <button class="btn btn-outline btn-xs btn-open-account" data-id="${escapeHTML(c.id)}" style="border-color:var(--piu-cyan); color:var(--piu-cyan); font-weight:700; padding:8px 12px; font-size:0.82rem; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;" title="Ver estado de cuenta, historial y abonos">
+                                    <span>💳 Estado de Cuenta</span>
                                 </button>
                             </div>
 
@@ -691,19 +688,7 @@ export async function renderClientsView(container, queryVal = '') {
         });
     });
 
-    // Eventos de Consumos y Cuenta de Jugador (Fase 2)
-    container.querySelectorAll('.btn-open-quick-consumption').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const client = allClients.find(c => c.id === id);
-            if (client && business) {
-                openQuickConsumptionModal(client, business, container, () => {
-                    renderClientsView(container, currentClientsSearchQuery);
-                });
-            }
-        });
-    });
-
+    // Evento de Cuenta de Jugador (Fase 2)
     container.querySelectorAll('.btn-open-account').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = btn.dataset.id;
