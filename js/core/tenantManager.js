@@ -69,6 +69,8 @@ export const DEFAULT_BUSINESSES = [
         wifiPassword: 'StepManiaPhoenix',
         isActive: true,
         status: 'ACTIVE',
+        allowClientCancellation: true,
+        blockedUsers: [],
         enabledModules: { ...DEFAULT_BUSINESS_MODULES },
         operatingHours: {
             0: { open: '15:00', close: '04:00', closed: false }, // Domingo: 3 PM - 4 AM Lunes
@@ -712,6 +714,84 @@ class TenantManager {
             }
         }
         this.notify();
+    }
+
+    /**
+     * Comprueba si un cliente/jugador está bloqueado en una sucursal específica.
+     */
+    isClientBlocked(business, clientData = {}) {
+        if (!business || !Array.isArray(business.blockedUsers) || business.blockedUsers.length === 0) {
+            return false;
+        }
+
+        const clientId = (clientData.id || clientData.clientId || '').toLowerCase().trim();
+        const clientUsername = (clientData.username || clientData.clientUsername || '').toLowerCase().trim();
+        const clientPhone = (clientData.phone || clientData.clientPhone || '').replace(/\D/g, '');
+        const clientName = (clientData.name || clientData.clientName || '').toLowerCase().trim();
+
+        return business.blockedUsers.some(b => {
+            const bId = (b.id || '').toLowerCase().trim();
+            const bUsername = (b.username || '').toLowerCase().trim();
+            const bPhone = (b.phone || '').replace(/\D/g, '');
+            const bName = (b.name || '').toLowerCase().trim();
+
+            if (clientId && bId && clientId === bId) return true;
+            if (clientUsername && bUsername && (clientUsername === bUsername || clientUsername === bUsername.replace(/^@/, ''))) return true;
+            if (clientPhone && bPhone && clientPhone === bPhone) return true;
+            if (clientName && bName && clientName === bName) return true;
+            return false;
+        });
+    }
+
+    /**
+     * Bloquea a un cliente para impedirle reservar en una sucursal.
+     */
+    async blockClientInBusiness(businessId, clientData, reason = 'Bloqueado por locatario') {
+        const business = this.businesses.find(b => b.id === businessId);
+        if (!business) throw new Error("Sucursal no encontrada.");
+
+        const currentBlocked = Array.isArray(business.blockedUsers) ? [...business.blockedUsers] : [];
+        const alreadyBlocked = this.isClientBlocked(business, clientData);
+        if (alreadyBlocked) {
+            return business;
+        }
+
+        const newBlockEntry = {
+            id: clientData.id || '',
+            username: clientData.username || '',
+            name: clientData.name || 'Jugador',
+            phone: clientData.phone ? clientData.phone.replace(/\D/g, '') : '',
+            reason: (reason || 'Sin motivo especificado').trim(),
+            blockedAt: new Date().toISOString()
+        };
+
+        currentBlocked.push(newBlockEntry);
+        return await this.updateBusiness(businessId, { blockedUsers: currentBlocked });
+    }
+
+    /**
+     * Desbloquea a un cliente en una sucursal.
+     */
+    async unblockClientInBusiness(businessId, clientIdOrPhone) {
+        const business = this.businesses.find(b => b.id === businessId);
+        if (!business) throw new Error("Sucursal no encontrada.");
+
+        const currentBlocked = Array.isArray(business.blockedUsers) ? [...business.blockedUsers] : [];
+        const key = (clientIdOrPhone || '').toLowerCase().trim();
+        const cleanPhone = key.replace(/\D/g, '');
+
+        const filtered = currentBlocked.filter(b => {
+            const bId = (b.id || '').toLowerCase().trim();
+            const bUsername = (b.username || '').toLowerCase().trim();
+            const bPhone = (b.phone || '').replace(/\D/g, '');
+
+            if (bId && bId === key) return false;
+            if (bUsername && bUsername === key) return false;
+            if (cleanPhone && bPhone && bPhone === cleanPhone) return false;
+            return true;
+        });
+
+        return await this.updateBusiness(businessId, { blockedUsers: filtered });
     }
 
     subscribe(callback) {

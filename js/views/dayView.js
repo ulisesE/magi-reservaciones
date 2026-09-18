@@ -377,10 +377,14 @@ function openReservationDetailModal(reservation) {
     });
 
     modalEl.querySelector('#btn-delete-res')?.addEventListener('click', async () => {
-        if (confirm(`¿Estás seguro de eliminar la reservación de ${reservation.clientName}?`)) {
-            await store.deleteReservation(reservation.id);
-            modal.close();
-            toast.info("Reservación eliminada.");
+        if (confirm(`¿Estás seguro de eliminar permanentemente la reservación de ${reservation.clientName}? Se borrará de la base de datos y se liberará el horario de la máquina.`)) {
+            try {
+                await store.deleteReservation(reservation.id);
+                modal.close();
+                toast.success("Reservación eliminada definitivamente.");
+            } catch (e) {
+                toast.error(e.message || "Error al eliminar la reservación.");
+            }
         }
     });
 }

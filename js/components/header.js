@@ -49,7 +49,7 @@ export function renderHeader(container) {
                             </div>
                             <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                                 <span>Plataforma Modular de Reservaciones</span>
-                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.2">v1.7.2</button>
+                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.3">v1.7.3</button>
                             </div>
                         </div>
                     </div>
@@ -96,7 +96,7 @@ export function renderHeader(container) {
                 <div class="header-brand">
                     ${(!isManager && ((!business?.disableChangeLocal && !tenantManager.disableChangeLocalGlobally) || isSuperAdmin)) ? `
                         <button id="btn-back-to-index" class="btn btn-outline btn-sm btn-back-hub" title="Regresar al inicio para cambiar de sucursal">
-                            <span>← Cambiar de Local</span>
+                            <span class="btn-back-text">← Cambiar de Local</span>
                         </button>
                     ` : ''}
                     
@@ -107,13 +107,13 @@ export function renderHeader(container) {
                         </div>
                         <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                             <span>${business?.city || 'Arcade'}</span>
-                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.2">v1.7.2</button>
+                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.3">v1.7.3</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- Control de Acceso, Red y Acciones -->
-                <div class="header-actions" style="display:flex; align-items:center; gap:12px;">
+                <div class="header-actions">
                     <!-- Indicador de Conexión de Red -->
                     <div id="header-network-status" class="network-status-badge ${navigator.onLine ? 'online' : 'offline'}" style="display:flex; align-items:center; gap:5px; font-size:0.72rem; padding:3px 8px; border-radius:12px; background:${navigator.onLine ? 'rgba(104,242,5,0.1)' : 'rgba(255,184,0,0.15)'}; border:1px solid ${navigator.onLine ? 'rgba(104,242,5,0.3)' : 'rgba(255,184,0,0.4)'}; color:${navigator.onLine ? 'var(--color-neon-lime)' : 'var(--color-neon-gold)'}; font-weight:700;" title="${navigator.onLine ? 'Conectado a Firestore' : 'Modo Sin Conexión'}">
                         <span style="font-size:0.6rem;">${navigator.onLine ? '🟢' : '🟡'}</span>
@@ -125,7 +125,7 @@ export function renderHeader(container) {
                         ${notificationManager.getPermissionStatus() === 'granted' ? '🔔' : '🔕'}
                     </button>
 
-                    <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
+                    <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" title="Ir al calendario de día para reservar" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
                         <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
                     </button>
 
@@ -185,7 +185,7 @@ export function renderHeader(container) {
                                 <button class="dropdown-item btn-open-changelog-header" type="button">
                                     <span class="item-icon">📜</span>
                                     <div class="item-info">
-                                        <strong>Novedades (v1.7.2)</strong>
+                                        <strong>Novedades (v1.7.3)</strong>
                                         <small>Ver registro de cambios</small>
                                     </div>
                                 </button>
@@ -378,7 +378,11 @@ export function renderHeader(container) {
     const quickBookBtn = container.querySelector('#btn-quick-book');
     if (quickBookBtn) {
         quickBookBtn.addEventListener('click', () => {
-            openBookingModal();
+            store.setCurrentView('DAY');
+            const dayTarget = document.querySelector('#day-view-container, .grid-container-card, .matrix-table-responsive');
+            if (dayTarget) {
+                dayTarget.scrollIntoView({ behavior: 'smooth' });
+            }
         });
     }
 

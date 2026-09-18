@@ -143,3 +143,29 @@ A partir de la versión **v1.7.2**, el **Superadministrador** cuenta con control
    - Modal de configuración `🎛️ Funciones` con interruptores categorizados y perfiles rápidos (Presets: *Modo Completo*, *Básico Arcade* y *Modo Estricto*).
 6. **100% Retrocompatible (Safe Defaults)**: Si una sucursal existente no posee `enabledModules` o `isActive`, los métodos `tenantManager.isModuleEnabled()` y `tenantManager.isBusinessActive()` retornan `true` de manera automática y segura.
 
+---
+
+## 🛡️ 4. Políticas de Sucursal, Bloqueos y Gestión de Reservas (v1.7.3)
+
+A partir de la versión **v1.7.3**, se introducen capacidades de soberanía operativa para los encargados de sucursal:
+
+### 1. Política de Cancelación Autónoma vs Asistida (`allowClientCancellation`)
+- **Configuración en el Local (`js/views/businessView.js`)**: El locatario puede decidir si los clientes pueden cancelar de forma autónoma sus turnos o si deben canalizarlo obligatoriamente por WhatsApp con el personal de la sala.
+- **Guardia en Perfil del Cliente (`js/views/clientProfileView.js`)**: Si la opción está desactivada, el botón de cancelar queda sustituido por un aviso y enlace directo a WhatsApp para acordar la cancelación directamente con el local.
+
+### 2. Bloqueo Granular de Jugadores por Local (`blockedUsers`)
+- **Estructura en Firestore (`piu_businesses/{businessId}`)**:
+  ```json
+  "blockedUsers": [
+    {
+      "id": "jugador_123",
+      "name": "Jugador Ejemplo",
+      "username": "gamer123",
+      "phone": "5512345678",
+      "reason": "Incumplimiento reiterado de horario",
+      "blockedAt": "2026-09-18T06:00:00.000Z"
+    }
+  ]
+  ```
+- **Validación al Reservar (`js/views/clientBookingModal.js`)**: Comprobación estricta por UID, GamerTag y teléfono impidiendo crear turnos a usuarios sancionados en esa sucursal.
+- **Administración**: Directorio de bloqueados en Ajustes de Sucursal (`BUSINESS`) y botones de acción rápida en el Directorio (`CLIENTS`) con diseño arcade neón.

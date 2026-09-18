@@ -4,7 +4,31 @@ Plataforma web profesional, modular y multi-negocio diseñada para la administra
 
 ---
 
-## Funcionalidades recientes y optimizaciones (v1.7.1 - Hotfixes & PIU ID Integration)
+## Novedades Recientes (v1.7.3 - Políticas de Sucursal, Bloqueos & Mobile 394px)
+
+### 🚫 Políticas de Cancelación y Bloqueo por Sucursal
+* **Cancelaciones de Clientes Personalizables**: Los locatarios pueden activar o desactivar la cancelación autónoma de reservaciones por parte del cliente. Al desactivarse, el sistema orienta al cliente a coordinar su cancelación directamente con la sucursal vía WhatsApp.
+* **Bloqueo Granular de Jugadores**: Los encargados pueden bloquear clientes no deseados para impedirles reservar en su sucursal, con registro de motivo, fecha y desbloqueo en 1 clic.
+* **Estética Cyberpunk Arcade**: Botones de Bloqueo/Desbloqueo rediseñados (`.btn-cyber-block` y `.btn-cyber-unblock`) con fondos translúcidos neón y animaciones hover fluidas, eliminando botones blancos por defecto.
+
+### ⚡ Eliminación Permanente de Reservaciones (Hard Delete)
+* **Borrado Definitivo**: Eliminación física en Firestore con `deleteDoc()` de reservas canceladas o rechazadas para limpiar reportes de ocupación y contabilidad.
+
+### 📱 Optimización Móvil Estricta (394 × 853 px) y Navegación
+* **Menú de Usuario Flotante**: Apertura del perfil sin afectar el flujo del DOM ni estirar la altura de la cabecera.
+* **Navegación Rápida "Reservar"**: El botón superior `➕ Reservar` navega al Calendario de Día en lugar de abrir el modal emergente.
+* **Calendario de Mes Adaptable**: Las 7 columnas (`Dom`-`Sáb`) encajan con precisión al 100% en pantallas móviles sin cortes laterales ni scroll horizontal indeseado.
+* **Alineación Restaurada en Escritorio**: Header en una única línea horizontal equilibrada en resoluciones estándar y panorámicas.
+
+---
+
+## Funcionalidades Anteriores (v1.7.2 - Feature Toggles & Control Operativo)
+* **Módulo de Feature Toggles**: Activación/desactivación granular de módulos por sucursal desde la consola del Superadministrador.
+* **Pausa Operativa de Locales**: Pausa y reactivación de sucursales con pantalla protectora de mantenimiento para usuarios.
+
+---
+
+## Funcionalidades Anteriores (v1.7.1 - Hotfixes & PIU ID Integration)
 
 ### 🎮 Soporte Oficial de PIU ID (`piugame.com`)
 * **Identificador Oficial de Juego**: Campo dedicado para PIU ID con discriminador numérico (ej. `megajefelink#1234`).

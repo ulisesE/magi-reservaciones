@@ -8,6 +8,7 @@ import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { DAYS_OF_WEEK } from '../core/timeUtils.js';
 import { THEMES } from '../core/themeManager.js';
+import { escapeHTML } from '../core/securityUtils.js';
 
 // URL de ejemplo sugerida por el usuario
 const FB_EXAMPLE_URL = 'https://scontent-qro1-2.xx.fbcdn.net/v/t39.30808-6/724053305_1025229003358348_5523282942833772562_n.jpg?stp=dst-jpg_tt6&cstp=mx500x500&ctp=s500x500&_nc_cat=107&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=LS1w0JkJS_MQ7kNvwHzxI4I&_nc_oc=Adr79gKV4Ryuma3nOMkafJ9MkywnUbjl7y_Rf9gDNR51ciURCvb0XNyj7ZYvzL6AvlE&_nc_zt=23&_nc_ht=scontent-qro1-2.xx&_nc_gid=6FLHME4iNh4boah72s7Jyw&_nc_ss=702a8&oh=00_AQHr29y8OUsGs4pG3sKdxE6APo5P5xnv_HMJZfpkpiBLeg&oe=6A82B2A6';
@@ -347,6 +348,16 @@ export function renderBusinessView(container) {
                                         <option value="10" ${business.maxActiveBookingsPerUser === 10 ? 'selected' : ''}>10 Reservas (Libre)</option>
                                     </select>
                                 </div>
+                                <div class="form-group">
+                                    <label for="biz-allow-client-cancel"><span class="neon-arrow">◆</span> Cancelación Directa por Clientes</label>
+                                    <select id="biz-allow-client-cancel" class="cyber-select">
+                                        <option value="true" ${business.allowClientCancellation !== false ? 'selected' : ''}>✅ Permitida (El cliente puede cancelar desde su perfil)</option>
+                                        <option value="false" ${business.allowClientCancellation === false ? 'selected' : ''}>🚫 Bloqueada (Debe pedir cancelación por mensaje al locatario)</option>
+                                    </select>
+                                    <small style="color:var(--text-muted); font-size:0.75rem; display:block; margin-top:4px;">
+                                        Si se bloquea, el botón de cancelar se cambia por un aviso para contactar a tu WhatsApp.
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -563,6 +574,66 @@ export function renderBusinessView(container) {
                                     ➕ Agregar Tarifa
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN 5: USUARIOS BLOQUEADOS EN ESTA SUCURSAL -->
+                    <div class="settings-card" style="margin-top: 20px;">
+                        <div class="card-title-bar">
+                            <div class="title-with-icon">
+                                <span class="t-icon">🚫</span>
+                                <div>
+                                    <h3>5. Jugadores Bloqueados para Reservar en esta Sucursal</h3>
+                                    <small>Jugadores que no tienen permitido agendar citas en este local. Puedes gestionarlos aquí o desde el Directorio de Jugadores.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-form-body">
+                            ${(!business.blockedUsers || business.blockedUsers.length === 0) ? `
+                                <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9rem; background: rgba(0,0,0,0.2); border-radius: var(--radius-sm); border: 1px dashed var(--border-color);">
+                                    <span>✅ No hay jugadores bloqueados en esta sucursal. Todos los clientes registrados pueden reservar.</span>
+                                </div>
+                            ` : `
+                                <div class="catalogs-table-wrapper">
+                                    <table class="catalogs-table" style="width:100%; font-size:0.85rem;">
+                                        <thead>
+                                            <tr>
+                                                <th>Jugador</th>
+                                                <th>Contacto / GamerTag</th>
+                                                <th>Motivo de Bloqueo</th>
+                                                <th>Fecha</th>
+                                                <th style="text-align:right;">Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${business.blockedUsers.map(b => `
+                                                <tr>
+                                                    <td>
+                                                        <strong style="color:#ffffff;">${escapeHTML(b.name || 'Jugador')}</strong>
+                                                        ${b.id ? `<br><small style="color:var(--text-muted); font-size:0.7rem; font-family:var(--font-mono);">${escapeHTML(b.id)}</small>` : ''}
+                                                    </td>
+                                                    <td>
+                                                        ${b.username ? `<span style="color:var(--piu-cyan); font-size:0.8rem; font-family:var(--font-mono);">@${escapeHTML(b.username)}</span><br>` : ''}
+                                                        ${b.phone ? `<small style="color:var(--text-muted); font-size:0.75rem;">📱 ${escapeHTML(b.phone)}</small>` : '<small style="color:var(--text-muted);">Sin teléfono</small>'}
+                                                    </td>
+                                                    <td style="color:var(--color-neon-red); font-size:0.82rem;">
+                                                        ${escapeHTML(b.reason || 'Sin motivo')}
+                                                    </td>
+                                                    <td style="font-size:0.75rem; color:var(--text-muted);">
+                                                        ${b.blockedAt ? new Date(b.blockedAt).toLocaleDateString() : ''}
+                                                    </td>
+                                                    <td style="text-align:right;">
+                                                        <button type="button" class="btn btn-xs btn-cyber-unblock btn-unblock-biz-user" data-user-id="${escapeHTML(b.id || b.username || b.phone)}" title="Desbloquear jugador para permitirle volver a reservar" style="padding:4px 10px; font-size:0.75rem;">
+                                                            <span>🔓 Desbloquear</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            `}
                         </div>
                     </div>
 
@@ -965,6 +1036,7 @@ export function renderBusinessView(container) {
             wifiNetwork: container.querySelector('#biz-wifi-net').value.trim(),
             wifiPassword: container.querySelector('#biz-wifi-pass').value.trim(),
             disableChangeLocal: container.querySelector('#biz-disable-change-local').checked,
+            allowClientCancellation: container.querySelector('#biz-allow-client-cancel') ? container.querySelector('#biz-allow-client-cancel').value === 'true' : (business.allowClientCancellation !== false),
             loyaltyEnabled: container.querySelector('#biz-loyalty-enabled').value === 'true',
             loyaltyMode: container.querySelector('#biz-loyalty-mode').value,
             pointsRatio: parseInt(container.querySelector('#biz-points-ratio').value, 10) || 10,
@@ -984,6 +1056,22 @@ export function renderBusinessView(container) {
         } catch (err) {
             toast.error(err.message);
         }
+    });
+
+    // Desbloquear usuario desde la lista de la sucursal
+    container.querySelectorAll('.btn-unblock-biz-user').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const uid = btn.dataset.userId;
+            if (confirm("¿Deseas desbloquear a este usuario para permitirle reservar nuevamente en este local?")) {
+                try {
+                    await tenantManager.unblockClientInBusiness(business.id, uid);
+                    toast.success("Usuario desbloqueado exitosamente.");
+                    renderBusinessView(container);
+                } catch (e) {
+                    toast.error(e.message);
+                }
+            }
+        });
     });
 
     // =========================================================================

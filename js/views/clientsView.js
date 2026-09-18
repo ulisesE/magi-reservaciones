@@ -21,6 +21,7 @@ import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { loyaltyManager } from '../core/loyaltyManager.js';
 import { accountManager, CONSUMPTION_TYPES } from '../core/accountManager.js';
+import { tenantManager } from '../core/tenantManager.js';
 import { escapeHTML, hashPin } from '../core/securityUtils.js';
 
 let currentClientsSearchQuery = '';
@@ -334,6 +335,7 @@ export async function renderClientsView(container, queryVal = '') {
                     const acct = (c.accounts && activeBusinessId && c.accounts[activeBusinessId]) ? c.accounts[activeBusinessId] : null;
                     const netDebt = acct ? (acct.netDebt || 0) : 0;
                     const credit = acct ? (acct.creditBalance || 0) : 0;
+                    const isBlockedInBiz = tenantManager.isClientBlocked(business, c);
 
                     return `
                         <div class="gamer-pass-card">
@@ -351,6 +353,9 @@ export async function renderClientsView(container, queryVal = '') {
                                         ` : `
                                             <span class="badge" style="background:rgba(255,184,0,0.15); color:var(--color-neon-gold); border:1px solid rgba(255,184,0,0.3); font-size:0.65rem; padding:1px 6px;" title="Perfil clásico / PIN local">🟡 Clásico</span>
                                         `}
+                                        ${isBlockedInBiz ? `
+                                            <span class="badge badge-danger" style="background:rgba(255,0,85,0.2); color:var(--color-neon-red); border:1px solid var(--color-neon-red); font-size:0.65rem; padding:1px 6px;" title="Bloqueado para reservaciones en este local">🚫 Bloqueado en este local</span>
+                                        ` : ''}
                                         ${c.username ? `<code style="font-size:0.7rem; color:var(--piu-cyan);">@${escapeHTML(c.username)}</code>` : ''}
                                         ${c.piuGameId ? `<span class="badge" style="background:rgba(0,229,255,0.12); color:var(--piu-cyan); border:1px solid rgba(0,229,255,0.3); font-size:0.65rem; padding:1px 6px;" title="PIU ID Oficial en piugame.com">🎮 ${escapeHTML(c.piuGameId)}</span>` : ''}
                                     </div>
@@ -415,6 +420,17 @@ export async function renderClientsView(container, queryVal = '') {
                                 <button class="btn btn-outline btn-xs btn-edit-client" data-id="${escapeHTML(c.id)}" title="Editar perfil y restablecer PIN" style="font-size:0.75rem; padding:3px 8px;">
                                     ✏️ Editar
                                 </button>
+                                ${business ? `
+                                    ${isBlockedInBiz ? `
+                                        <button class="btn btn-xs btn-cyber-unblock btn-unblock-client" data-id="${escapeHTML(c.id)}" data-name="${escapeHTML(c.name)}" style="font-size:0.75rem; padding:3px 9px;" title="Desbloquear jugador para permitirle volver a reservar en esta sucursal">
+                                            <span>🔓 Desbloquear</span>
+                                        </button>
+                                    ` : `
+                                        <button class="btn btn-xs btn-cyber-block btn-block-client" data-id="${escapeHTML(c.id)}" data-name="${escapeHTML(c.name)}" data-username="${escapeHTML(c.username || '')}" data-phone="${escapeHTML(c.phone || '')}" style="font-size:0.75rem; padding:3px 9px;" title="Bloquear usuario para que no pueda reservar en esta sucursal">
+                                            <span>🚫 Bloquear</span>
+                                        </button>
+                                    `}
+                                ` : ''}
                                 ${business && business.loyaltyEnabled ? `
                                     ${activeMode === 'VISITS' ? `
                                         <button class="btn btn-success btn-xs btn-quick-visit" data-id="${escapeHTML(c.id)}" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid var(--color-neon-lime); font-size:0.75rem; padding:3px 8px;" title="Registrar 1 visita al instante">
@@ -711,6 +727,49 @@ export async function renderClientsView(container, queryVal = '') {
                 try {
                     await loyaltyManager.adjustPlayerPoints(business.id, client.id, 1, 1, 'Registro rápido de visita en recepción');
                     toast.success(`¡Visita registrada para ${client.name}!`);
+                    renderClientsView(container, currentClientsSearchQuery);
+                } catch (e) {
+                    toast.error(e.message);
+                }
+            }
+        });
+    });
+
+    // Eventos Bloquear / Desbloquear jugador en la sucursal activa
+    container.querySelectorAll('.btn-block-client').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!business) {
+                toast.error("No hay sucursal activa seleccionada.");
+                return;
+            }
+            const id = btn.dataset.id;
+            const name = btn.dataset.name || 'este jugador';
+            const username = btn.dataset.username || '';
+            const phone = btn.dataset.phone || '';
+
+            const reason = prompt(`¿Estás seguro de bloquear a "${name}" para que NO pueda reservar en "${business.name}"?\nIngresa el motivo del bloqueo (opcional):`, "Incumplimiento de reservas o política interna");
+            if (reason !== null) {
+                try {
+                    await tenantManager.blockClientInBusiness(business.id, { id, name, username, phone }, reason);
+                    toast.warning(`Jugador "${name}" bloqueado para reservaciones en este local.`);
+                    renderClientsView(container, currentClientsSearchQuery);
+                } catch (e) {
+                    toast.error(e.message);
+                }
+            }
+        });
+    });
+
+    container.querySelectorAll('.btn-unblock-client').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!business) return;
+            const id = btn.dataset.id;
+            const name = btn.dataset.name || 'este jugador';
+
+            if (confirm(`¿Deseas desbloquear a "${name}" para permitirle volver a reservar en "${business.name}"?`)) {
+                try {
+                    await tenantManager.unblockClientInBusiness(business.id, id);
+                    toast.success(`Jugador "${name}" desbloqueado exitosamente.`);
                     renderClientsView(container, currentClientsSearchQuery);
                 } catch (e) {
                     toast.error(e.message);
