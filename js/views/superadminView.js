@@ -439,10 +439,10 @@ export async function renderSuperadminView(container) {
     container.querySelectorAll('.btn-del-res-super').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
-            if (confirm("¿Estás seguro de cancelar / anular esta reservación?")) {
+            if (confirm("¿Estás seguro de eliminar permanentemente esta reservación de la base de datos? Se quitará de todos los reportes globales.")) {
                 try {
-                    await store.deleteReservation(id, 'Cancelada por Super Administrador');
-                    toast.info("Reservación cancelada.");
+                    await store.deleteReservation(id, 'Eliminada por Super Administrador');
+                    toast.success("Reservación eliminada permanentemente de la base de datos.");
                     renderSuperadminView(container);
                 } catch (err) {
                     toast.error(err.message);

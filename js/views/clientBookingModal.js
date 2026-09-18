@@ -26,6 +26,30 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         return;
     }
 
+    // Comprobar si el cliente actual está bloqueado en esta sucursal
+    if (isClientUser && tenantManager.isClientBlocked(business, currentUser)) {
+        modal.open({
+            title: 'Acceso Restringido en Sucursal',
+            icon: '🚫',
+            contentHtml: `
+                <div style="padding: 16px; text-align: center;">
+                    <div style="font-size: 3rem; margin-bottom: 12px;">🚫</div>
+                    <h3 style="color: var(--color-neon-red); margin-bottom: 12px;">Reservaciones Restringidas</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; margin-bottom: 16px;">
+                        Tu cuenta tiene restringidas las reservaciones en <strong>${escapeHTML(business?.name || 'esta sucursal')}</strong> por disposición de la administración.
+                    </p>
+                    <p style="color: var(--text-muted); font-size: 0.85rem;">
+                        Si consideras que se trata de un error o deseas aclarar tu situación, por favor ponte en contacto directamente con el encargado del local.
+                    </p>
+                </div>
+            `,
+            footerHtml: `<button type="button" class="btn btn-secondary" id="btn-close-blocked-modal">Cerrar</button>`,
+            maxWidth: '440px'
+        });
+        document.getElementById('btn-close-blocked-modal')?.addEventListener('click', () => modal.close());
+        return;
+    }
+
     if (machines.length === 0) {
         toast.warning("No hay máquinas disponibles en este momento para reservar.");
         return;
@@ -441,6 +465,18 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
                     targetClientId = found.id;
                     targetClientUsername = found.username;
                 }
+            }
+
+            // Validar bloqueo en la sucursal
+            if (tenantManager.isClientBlocked(business, {
+                id: targetClientId,
+                username: targetClientUsername,
+                phone: enteredPhone,
+                name: enteredName
+            })) {
+                errorMsg.textContent = 'Este usuario o número de teléfono tiene restringidas las reservaciones en esta sucursal.';
+                errorMsg.classList.remove('hidden');
+                return;
             }
 
             const booking = await store.requestReservation({

@@ -303,10 +303,14 @@ export function renderRequestsView(container) {
             tbody.querySelectorAll('.btn-del-res').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const id = btn.dataset.id;
-                    if (confirm("¿Estás seguro de eliminar el registro de esta reservación?")) {
-                        await store.deleteReservation(id);
-                        toast.info("Registro eliminado.");
-                        renderRequestsView(container);
+                    if (confirm("¿Estás seguro de eliminar permanentemente esta reservación de la base de datos? Esta acción la quitará por completo de todos los reportes e historiales.")) {
+                        try {
+                            await store.deleteReservation(id);
+                            toast.success("Reservación eliminada permanentemente de la base de datos.");
+                            renderRequestsView(container);
+                        } catch (e) {
+                            toast.error(e.message || "Error al eliminar la reservación.");
+                        }
                     }
                 });
             });

@@ -330,9 +330,20 @@ export async function renderClientProfileView(container) {
                                             🎟️ Ver Comprobante
                                         </button>
                                         ${isCancellable ? `
-                                            <button class="btn btn-danger btn-xs btn-cancel-res" data-res-id="${r.id}" title="Cancelar esta reservación">
-                                                ❌ Cancelar
-                                            </button>
+                                            ${(business && business.allowClientCancellation === false) ? `
+                                                <button class="btn btn-warning btn-xs btn-request-cancel-msg" 
+                                                    data-res-id="${r.id}" 
+                                                    data-res-date="${escapeHTML(friendlyDate)}" 
+                                                    data-res-time="${escapeHTML(timeFormatted)}" 
+                                                    data-machine-name="${escapeHTML(machine ? machine.name : 'Máquina')}"
+                                                    title="Solicitar cancelación al encargado por mensaje">
+                                                    💬 Cancelar (Vía Mensaje)
+                                                </button>
+                                            ` : `
+                                                <button class="btn btn-danger btn-xs btn-cancel-res" data-res-id="${r.id}" title="Cancelar esta reservación">
+                                                    ❌ Cancelar
+                                                </button>
+                                            `}
                                         ` : ''}
                                     </div>
                                 </div>
@@ -811,7 +822,7 @@ export async function renderClientProfileView(container) {
         });
     });
 
-    // Cancelar reservación
+    // Cancelar reservación (cuando está permitido de forma directa)
     container.querySelectorAll('.btn-cancel-res').forEach(btn => {
         btn.addEventListener('click', async () => {
             const resId = btn.dataset.resId;
@@ -824,6 +835,54 @@ export async function renderClientProfileView(container) {
                     toast.error(err.message || "No se pudo cancelar la reservación.");
                 }
             }
+        });
+    });
+
+    // Solicitar cancelación al locatario por mensaje (cuando la sucursal bloquea cancelación directa)
+    container.querySelectorAll('.btn-request-cancel-msg').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const resId = btn.dataset.resId;
+            const machName = btn.dataset.machineName || 'Máquina';
+            const resDate = btn.dataset.resDate || '';
+            const resTime = btn.dataset.resTime || '';
+            
+            const rawPhone = (business?.phone || business?.whatsapp || '').replace(/\D/g, '');
+            const waNumber = rawPhone.length === 10 ? `52${rawPhone}` : rawPhone;
+            const msgText = encodeURIComponent(`Hola, solicito cancelar mi reservación en ${business?.name || 'la sucursal'}.\nFolio: ${resId}\nMáquina: ${machName}\nFecha: ${resDate}\nHorario: ${resTime}\nCliente: ${currentUser.name || currentUser.username}`);
+            const waUrl = waNumber ? `https://wa.me/${waNumber}?text=${msgText}` : null;
+
+            modal.open({
+                title: 'Solicitar Cancelación al Encargado',
+                icon: '💬',
+                contentHtml: `
+                    <div style="padding:10px 4px; text-align:left;">
+                        <p style="margin-bottom:12px; font-size:0.92rem; line-height:1.5;">
+                            En <strong>${escapeHTML(business?.name || 'esta sucursal')}</strong>, las reservaciones no pueden cancelarse directamente desde el portal.
+                        </p>
+                        <div style="background:var(--bg-dark-700); border:1px solid var(--border-color); border-radius:6px; padding:12px; margin-bottom:16px;">
+                            <div style="font-size:0.85rem; margin-bottom:4px;"><strong>Máquina:</strong> ${escapeHTML(machName)}</div>
+                            <div style="font-size:0.85rem; margin-bottom:4px;"><strong>Fecha y Hora:</strong> ${escapeHTML(resDate)} (${escapeHTML(resTime)})</div>
+                            <div style="font-size:0.85rem; color:var(--text-muted);"><strong>Folio:</strong> <code>${escapeHTML(resId)}</code></div>
+                        </div>
+                        <p style="font-size:0.88rem; color:var(--text-secondary); margin-bottom:16px;">
+                            Para cancelar o reprogramar, debes acordarlo directamente enviando un mensaje al encargado de la sucursal:
+                        </p>
+                        ${waUrl ? `
+                            <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-success glow-green" style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; text-decoration:none; padding:12px; font-weight:700;">
+                                <span>📲 Enviar WhatsApp al Encargado</span>
+                            </a>
+                        ` : `
+                            <div style="background:rgba(255,184,0,0.15); border:1px solid rgba(255,184,0,0.3); padding:10px; border-radius:4px; font-size:0.85rem; color:var(--color-neon-gold);">
+                                📞 Teléfono de contacto de la sucursal: <strong>${escapeHTML(business?.phone || 'No registrado')}</strong>
+                            </div>
+                        `}
+                    </div>
+                `,
+                footerHtml: `<button type="button" class="btn btn-secondary" id="btn-close-cancel-info">Entendido / Cerrar</button>`,
+                maxWidth: '460px'
+            });
+
+            document.getElementById('btn-close-cancel-info')?.addEventListener('click', () => modal.close());
         });
     });
 

@@ -4,10 +4,46 @@ import { modal } from './modal.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.7.3',
+        date: '18 de Septiembre de 2026',
+        badge: '⚡ Versión Actual (Políticas, Bloqueos & Mobile)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🚫 Control de Cancelaciones y Bloqueo de Jugadores',
+                icon: '🛡️',
+                items: [
+                    'Política de cancelación configurable por local: opción para desactivar cancelaciones autónomas de clientes y canalizarlas por WhatsApp.',
+                    'Bloqueo granular de jugadores sancionados por sucursal con validación en tiempo real al agendar.',
+                    'Directorio de bloqueados con motivo y fecha en el panel de configuración del negocio.',
+                    'Botones arcade cyberpunk de Bloquear y Desbloquear con estilo neón y gradientes interactivos.'
+                ]
+            },
+            {
+                title: '🗑️ Eliminación Permanente de Reservaciones',
+                icon: '⚡',
+                items: [
+                    'Borrado definitivo mediante deleteDoc en Firestore en Vista Día y Solicitudes.',
+                    'Limpieza fidedigna del historial para que las reservas eliminadas no reaparezcan en balances ni reportes.'
+                ]
+            },
+            {
+                title: '📱 Experiencia Móvil Optimizada (394 × 853 px)',
+                icon: '📱',
+                items: [
+                    'Menú de usuario flotante con z-index alto que no altera la altura de la cabecera al abrirse.',
+                    'Calendario de mes 100% responsivo con las 7 columnas completas de lunes a domingo sin desbordamiento.',
+                    'Botón superior "Reservar" navega de forma directa y fluida a la Vista Día.',
+                    'Alineación horizontal perfecta de la cabecera restaurada para pantallas de escritorio.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.7.2',
         date: '03 de Septiembre de 2026',
-        badge: '🛡️ Versión Actual (Feature Toggles)',
-        isCurrent: true,
+        badge: 'Estable (Feature Toggles)',
+        isCurrent: false,
         highlights: [
             {
                 title: '🎛️ Control de Funciones por Sucursal (Feature Toggles)',
@@ -279,7 +315,7 @@ export function openChangelogModal() {
 
     const footerHtml = `
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.1</small>
+            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.3</small>
             <button type="button" class="btn btn-primary" id="btn-close-changelog">
                 <span>Entendido</span>
             </button>

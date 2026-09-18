@@ -652,6 +652,16 @@ class Store {
             }
         }
 
+        // Validación de bloqueo por sucursal para impedir reservaciones a usuarios bloqueados
+        if (tenantManager.isClientBlocked(this.currentBusiness, {
+            id: resolvedClientId,
+            username: resolvedClientUsername,
+            phone: bookingData.clientPhone,
+            name: bookingData.clientName
+        })) {
+            throw new Error("Tu cuenta o número telefónico tiene restringidas las reservaciones en esta sucursal por disposición de la administración.");
+        }
+
         // IDEMPOTENCIA DETERMINISTA: Si el cliente no provee idempotencyKey, derivarla exclusivamente
         // de los atributos semánticos de la reserva (local, máquina, fecha, hora inicio, jugador). CERO Date.now()
         const canonicalClientKey = resolvedClientId || (bookingData.clientName || 'anon').trim().toLowerCase().replace(/\s+/g, '_');
@@ -871,6 +881,9 @@ class Store {
 
     async cancelReservationByClient(reservationId) {
         assertFinancialOnline();
+        if (this.currentBusiness && this.currentBusiness.allowClientCancellation === false) {
+            throw new Error("Esta sucursal no permite cancelaciones directas por parte de clientes. Por favor contacta al encargado por mensaje.");
+        }
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
@@ -1392,10 +1405,11 @@ class Store {
     }
 
     /**
-     * ANULACIÓN / CANCELACIÓN DE RESERVACIÓN (CERO BORRADO FÍSICO).
-     * Reemplaza el deleteDoc() físico por un soft-cancel con auditoría y reversión de puntos.
+     * ELIMINACIÓN PERMANENTE DE RESERVACIÓN DE LA BASE DE DATOS.
+     * Elimina el documento definitivamente de Firestore para quitarlo de reportes y bandejas,
+     * remueve el slot de machine_schedules, revierte lealtad si fue confirmada y depura la memoria local.
      */
-    async deleteReservation(reservationId, reason = 'Cancelada por el encargado') {
+    async deleteReservation(reservationId, reason = 'Eliminada por el encargado') {
         assertFinancialOnline();
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada.");
@@ -1409,12 +1423,9 @@ class Store {
                     // 1. TODAS LAS LECTURAS (READS) PRIMERO
                     const resRef = doc(db, COLLECTIONS.RESERVATIONS, reservationId);
                     const resDoc = await transaction.get(resRef);
-                    if (!resDoc.exists()) throw new Error("Reservación no encontrada.");
+                    if (!resDoc.exists()) return;
 
                     const resData = resDoc.data();
-                    if (resData.status === 'CANCELLED') {
-                        return;
-                    }
                     const wasConfirmed = resData.status === 'CONFIRMED';
 
                     const scheduleKey = `${resData.businessId}_${resData.machineId}_${resData.date}`;
@@ -1429,21 +1440,16 @@ class Store {
                     }
 
                     // 2. TODAS LAS ESCRITURAS (WRITES)
+                    // Eliminar el slot del calendario de la máquina para liberar completamente el horario
                     if (scheduleDoc.exists()) {
-                        const slots = (scheduleDoc.data().slots || []).map(s => 
-                            s.resId === reservationId ? { ...s, status: 'CANCELLED', updatedAt: nowIso } : s
-                        );
+                        const slots = (scheduleDoc.data().slots || []).filter(s => s.resId !== reservationId);
                         transaction.set(scheduleRef, { slots, updatedAt: nowIso }, { merge: true });
                     }
 
-                    transaction.update(resRef, {
-                        status: 'CANCELLED',
-                        cancellationReason: reason.trim(),
-                        cancelledAt: nowIso,
-                        cancelledBy: currentStaff,
-                        updatedAt: nowIso
-                    });
+                    // Eliminar permanentemente el documento de Firestore
+                    transaction.delete(resRef);
 
+                    // Revertir puntos de lealtad si la reservación estaba confirmada
                     if (playerDoc && playerDoc.exists() && playerRef && this.currentBusiness?.loyaltyEnabled) {
                         const playerData = playerDoc.data();
                         const loyaltyMap = playerData.loyalty || {};
@@ -1479,25 +1485,21 @@ class Store {
 
                     auditLogger.appendTransactionAudit(transaction, {
                         businessId: resData.businessId,
-                        action: AUDIT_ACTIONS.RESERVATION_CANCELLED,
+                        action: AUDIT_ACTIONS.RESERVATION_DELETED,
                         target: { type: 'RESERVATION', id: reservationId, name: resData.clientName || 'Jugador' },
                         financialData: { amount: resData.totalCost || 0 },
-                        details: `Cancelada/Eliminada reservación ID ${reservationId} (${resData.clientName || 'Jugador'}) por ${currentStaff}. Motivo: "${reason.trim()}"`
+                        details: `Eliminada definitivamente reservación ID ${reservationId} (${resData.clientName || 'Jugador'}) por ${currentStaff}. Motivo: "${reason.trim()}"`
                     });
                 });
             } catch (e) {
-                handleAppError(e, { context: "Error al cancelar reservación en Firestore", showToast: true, rethrow: true });
+                handleAppError(e, { context: "Error al eliminar reservación permanentemente en Firestore", showToast: true, rethrow: true });
             }
         }
 
-        // Mantener la reservación en memoria marcada como CANCELLED para coherencia con Firestore
-        const inMemory = this.reservations.find(r => r.id === reservationId);
-        if (inMemory) {
-            inMemory.status = 'CANCELLED';
-            inMemory.cancellationReason = reason.trim();
-            inMemory.cancelledAt = nowIso;
-            inMemory.cancelledBy = currentStaff;
-            inMemory.updatedAt = nowIso;
+        // Depurar completamente de la memoria local y caché
+        this.reservations = this.reservations.filter(r => r.id !== reservationId);
+        if (this.pendingReservations) {
+            this.pendingReservations = this.pendingReservations.filter(r => r.id !== reservationId);
         }
         if (this.currentBusiness?.id) {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
@@ -1506,7 +1508,7 @@ class Store {
         if (res.isVersusMatch && res.challengeId) {
             try {
                 const { challengeManager } = await import('./challengeManager.js');
-                await challengeManager.handleReservationRejectedOrCancelled(res.challengeId, reason || 'Cancelada por encargado');
+                await challengeManager.handleReservationRejectedOrCancelled(res.challengeId, reason || 'Eliminada por encargado');
             } catch (e) {
                 console.warn("Error notificando cancelación a challengeManager:", e);
             }
