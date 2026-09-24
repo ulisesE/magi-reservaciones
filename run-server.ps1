@@ -22,6 +22,7 @@ function Get-ContentType($filePath) {
         ".gif"  { return "image/gif" }
         ".svg"  { return "image/svg+xml" }
         ".json" { return "application/json; charset=utf-8" }
+        ".webmanifest" { return "application/manifest+json; charset=utf-8" }
         default { return "application/octet-stream" }
     }
 }
@@ -109,6 +110,13 @@ try {
         if (Test-Path $filePath -PathType Leaf) {
             $bytes = [System.IO.File]::ReadAllBytes($filePath)
             $response.ContentType = Get-ContentType $filePath
+            
+            # Encabezados de no-cache para simular las reglas de Firebase Hosting
+            if ($urlClean -eq "sw.js" -or $urlClean -eq "version.json" -or $urlClean -eq "manifest.json") {
+                $response.AddHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+                $response.AddHeader("Pragma", "no-cache")
+            }
+
             $response.ContentLength64 = $bytes.Length
             $response.OutputStream.Write($bytes, 0, $bytes.Length)
         } else {

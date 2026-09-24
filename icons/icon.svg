@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0e1726" />
+      <stop offset="60%" stop-color="#080a0f" />
+      <stop offset="100%" stop-color="#030508" />
+    </radialGradient>
+
+    <!-- Neon Glow Filter -->
+    <filter id="neonLime" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="neonPink" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="7" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="neonCyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="7" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Linear Gradients for Arrows -->
+    <linearGradient id="pinkArrow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF2E7E" />
+      <stop offset="100%" stop-color="#FF0055" />
+    </linearGradient>
+
+    <linearGradient id="cyanArrow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" />
+      <stop offset="100%" stop-color="#0080FF" />
+    </linearGradient>
+
+    <linearGradient id="limeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A6FF00" />
+      <stop offset="100%" stop-color="#68F205" />
+    </linearGradient>
+
+    <linearGradient id="yellowCenter" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF066" />
+      <stop offset="100%" stop-color="#FFB800" />
+    </linearGradient>
+  </defs>
+
+  <!-- Base App Background with Rounded Hexagon / Rounded Rect -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#bgGlow)" stroke="#1a2936" stroke-width="6" />
+
+  <!-- Outer Neon Grid Ring -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#68F205" stroke-opacity="0.15" stroke-width="2" stroke-dasharray="8 8" />
+  <circle cx="256" cy="256" r="195" fill="none" stroke="#00F0FF" stroke-opacity="0.2" stroke-width="2" />
+
+  <!-- ================= PUMP IT UP 5-PANEL ARROWS ================= -->
+
+  <!-- Top-Left Arrow (Up-Left Red/Pink) -->
+  <g filter="url(#neonPink)">
+    <polygon points="100,100 200,100 100,200" fill="url(#pinkArrow)" />
+    <polygon points="120,120 180,120 120,180" fill="#FFA3C2" opacity="0.8" />
+    <path d="M110,110 L190,110 L110,190 Z" fill="none" stroke="#FFF" stroke-width="3" opacity="0.9" />
+  </g>
+
+  <!-- Top-Right Arrow (Up-Right Red/Pink) -->
+  <g filter="url(#neonPink)">
+    <polygon points="412,100 312,100 412,200" fill="url(#pinkArrow)" />
+    <polygon points="392,120 332,120 392,180" fill="#FFA3C2" opacity="0.8" />
+    <path d="M402,110 L322,110 L402,190 Z" fill="none" stroke="#FFF" stroke-width="3" opacity="0.9" />
+  </g>
+
+  <!-- Bottom-Left Arrow (Down-Left Cyan/Blue) -->
+  <g filter="url(#neonCyan)">
+    <polygon points="100,412 200,412 100,312" fill="url(#cyanArrow)" />
+    <polygon points="120,392 180,392 120,332" fill="#B3F7FF" opacity="0.8" />
+    <path d="M110,402 L190,402 L110,322 Z" fill="none" stroke="#FFF" stroke-width="3" opacity="0.9" />
+  </g>
+
+  <!-- Bottom-Right Arrow (Down-Right Cyan/Blue) -->
+  <g filter="url(#neonCyan)">
+    <polygon points="412,412 312,412 412,312" fill="url(#cyanArrow)" />
+    <polygon points="392,392 332,392 392,332" fill="#B3F7FF" opacity="0.8" />
+    <path d="M402,402 L322,402 L402,322 Z" fill="none" stroke="#FFF" stroke-width="3" opacity="0.9" />
+  </g>
+
+  <!-- Center Pad (Yellow Step Pad) -->
+  <g>
+    <rect x="216" y="216" width="80" height="80" rx="16" fill="url(#yellowCenter)" stroke="#FFF" stroke-width="4" filter="url(#neonLime)" />
+    <rect x="232" y="232" width="48" height="48" rx="8" fill="#FFF7B2" opacity="0.85" />
+    <circle cx="256" cy="256" r="14" fill="#FF8800" />
+  </g>
+
+  <!-- Arcade Crosshair Accents -->
+  <line x1="256" y1="56" x2="256" y2="90" stroke="#68F205" stroke-width="4" stroke-linecap="round" filter="url(#neonLime)" />
+  <line x1="256" y1="422" x2="256" y2="456" stroke="#68F205" stroke-width="4" stroke-linecap="round" filter="url(#neonLime)" />
+  <line x1="56" y1="256" x2="90" y2="256" stroke="#00F0FF" stroke-width="4" stroke-linecap="round" filter="url(#neonCyan)" />
+  <line x1="422" y1="256" x2="456" y2="256" stroke="#00F0FF" stroke-width="4" stroke-linecap="round" filter="url(#neonCyan)" />
+
+  <!-- Bottom Text Banner: PIU HUB -->
+  <g filter="url(#neonLime)">
+    <rect x="156" y="434" width="200" height="38" rx="10" fill="#080e14" stroke="#68F205" stroke-width="3" />
+    <text x="256" y="460" font-family="'Impact', 'Rajdhani', 'Arial Black', sans-serif" font-size="22" font-weight="900" fill="#68F205" text-anchor="middle" letter-spacing="4">PIU HUB</text>
+  </g>
+</svg>

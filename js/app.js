@@ -22,7 +22,9 @@ import { renderClientProfileView } from './views/clientProfileView.js';
 import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
 import { renderVersusView } from './views/versusView.js';
 import { notificationManager } from './core/notificationManager.js';
+import { pwaManager } from './core/pwaManager.js';
 import { openChangelogModal } from './components/changelogModal.js';
+import { updateManager } from './core/updateManager.js';
 import { isFirebaseAvailable } from './firebaseConfig.js';
 import './core/financialTests.js';
 
@@ -49,8 +51,9 @@ class App {
         // 2. Inicializar Autenticación y Roles
         await authManager.init();
 
-        // 2.5. Inicializar Service Worker de Notificaciones
+        // 2.5. Inicializar Service Worker de Notificaciones y Gestor de Actualizaciones
         await notificationManager.init();
+        updateManager.init();
         notificationManager.setupRealtimeListeners(authManager.getCurrentUser());
 
         // 3. Inicializar Catálogos Maestros (Versiones de Juego, Reglas)
@@ -94,12 +97,12 @@ class App {
             if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.7.3 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.7.4 • Novedades 📜)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.7.3 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.7.4 • Novedades 📜)</span>
                 `;
             }
         }

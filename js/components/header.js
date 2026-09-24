@@ -9,6 +9,8 @@ import { modal } from './modal.js';
 import { toast } from './toast.js';
 import { navShortcutsManager } from '../core/navShortcutsManager.js';
 import { notificationManager } from '../core/notificationManager.js';
+import { pwaManager } from '../core/pwaManager.js';
+import { updateManager } from '../core/updateManager.js';
 
 export function renderHeader(container) {
     const isLocalSelected = tenantManager.isLocalSelected;
@@ -49,12 +51,15 @@ export function renderHeader(container) {
                             </div>
                             <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                                 <span>Plataforma Modular de Reservaciones</span>
-                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.3">v1.7.3</button>
+                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.4">v1.7.4</button>
                             </div>
                         </div>
                     </div>
 
                     <div class="header-actions">
+                        <button class="btn btn-outline btn-xs btn-pwa-install" style="display:none; border-radius:var(--radius-full); padding:4px 9px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:bold; align-items:center; gap:4px;" title="Instalar Pump It Up Hub en tu celular o PC">
+                            <span>📲 Instalar App</span>
+                        </button>
                         ${currentUser ? `
                             <div class="user-session-pill" style="display:flex; align-items:center; gap:8px; background:var(--bg-dark-700); padding:4px 12px; border-radius:var(--radius-full); border:1px solid var(--border-color);">
                                 <span style="font-size:1.1rem;">${currentUser.avatar || '👤'}</span>
@@ -107,7 +112,7 @@ export function renderHeader(container) {
                         </div>
                         <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                             <span>${business?.city || 'Arcade'}</span>
-                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.3">v1.7.3</button>
+                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.4">v1.7.4</button>
                         </div>
                     </div>
                 </div>
@@ -123,6 +128,11 @@ export function renderHeader(container) {
                     <!-- Botón de Notificaciones del Navegador -->
                     <button id="btn-toggle-notifs" class="btn btn-outline btn-xs" style="border-radius:var(--radius-full); padding:4px 8px; font-size:0.85rem;" title="${notificationManager.getPermissionStatus() === 'granted' ? 'Notificaciones activadas (clic para probar)' : 'Activar notificaciones del navegador'}">
                         ${notificationManager.getPermissionStatus() === 'granted' ? '🔔' : '🔕'}
+                    </button>
+
+                    <!-- Botón de Instalación PWA (Móvil y Escritorio) -->
+                    <button id="btn-pwa-install" class="btn btn-outline btn-xs btn-pwa-install" style="display:none; border-radius:var(--radius-full); padding:4px 9px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:bold; align-items:center; gap:4px;" title="Instalar Pump It Up Hub en tu celular o PC">
+                        <span>📲 Instalar App</span>
                     </button>
 
                     <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" title="Ir al calendario de día para reservar" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
@@ -182,11 +192,27 @@ export function renderHeader(container) {
                                     </button>
                                 ` : ''}
 
+                                <button class="dropdown-item btn-pwa-install" type="button" style="display:none;">
+                                    <span class="item-icon">📲</span>
+                                    <div class="item-info">
+                                        <strong>Instalar Aplicación (PWA)</strong>
+                                        <small>Añadir a pantalla de inicio</small>
+                                    </div>
+                                </button>
+
                                 <button class="dropdown-item btn-open-changelog-header" type="button">
                                     <span class="item-icon">📜</span>
                                     <div class="item-info">
-                                        <strong>Novedades (v1.7.3)</strong>
+                                        <strong>Novedades (v1.7.4)</strong>
                                         <small>Ver registro de cambios</small>
+                                    </div>
+                                </button>
+
+                                <button class="dropdown-item btn-check-updates-header" type="button">
+                                    <span class="item-icon">🔄</span>
+                                    <div class="item-info">
+                                        <strong>Buscar Actualizaciones</strong>
+                                        <small>Verificar versión y limpiar caché</small>
                                     </div>
                                 </button>
 
@@ -333,6 +359,30 @@ export function renderHeader(container) {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             openChangelogModal();
+        });
+    });
+
+    // Evento para buscar actualizaciones manualmente
+    container.querySelectorAll('.btn-check-updates-header').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            container.querySelectorAll('.nav-dropdown-wrapper.open').forEach(w => w.classList.remove('open'));
+            updateManager.checkForUpdates(true);
+        });
+    });
+
+    // Gestión de Botones de Instalación PWA
+    pwaManager.subscribe((canInstall) => {
+        container.querySelectorAll('.btn-pwa-install').forEach(el => {
+            el.style.display = canInstall ? (el.classList.contains('dropdown-item') ? 'flex' : 'inline-flex') : 'none';
+        });
+    });
+
+    container.querySelectorAll('.btn-pwa-install').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            container.querySelectorAll('.nav-dropdown-wrapper.open').forEach(w => w.classList.remove('open'));
+            pwaManager.promptInstall();
         });
     });
 

@@ -1,13 +1,54 @@
 // js/components/changelogModal.js
 // Modal público e interactivo para consultar el Registro de Cambios (Changelog) del sistema
 import { modal } from './modal.js';
+import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.7.4',
+        date: '23 de Septiembre de 2026',
+        badge: '⚡ Versión Actual (PWA Móvil & Caja Unificada)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '📲 Experiencia PWA Móvil Completa e Instalable',
+                icon: '📱',
+                items: [
+                    'Web App Manifest (manifest.json) con colores arcade (#080a0f), orientación vertical y accesos directos rápidos.',
+                    'Conjunto de iconos vectoriales y de alta resolución (192px, 512px, maskable, apple-touch-icon y SVG).',
+                    'Soporte nativo para pantalla completa en iPhone/iPad (iOS Safari) y Android (Chrome).',
+                    'Service Worker (sw.js) con estrategia de caché inteligente para navegación rápida y offline.',
+                    'Gestor de instalación PWA con botón arcade "📲 Instalar App" en cabecera y guía visual para iOS.'
+                ]
+            },
+            {
+                title: '💳 Desacoplamiento y Unificación de Caja en Cuenta Fácil',
+                icon: '🛒',
+                items: [
+                    'Eliminación del flujo legacy y más de 500 líneas redundantes en el Directorio de Jugadores.',
+                    'El botón "Estado de Cuenta" en las tarjetas de jugador abre directamente el modal autoritativo de Cuenta Fácil.',
+                    'Integración completa desde el estado de cuenta con el POS de productos del catálogo oficial, abonos con saldo a favor y liquidación de tickets fiados.',
+                    'Arquitectura centralizada para garantizar consistencia transaccional atómica en Firestore.'
+                ]
+            },
+            {
+                title: '🔄 Sistema de Actualización Forzada y Detección Automática',
+                icon: '⚡',
+                items: [
+                    'Manifiesto de despliegue version.json con control de versión semántica y directiva forceUpdate.',
+                    'Encabezados HTTP anti-caché en firebase.json para sw.js, version.json y manifest.json.',
+                    'updateManager con monitoreo activo del ciclo de vida del Service Worker y chequeos automáticos.',
+                    'Banner arcade Cyberpunk flotante con cuenta regresiva interactiva y botón "Actualizar Ahora".',
+                    'Botón "Buscar Actualizaciones" integrado en el menú de usuario y modal de novedades para control en 1 clic.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.7.3',
         date: '18 de Septiembre de 2026',
-        badge: '⚡ Versión Actual (Políticas, Bloqueos & Mobile)',
-        isCurrent: true,
+        badge: 'Políticas, Bloqueos & Mobile',
+        isCurrent: false,
         highlights: [
             {
                 title: '🚫 Control de Cancelaciones y Bloqueo de Jugadores',
@@ -314,8 +355,13 @@ export function openChangelogModal() {
     `;
 
     const footerHtml = `
-        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.3</small>
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.4</small>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-check-updates-changelog" style="font-size:0.75rem; padding:3px 8px;">
+                    🔄 Buscar Actualizaciones
+                </button>
+            </div>
             <button type="button" class="btn btn-primary" id="btn-close-changelog">
                 <span>Entendido</span>
             </button>
@@ -331,4 +377,7 @@ export function openChangelogModal() {
     });
 
     modalEl.querySelector('#btn-close-changelog')?.addEventListener('click', () => modal.close());
+    modalEl.querySelector('#btn-check-updates-changelog')?.addEventListener('click', () => {
+        updateManager.checkForUpdates(true);
+    });
 }

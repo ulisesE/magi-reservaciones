@@ -2,6 +2,7 @@
 // Gestor Centralizado de Notificaciones del Navegador y Comunicación con Service Worker (v1.9.0)
 import { isFirebaseAvailable, db, COLLECTIONS, collection, query, where, onSnapshot } from '../firebaseConfig.js';
 import { toast } from '../components/toast.js';
+import { updateManager } from './updateManager.js';
 
 class NotificationManager {
     constructor() {
@@ -24,8 +25,11 @@ class NotificationManager {
 
         try {
             this.swRegistration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-            console.log("🔔 Service Worker de Notificaciones registrado con éxito. Scope:", this.swRegistration.scope);
+            console.log("🔔 Service Worker PWA & Notificaciones registrado con éxito. Scope:", this.swRegistration.scope);
             this.isInitialized = true;
+
+            // Vincular con el gestor de actualizaciones
+            updateManager.bindServiceWorker(this.swRegistration);
 
             // Escuchar cambios de controlador
             navigator.serviceWorker.addEventListener('controllerchange', () => {

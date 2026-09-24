@@ -6,6 +6,35 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.7.4] - 2026-09-23
+
+### 🚀 Nuevas Características
+- **Experiencia PWA Móvil Completa e Instalable (Progressive Web App)**:
+  - Archivo `manifest.json` integrado con tema arcade `#080a0f`, orientación portrait y accesos directos rápidos a *Calendario de Día*, *Mi Perfil*, *Retas Versus* y *Cuenta Fácil*.
+  - Colección de iconos arcade de alta fidelidad: `icons/icon-192.png`, `icons/icon-512.png`, `icons/icon-maskable.png`, `icons/apple-touch-icon.png` e `icons/icon.svg` con la icónica cruceta de 5 paneles de Pump It Up.
+  - Soporte nativo para pantallas de inicio de iOS Safari (`apple-mobile-web-app-capable`) y Android Chrome.
+  - Service Worker (`sw.js`) optimizado con estrategia de caché inteligente para navegación offline y precaching de assets esenciales.
+  - Nuevo gestor `js/core/pwaManager.js` que escucha `beforeinstallprompt`, detecta ejecución en modo Standalone y despliega un botón arcade `📲 Instalar App` en la barra superior y menú de usuario.
+  - Modal arcade interactivo con guía paso a paso para añadir a inicio en dispositivos iPhone/iPad.
+
+- **Sistema de Actualización Forzada y Detección Automática de Nuevas Versiones**:
+  - Archivo `version.json` como manifiesto de despliegue con control semántico de versiones, build timestamp y bandera `forceUpdate`.
+  - Configuración de encabezados HTTP en `firebase.json` (`Cache-Control: no-cache, no-store, must-revalidate`) para `/sw.js`, `/version.json`, `/manifest.json` e `/index.html`, evitando bloqueos por cachés de CDN o navegador.
+  - Nuevo gestor `js/core/updateManager.js` que monitorea el ciclo de vida del Service Worker y realiza chequeos automáticos en segundo plano, al volver a la app (`visibilitychange`), al reconectar a internet y periódicamente cada 15 minutos.
+  - Soporte de mensajes `SKIP_WAITING` y `SW_ACTIVATED` en `sw.js` para activar inmediatamente el nuevo worker y purgar cachés obsoletas.
+  - Banner arcade Cyberpunk flotante (`.app-update-banner`) con cuenta regresiva interactiva, opción de pausar temporalmente y botón de acción directa `⚡ Actualizar Ahora`.
+  - Botón interactivo `🔄 Buscar Actualizaciones` integrado en el menú de usuario y en el modal del Changelog para comprobaciones manuales en 1 clic.
+  - Utilidad administrativa y de diagnóstico `window.piuForceUpdate()` para emergencias y limpiezas totales de caché.
+
+### 🛠️ Correcciones y Mejoras
+- **Desacoplamiento y Unificación de Caja en Cuenta Fácil**:
+  - Eliminación del modal legacy y código duplicado de registro de consumo en el Directorio de Clientes (`js/views/clientsView.js`), reduciendo más de 500 líneas redundantes.
+  - El botón `💳 Estado de Cuenta` en las tarjetas de jugador ahora abre el modal unificado y autoritativo de Cuenta Fácil (`js/views/accountsView.js`).
+  - Desde el estado de cuenta ahora es posible registrar consumos mediante el POS multi-producto con catálogo oficial (`openQuickSaleModal`), registrar abonos/pagos con opción de amortizar con saldo a favor (`openPaymentModal`), liquidar tickets fiados individuales (`openSettleTicketModal`) y anular movimientos de forma atómica.
+  - Puentes delegadores retrocompatibles para prevenir errores en cualquier componente que invoque APIs anteriores.
+
+---
+
 ## [1.7.3] - 2026-09-18
 
 ### 🚀 Nuevas Características
