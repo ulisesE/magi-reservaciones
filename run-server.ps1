@@ -53,15 +53,18 @@ try {
             continue
         }
         
-        # 2. Interceptar peticiones a la raíz index.html para inyección dinámica de meta tags
-        if ($url -eq "/" -or $url -eq "/index.html" -or $url -eq "/index.html/") {
+        # 2. Interceptar peticiones a la raíz index.html o rutas SPA (/local/:id) para inyección dinámica de meta tags
+        if ($url -eq "/" -or $url -eq "/index.html" -or $url -eq "/index.html/" -or $url.StartsWith("/local/")) {
             $filePath = Join-Path $PSScriptRoot "index.html"
             $html = [System.IO.File]::ReadAllText($filePath)
             
             $query = $request.Url.Query
             $localId = ""
-            if ($query -match "local=([^&]+)") { $localId = $Matches[1] }
-            elseif ($query -match "sucursal=([^&]+)") { $localId = $Matches[1] }
+            if ($url.StartsWith("/local/")) {
+                $localId = $url.Substring(7).Trim('/')
+            }
+            if (-not $localId -and $query -match "local=([^&]+)") { $localId = $Matches[1] }
+            elseif (-not $localId -and $query -match "sucursal=([^&]+)") { $localId = $Matches[1] }
             
             if ($localId) {
                 $metaPath = Join-Path $PSScriptRoot "metadata.json"

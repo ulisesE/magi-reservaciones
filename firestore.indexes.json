@@ -13,6 +13,24 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "piu_reservations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "businessId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "machineId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

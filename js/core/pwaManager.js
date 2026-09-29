@@ -338,15 +338,15 @@ class PWAManager {
             if (!manifestEl) {
                 manifestEl = document.createElement('link');
                 manifestEl.rel = 'manifest';
-                manifestEl.href = 'manifest.json';
+                manifestEl.href = '/manifest.json';
                 document.head.appendChild(manifestEl);
-            } else if (manifestEl.getAttribute('href') !== 'manifest.json') {
-                // Si existía un blob anterior, revocarlo y restablecer a manifest.json
+            } else if (manifestEl.getAttribute('href') !== '/manifest.json' && manifestEl.getAttribute('href') !== 'manifest.json') {
+                // Si existía un blob anterior, revocarlo y restablecer a /manifest.json
                 if (this.currentManifestBlobUrl) {
                     URL.revokeObjectURL(this.currentManifestBlobUrl);
                     this.currentManifestBlobUrl = null;
                 }
-                manifestEl.setAttribute('href', 'manifest.json');
+                manifestEl.setAttribute('href', '/manifest.json');
             }
 
             const cleanBizName = business.name || 'PIU Hub';

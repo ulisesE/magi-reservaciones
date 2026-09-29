@@ -518,6 +518,10 @@ class Store {
         }
 
         loaded.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+        
+        // Sincronizar memoria del store y caché local con todas las reservaciones cargadas del local
+        this.reservations = loaded;
+        this.saveLocalReservations(bizId, loaded);
         return loaded;
     }
 
@@ -647,32 +651,78 @@ class Store {
         const biz = (tenantManager.getBusinessById && bizId) ? (tenantManager.getBusinessById(bizId) || this.currentBusiness) : this.currentBusiness;
         const { openingTime, closingTime } = getBusinessHoursForDate(biz, date);
 
-        // 1. Verificar directamente en Firestore sobre COLLECTIONS.RESERVATIONS (fuente autoritativa real)
+        // 1. Consultar directamente en Firestore sobre COLLECTIONS.RESERVATIONS (fuente autoritativa real)
         if (isFirebaseAvailable && db && bizId) {
             try {
-                const q = query(
-                    collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", bizId),
-                    where("machineId", "==", machineId),
-                    where("date", "==", date)
-                );
-                const snap = await getDocs(q);
-                snap.forEach(docSnap => {
-                    const r = { id: docSnap.id, ...docSnap.data() };
-                    if (excludeReservationId && r.id === excludeReservationId) return;
-                    if (r.status === 'CANCELLED' || r.status === 'REJECTED') return;
-                    if (onlyConfirmed && r.status !== 'CONFIRMED') return;
+                let snap = null;
+                // Intento A: Por businessId y date (índice nativo en firestore.indexes.json)
+                try {
+                    const qDate = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId),
+                        where("date", "==", date)
+                    );
+                    snap = await getDocs(qDate);
+                } catch(eIndex) {
+                    // Intento B: Por businessId solo (cero requerimiento de índices compuestos)
+                    const qBiz = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId)
+                    );
+                    snap = await getDocs(qBiz);
+                }
 
-                    if (isOverlapping(startTime, endTime, r.startTime, r.endTime, openingTime, closingTime)) {
-                        conflicts.push(r);
-                        if (!this.reservations.some(item => item.id === r.id)) {
+                if (snap) {
+                    snap.forEach(docSnap => {
+                        const r = { id: docSnap.id, ...docSnap.data() };
+                        // Sincronizar en memoria de store
+                        const exIdx = this.reservations.findIndex(x => x.id === r.id);
+                        if (exIdx !== -1) {
+                            this.reservations[exIdx] = r;
+                        } else {
                             this.reservations.push(r);
                         }
-                    }
-                });
+
+                        if (excludeReservationId && r.id === excludeReservationId) return;
+                        if (r.machineId !== machineId || r.date !== date) return;
+                        if (r.status === 'CANCELLED' || r.status === 'REJECTED') return;
+                        if (onlyConfirmed && r.status !== 'CONFIRMED') return;
+
+                        if (isOverlapping(startTime, endTime, r.startTime, r.endTime, openingTime, closingTime)) {
+                            conflicts.push(r);
+                        }
+                    });
+                }
             } catch (err) {
-                console.warn("⚠️ Error consultando conflictos en Firestore:", err);
+                console.warn("⚠️ Error consultando reservaciones en Firestore:", err);
             }
+
+            // 1b. Consultar en MACHINE_SCHEDULES transaccional de Firestore
+            try {
+                const scheduleKey = `${bizId}_${machineId}_${date}`;
+                const scheduleSnap = await getDoc(doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey));
+                if (scheduleSnap.exists()) {
+                    const slots = scheduleSnap.data().slots || [];
+                    slots.forEach(slot => {
+                        if (excludeReservationId && slot.resId === excludeReservationId) return;
+                        if (slot.status === 'CANCELLED' || slot.status === 'REJECTED') return;
+                        if (onlyConfirmed && slot.status !== 'CONFIRMED') return;
+                        if (isOverlapping(startTime, endTime, slot.startTime, slot.endTime, openingTime, closingTime)) {
+                            if (!conflicts.some(c => c.id === slot.resId)) {
+                                conflicts.push({
+                                    id: slot.resId || 'slot_conflict',
+                                    machineId,
+                                    date,
+                                    startTime: slot.startTime,
+                                    endTime: slot.endTime,
+                                    status: slot.status || 'CONFIRMED',
+                                    clientName: slot.clientName || 'Otro jugador'
+                                });
+                            }
+                        }
+                    });
+                }
+            } catch(e) {}
         }
 
         // 2. Verificar en memoria local y en localStorage
@@ -1139,22 +1189,22 @@ class Store {
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
-        // 🛡️ CANDADO NIVEL 1 EN APROBACIÓN:
-        // Verificar contra reservaciones confirmadas en memoria y evitar traslapes
-        const existingConfirmed = this.getReservations({
-            date: res.date,
-            machineId: res.machineId,
-            status: 'CONFIRMED'
-        }).filter(r => r.id !== reservationId);
-
-        const biz = tenantManager.getActiveBusiness() || this.currentBusiness;
-        const { openingTime: opt, closingTime: clt } = getBusinessHoursForDate(biz, res.date);
-
-        const localConflict = existingConfirmed.find(r => 
-            isOverlapping(res.startTime, res.endTime, r.startTime, r.endTime, opt, clt)
+        // 🛡️ CANDADO AUTORITATIVO NIVEL 1 EN APROBACIÓN:
+        // Consulta directamente en Firestore COLLECTIONS.RESERVATIONS, MACHINE_SCHEDULES,
+        // memoria y localStorage si ya existe una reservación CONFIRMADA en ese horario
+        const conflicts = await this.getAuthoritativeConflicts(
+            res.businessId || this.currentBusiness?.id,
+            res.machineId,
+            res.date,
+            res.startTime,
+            res.endTime,
+            reservationId,
+            true // ONLY CONFIRMED
         );
-        if (localConflict) {
-            throw new Error(`No se puede aprobar: este horario se traslapa con la reservación ya confirmada de ${localConflict.clientName} (${format12Hour(localConflict.startTime)} - ${format12Hour(localConflict.endTime)}).`);
+
+        if (conflicts.length > 0) {
+            const conflict = conflicts[0];
+            throw new Error(`No se puede aprobar: Este horario se traslapa con la reservación ya confirmada de ${conflict.clientName} (${format12Hour(conflict.startTime)} - ${format12Hour(conflict.endTime)}).`);
         }
 
         const nowIso = new Date().toISOString();
