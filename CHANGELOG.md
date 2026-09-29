@@ -6,6 +6,34 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.7.5] - 2026-09-28
+
+### 🚀 Nuevas Características
+- **Reordenamiento Personalizado de Máquinas en la Vista de Día**:
+  - Exclusivo para locatarios y staff: reordena las columnas de máquinas para que se muestren exactamente en la secuencia deseada en la Vista de Día (`js/views/dayView.js`).
+  - Nuevo modal interactivo `openReorderMachinesModal` con vista previa en tiempo real de las columnas del calendario, botones de subir `▲` y bajar `▼`, e insignias numéricas `#1`, `#2`, etc.
+  - Botón de acceso rápido `⇅ Reordenar en Vista Día` integrado tanto en la cabecera de la Vista Día como en el catálogo de máquinas (`js/views/machinesView.js`).
+  - Métodos `store.reorderMachines()` y `store.moveMachine()` con sincronización atómica en Firestore, LocalStorage y registro de auditoría.
+
+- **Página y Módulo de Descarga PWA Exclusiva por Sucursal**:
+  - Nueva vista dedicada `js/views/downloadAppView.js` accesible vía menú, footer y URL directa (`?view=DOWNLOAD&local={id}`).
+  - Botón de instalación nativa en 1 clic que dispara el prompt nativo PWA o modal educativo ilustrado en iOS Safari.
+  - Generador de código QR descargable e imprimible en alta resolución (PNG) con logotipo y nombre de la sala para colocar en mostradores.
+  - Botón para compartir instantáneamente por WhatsApp con mensaje arcade personalizado preconfigurado.
+  - Guías ilustradas paso a paso para Android, iPhone/iPad (Safari) y Computadoras de escritorio.
+
+- **Ocultamiento Inteligente de Botones de Descarga al Estar Instalada**:
+  - Detección exhaustiva de modo Standalone / PWA en todas las plataformas (`display-mode: standalone`, `navigator.standalone`, flags y LocalStorage).
+  - Al detectar que la app ya fue descargada/instalada en el dispositivo, se ocultan automáticamente los botones y banners de descarga en la barra superior (`header.js`), la pantalla de inicio del local (`businessHomeView.js`) y las tarjetas de la pantalla de bienvenida (`landingView.js`).
+  - En la vista de descarga se actualiza el estado a `✅ APP YA INSTALADA EN ESTE DISPOSITIVO`, manteniendo disponibles las herramientas de difusión y descarga del código QR.
+
+- **Seguridad y Ocultamiento de Locales Deshabilitados**:
+  - Los locales deshabilitados (`active === false` o `status === 'disabled'`) se filtran y ocultan automáticamente en la pantalla de bienvenida (`js/views/landingView.js`) para usuarios generales y clientes.
+  - Guardias de seguridad en `tenantManager` y en el enrutador principal (`app.js`) que impiden el acceso forzado mediante parámetros URL `?local={id}` a negocios inactivos a cualquier usuario que no posea rol de Super Admin.
+  - El Super Administrador conserva visibilidad total con distintivo de estado `⏸️ DESHABILITADO`.
+
+---
+
 ## [1.7.4] - 2026-09-23
 
 ### 🚀 Nuevas Características

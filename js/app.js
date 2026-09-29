@@ -21,6 +21,7 @@ import { renderSuperadminView } from './views/superadminView.js';
 import { renderClientProfileView } from './views/clientProfileView.js';
 import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
 import { renderVersusView } from './views/versusView.js';
+import { renderDownloadAppView } from './views/downloadAppView.js';
 import { notificationManager } from './core/notificationManager.js';
 import { pwaManager } from './core/pwaManager.js';
 import { openChangelogModal } from './components/changelogModal.js';
@@ -65,16 +66,28 @@ class App {
         // 4.5. Inicializar Gestor de Temas
         themeManager.init();
 
-        // Los enlaces compartidos de una sucursal abren su página pública.
-        const hasBusinessInUrl = new URLSearchParams(window.location.search).has('local')
-            || new URLSearchParams(window.location.search).has('business')
-            || new URLSearchParams(window.location.search).has('sucursal');
-        if (hasBusinessInUrl && tenantManager.isLocalSelected && store.currentView === 'DAY' && !authManager.isStaff()) {
+        // Los enlaces compartidos de una sucursal abren su página pública o la vista solicitada.
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasBusinessInUrl = urlParams.has('local')
+            || urlParams.has('business')
+            || urlParams.has('sucursal');
+        const viewFromUrl = urlParams.get('view')?.toUpperCase();
+
+        if (viewFromUrl === 'DOWNLOAD' || viewFromUrl === 'INSTALL') {
+            store.currentView = 'DOWNLOAD';
+        } else if (viewFromUrl) {
+            store.currentView = viewFromUrl;
+        } else if (hasBusinessInUrl && tenantManager.isLocalSelected && store.currentView === 'DAY' && !authManager.isStaff()) {
             store.currentView = 'HOME';
         }
 
         if (authManager.isSuperAdmin() && store.currentView === 'DAY' && !tenantManager.isLocalSelected) {
             store.currentView = 'SUPERADMIN';
+        }
+
+        // Sincronizar Web App Manifest para la sucursal activa
+        if (tenantManager.getActiveBusiness()) {
+            pwaManager.updateDynamicManifest(tenantManager.getActiveBusiness());
         }
 
         // 5. Renderizar Header y Vista Activa
@@ -97,12 +110,12 @@ class App {
             if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.7.4 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.7.5 • Novedades 📜)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.7.4 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.7.5 • Novedades 📜)</span>
                 `;
             }
         }
@@ -131,9 +144,11 @@ class App {
                 return;
             }
 
-            // GUARDIA 1: SUCURSAL EN PAUSA / FUERA DE SERVICIO (Para clientes/staff no Superadmin)
+            // GUARDIA 1: SUCURSAL DESHABILITADA (Solo Superadmin puede acceder)
             if (isLocalSelected && activeBusiness && !tenantManager.isBusinessActive(activeBusiness) && !isSuperAdmin) {
-                this.renderInactiveBusinessView(this.mainContent, activeBusiness);
+                tenantManager.clearSelectedLocal();
+                store.currentView = 'DAY';
+                renderLandingView(this.mainContent);
                 return;
             }
 
@@ -184,6 +199,10 @@ class App {
                     break;
                 case 'VERSUS':
                     renderVersusView(this.mainContent);
+                    break;
+                case 'DOWNLOAD':
+                case 'INSTALL':
+                    renderDownloadAppView(this.mainContent);
                     break;
                 case 'SUPERADMIN':
                     renderSuperadminView(this.mainContent);

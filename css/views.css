@@ -2482,3 +2482,277 @@
     background: rgba(255, 255, 255, 0.2);
     border-radius: 4px;
 }
+
+/* ==========================================================================
+   REORDENAR MÁQUINAS (VISTA DE DÍA & CATÁLOGO)
+   ========================================================================== */
+.btn-group-reorder .btn {
+    border-color: rgba(255, 255, 255, 0.15);
+    color: var(--text-secondary);
+}
+.btn-group-reorder .btn:hover:not(:disabled) {
+    border-color: var(--color-neon-cyan);
+    color: var(--color-neon-cyan);
+    background: rgba(0, 229, 255, 0.1);
+}
+
+.reorder-item-card:hover {
+    border-color: var(--color-neon-cyan) !important;
+    background: var(--bg-dark-700) !important;
+}
+
+.preview-columns-bar::-webkit-scrollbar {
+    height: 4px;
+}
+.preview-columns-bar::-webkit-scrollbar-thumb {
+    background: var(--color-neon-cyan);
+    border-radius: 4px;
+}
+
+/* ==========================================================================
+   VISTA DESCARGAR APP PWA (v1.9.0)
+   ========================================================================== */
+.download-app-view-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 16px 60px 16px;
+}
+
+.download-hero-card {
+    background: radial-gradient(circle at top, rgba(0, 229, 255, 0.12) 0%, rgba(8, 10, 15, 0.95) 75%), var(--bg-dark-800);
+    border: 2px solid var(--color-neon-cyan);
+    border-radius: var(--radius-lg);
+    padding: 36px 24px;
+    text-align: center;
+    box-shadow: 0 0 35px rgba(0, 229, 255, 0.18);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.download-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 229, 255, 0.12);
+    border: 1px solid var(--color-neon-cyan);
+    color: var(--color-neon-cyan);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 4px 14px;
+    border-radius: var(--radius-full);
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.download-hero-title {
+    font-family: var(--font-heading);
+    font-size: 2.4rem;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    color: #ffffff;
+    margin: 0 0 12px 0;
+    text-transform: uppercase;
+    line-height: 1.15;
+}
+
+.download-hero-subtitle {
+    color: var(--text-secondary);
+    font-size: 1.05rem;
+    max-width: 680px;
+    margin: 0 auto 24px auto;
+    line-height: 1.6;
+}
+
+.download-cta-box {
+    background: rgba(1, 24, 22, 0.6);
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.download-cta-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.download-grid-two-col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.card-header-styled {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 12px;
+}
+
+.card-header-styled .header-icon {
+    font-size: 1.6rem;
+}
+
+.copy-url-group {
+    display: flex;
+    gap: 8px;
+}
+
+.copy-url-group input {
+    flex: 1;
+}
+
+.platform-tab-btn {
+    background: var(--bg-dark-800);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+.platform-tab-btn:hover {
+    color: #ffffff;
+    border-color: var(--color-neon-cyan);
+}
+
+.platform-tab-btn.active {
+    background: rgba(0, 229, 255, 0.15);
+    border-color: var(--color-neon-cyan);
+    color: var(--color-neon-cyan);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+}
+
+.platform-tab-content {
+    display: none;
+    animation: fadeIn 0.25s ease;
+}
+
+.platform-tab-content.active {
+    display: block;
+}
+
+.steps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 14px;
+}
+
+.step-card {
+    background: var(--bg-dark-900);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.step-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-neon-cyan);
+}
+
+.step-number {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(0, 229, 255, 0.15);
+    color: var(--color-neon-cyan);
+    border: 1px solid var(--color-neon-cyan);
+    font-size: 0.75rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+}
+
+.step-icon {
+    font-size: 1.8rem;
+    margin-bottom: 4px;
+}
+
+.step-card h4 {
+    margin: 0;
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-family: var(--font-heading);
+}
+
+.step-card p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.benefits-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+}
+
+.benefit-item {
+    background: var(--bg-dark-800);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    transition: all 0.2s ease;
+}
+
+.benefit-item:hover {
+    border-color: var(--color-neon-lime);
+    box-shadow: 0 4px 16px rgba(104, 242, 5, 0.1);
+}
+
+.benefit-icon {
+    font-size: 1.8rem;
+    flex-shrink: 0;
+}
+
+.benefit-text strong {
+    color: #ffffff;
+    font-size: 0.92rem;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.benefit-text p {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin: 0;
+    line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+    .download-hero-title {
+        font-size: 1.8rem;
+    }
+    .download-cta-actions {
+        flex-direction: column;
+    }
+    .download-cta-actions .btn {
+        width: 100%;
+    }
+}
+

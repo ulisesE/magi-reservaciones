@@ -520,6 +520,12 @@ class Store {
                     m.hourlyRate2P = m.hourlyRate === 80 ? 130 : Math.round(m.hourlyRate * 1.625);
                 }
                 return m;
+            })
+            .sort((a, b) => {
+                const orderA = a.displayOrder !== undefined ? a.displayOrder : (a.order !== undefined ? a.order : 9999);
+                const orderB = b.displayOrder !== undefined ? b.displayOrder : (b.order !== undefined ? b.order : 9999);
+                if (orderA !== orderB) return orderA - orderB;
+                return (a.name || '').localeCompare(b.name || '');
             });
     }
 
@@ -1668,6 +1674,8 @@ class Store {
             hourlyRate2P: Number(machineData.hourlyRate2P) || 130,
             imageUrl: machineData.imageUrl || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
             features: machineData.features || ['AM.PASS', 'HD Sound'],
+            displayOrder: (this.machines?.length || 0) + 1,
+            order: (this.machines?.length || 0) + 1,
             createdAt: new Date().toISOString()
         };
 
@@ -1775,6 +1783,86 @@ class Store {
 
         this.notify();
         return true;
+    }
+
+    /**
+     * Reordenar máquinas del local para la Vista de Día (Solo Staff / Locatario)
+     * @param {Array<string>} orderedMachineIds - Lista ordenada de IDs de máquinas
+     */
+    async reorderMachines(orderedMachineIds) {
+        if (!authManager.isStaff()) {
+            throw new Error("Solo el personal locatario o administrador puede reordenar máquinas.");
+        }
+        if (!this.currentBusiness) throw new Error("No hay sucursal activa seleccionada.");
+
+        const bizId = this.currentBusiness.id;
+        const nowIso = new Date().toISOString();
+
+        const orderMap = new Map();
+        orderedMachineIds.forEach((id, idx) => {
+            orderMap.set(id, idx + 1);
+        });
+
+        // Actualizar en memoria local
+        this.machines = this.machines.map(m => {
+            if (orderMap.has(m.id)) {
+                return {
+                    ...m,
+                    displayOrder: orderMap.get(m.id),
+                    order: orderMap.get(m.id),
+                    updatedAt: nowIso
+                };
+            }
+            return m;
+        });
+
+        this.saveLocalMachines(bizId, this.machines);
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    for (const id of orderedMachineIds) {
+                        const newOrder = orderMap.get(id);
+                        const machRef = doc(db, COLLECTIONS.MACHINES, id);
+                        transaction.update(machRef, {
+                            displayOrder: newOrder,
+                            order: newOrder,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: bizId,
+                        action: AUDIT_ACTIONS.MACHINE_UPDATED,
+                        target: { type: 'BUSINESS', id: bizId, name: this.currentBusiness.name },
+                        details: `Reordenadas ${orderedMachineIds.length} máquinas en Vista de Día por ${authManager.getCurrentUser()?.name || 'Locatario'}`
+                    });
+                });
+            } catch (e) {
+                console.warn("Aviso al guardar orden de máquinas en Firestore (usando LocalStorage):", e);
+            }
+        }
+
+        this.notify();
+        return this.getMachines();
+    }
+
+    /**
+     * Mover máquina una posición arriba o abajo (Solo Staff / Locatario)
+     */
+    async moveMachine(machineId, direction = 'up') {
+        const currentList = this.getMachines();
+        const index = currentList.findIndex(m => m.id === machineId);
+        if (index === -1) return currentList;
+        if (direction === 'up' && index === 0) return currentList;
+        if (direction === 'down' && index === currentList.length - 1) return currentList;
+
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        const reordered = [...currentList];
+        const [movedItem] = reordered.splice(index, 1);
+        reordered.splice(newIndex, 0, movedItem);
+
+        return await this.reorderMachines(reordered.map(m => m.id));
     }
 
     setCurrentView(view) {

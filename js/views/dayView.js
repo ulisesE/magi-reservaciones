@@ -15,6 +15,7 @@ import {
 } from '../core/timeUtils.js';
 import { openBookingModal, showReservationTicket } from './clientBookingModal.js';
 import { openModifyModal } from './requestsView.js';
+import { openReorderMachinesModal } from './machinesView.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { escapeHTML } from '../core/securityUtils.js';
@@ -87,18 +88,25 @@ export function renderDayView(container) {
                 </div>
             </div>
 
-            <!-- Selector Rápido de Máquinas (Filtro por Chips) -->
+            <!-- Selector Rápido de Máquinas (Filtro por Chips) & Reordenar Columnas Staff -->
             ${activeMachines.length > 1 ? `
-                <div class="machine-filter-bar" role="toolbar" aria-label="Filtrar por máquina">
-                    <button class="machine-filter-chip ${currentMachineFilter === 'ALL' ? 'active' : ''}" data-filter="ALL" title="Ver todas las máquinas con columnas fijas">
-                        <span>🕹️ Todas</span>
-                        <span class="chip-count">${activeMachines.length}</span>
-                    </button>
-                    ${activeMachines.map(m => `
-                        <button class="machine-filter-chip ${currentMachineFilter === m.id ? 'active' : ''}" data-filter="${m.id}" title="Ver solo ${escapeHTML(m.name)}">
-                            <span>${escapeHTML(m.name)}</span>
+                <div class="machine-filter-bar-container" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+                    <div class="machine-filter-bar" role="toolbar" aria-label="Filtrar por máquina" style="margin-bottom:0;">
+                        <button class="machine-filter-chip ${currentMachineFilter === 'ALL' ? 'active' : ''}" data-filter="ALL" title="Ver todas las máquinas con columnas fijas">
+                            <span>🕹️ Todas</span>
+                            <span class="chip-count">${activeMachines.length}</span>
                         </button>
-                    `).join('')}
+                        ${activeMachines.map(m => `
+                            <button class="machine-filter-chip ${currentMachineFilter === m.id ? 'active' : ''}" data-filter="${m.id}" title="Ver solo ${escapeHTML(m.name)}">
+                                <span>${escapeHTML(m.name)}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                    ${isStaff ? `
+                        <button class="btn btn-outline btn-xs" id="btn-day-reorder-mach" style="border-radius:var(--radius-full); padding:5px 12px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:700; display:inline-flex; align-items:center; gap:5px;" title="Reordenar las columnas de máquinas en este día">
+                            <span>⇅ Reordenar Columnas</span>
+                        </button>
+                    ` : ''}
                 </div>
             ` : ''}
 
@@ -253,6 +261,11 @@ export function renderDayView(container) {
             currentMachineFilter = chip.dataset.filter;
             renderDayView(container);
         });
+    });
+
+    // Evento Reordenar Columnas Staff en Vista Día
+    container.querySelector('#btn-day-reorder-mach')?.addEventListener('click', () => {
+        openReorderMachinesModal(container);
     });
 
     // Evento Click en Slot Libre -> Abrir Modal de Reservación con máquina, fecha y hora precargadas

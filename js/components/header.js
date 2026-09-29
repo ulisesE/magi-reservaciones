@@ -22,6 +22,7 @@ export function renderHeader(container) {
     const isClientUser = authManager.isClientUser();
     const pendingCount = store.getPendingRequestsCount();
     const currentView = store.currentView;
+    const isAppInstalled = pwaManager.isAppInstalled();
 
     const userId = currentUser ? (currentUser.id || currentUser.username || 'staff') : 'default';
     const availableStaffModules = isStaff ? navShortcutsManager.getAvailableModules(isSuperAdmin, business) : [];
@@ -51,7 +52,7 @@ export function renderHeader(container) {
                             </div>
                             <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                                 <span>Plataforma Modular de Reservaciones</span>
-                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.4">v1.7.4</button>
+                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.5">v1.7.5</button>
                             </div>
                         </div>
                     </div>
@@ -112,7 +113,7 @@ export function renderHeader(container) {
                         </div>
                         <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
                             <span>${business?.city || 'Arcade'}</span>
-                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.4">v1.7.4</button>
+                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.5">v1.7.5</button>
                         </div>
                     </div>
                 </div>
@@ -130,10 +131,12 @@ export function renderHeader(container) {
                         ${notificationManager.getPermissionStatus() === 'granted' ? '🔔' : '🔕'}
                     </button>
 
-                    <!-- Botón de Instalación PWA (Móvil y Escritorio) -->
-                    <button id="btn-pwa-install" class="btn btn-outline btn-xs btn-pwa-install" style="display:none; border-radius:var(--radius-full); padding:4px 9px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:bold; align-items:center; gap:4px;" title="Instalar Pump It Up Hub en tu celular o PC">
-                        <span>📲 Instalar App</span>
-                    </button>
+                    ${!isAppInstalled ? `
+                        <!-- Botón de Descarga / Instalación PWA (Móvil y Escritorio) -->
+                        <button id="btn-header-download-app" class="btn btn-outline btn-xs" style="border-radius:var(--radius-full); padding:4px 9px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:bold; display:inline-flex; align-items:center; gap:4px;" title="Descargar e instalar la App exclusiva de esta sucursal">
+                            <span>📲 Descargar App</span>
+                        </button>
+                    ` : ''}
 
                     <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" title="Ir al calendario de día para reservar" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
                         <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
@@ -192,18 +195,20 @@ export function renderHeader(container) {
                                     </button>
                                 ` : ''}
 
-                                <button class="dropdown-item btn-pwa-install" type="button" style="display:none;">
-                                    <span class="item-icon">📲</span>
-                                    <div class="item-info">
-                                        <strong>Instalar Aplicación (PWA)</strong>
-                                        <small>Añadir a pantalla de inicio</small>
-                                    </div>
-                                </button>
+                                ${!isAppInstalled ? `
+                                    <button class="dropdown-item ${currentView === 'DOWNLOAD' ? 'active' : ''}" data-view="DOWNLOAD" type="button">
+                                        <span class="item-icon">📲</span>
+                                        <div class="item-info">
+                                            <strong style="color:var(--color-neon-cyan);">Descargar App (PWA)</strong>
+                                            <small>Instalar y enlace exclusivo del local</small>
+                                        </div>
+                                    </button>
+                                ` : ''}
 
                                 <button class="dropdown-item btn-open-changelog-header" type="button">
                                     <span class="item-icon">📜</span>
                                     <div class="item-info">
-                                        <strong>Novedades (v1.7.4)</strong>
+                                        <strong>Novedades (v1.7.5)</strong>
                                         <small>Ver registro de cambios</small>
                                     </div>
                                 </button>
@@ -301,6 +306,13 @@ export function renderHeader(container) {
                                 <span class="tab-text">${isClientUser ? 'Mi Perfil' : 'Mi Cuenta'}</span>
                             </button>
                         ` : ''}
+
+                        ${(!isAppInstalled || currentView === 'DOWNLOAD') ? `
+                            <button class="nav-tab ${currentView === 'DOWNLOAD' ? 'active' : ''}" data-view="DOWNLOAD" title="Descargar e Instalar la App exclusiva de este local">
+                                <span class="tab-icon">📲</span>
+                                <span class="tab-text">Descargar App</span>
+                            </button>
+                        ` : ''}
                     </div>
 
                     <!-- Cluster de Operación & Staff (Personalizable por el usuario) -->
@@ -372,18 +384,22 @@ export function renderHeader(container) {
     });
 
     // Gestión de Botones de Instalación PWA
-    pwaManager.subscribe((canInstall) => {
+    pwaManager.subscribe((canInstall, isInstalled) => {
         container.querySelectorAll('.btn-pwa-install').forEach(el => {
-            el.style.display = canInstall ? (el.classList.contains('dropdown-item') ? 'flex' : 'inline-flex') : 'none';
+            el.style.display = (canInstall && !isInstalled) ? (el.classList.contains('dropdown-item') ? 'flex' : 'inline-flex') : 'none';
         });
+        if (isInstalled) {
+            container.querySelector('#btn-header-download-app')?.remove();
+            if (store.currentView !== 'DOWNLOAD') {
+                container.querySelectorAll('[data-view="DOWNLOAD"]').forEach(el => el.remove());
+            }
+        }
     });
 
-    container.querySelectorAll('.btn-pwa-install').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            container.querySelectorAll('.nav-dropdown-wrapper.open').forEach(w => w.classList.remove('open'));
-            pwaManager.promptInstall();
-        });
+    // Evento botón Descargar App en la cabecera
+    container.querySelector('#btn-header-download-app')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        store.setCurrentView('DOWNLOAD');
     });
 
     // Evento Regresar al Index para cambiar de local

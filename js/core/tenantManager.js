@@ -307,10 +307,20 @@ class TenantManager {
             } catch (e) {}
         }
 
+        const isSuperAdmin = this.isCurrentUserSuperAdmin();
+
         if (managerBizId && this.businesses.some(b => b.id === managerBizId)) {
-            this.activeBusinessId = managerBizId;
-            this.isLocalSelected = true;
-            localStorage.setItem(SESSION_LOCKED_KEY, managerBizId);
+            const mgrBiz = this.businesses.find(b => b.id === managerBizId);
+            if (this.isBusinessActive(mgrBiz) || isSuperAdmin) {
+                this.activeBusinessId = managerBizId;
+                this.isLocalSelected = true;
+                localStorage.setItem(SESSION_LOCKED_KEY, managerBizId);
+            } else {
+                this.isLocalSelected = false;
+                localStorage.removeItem(SESSION_LOCKED_KEY);
+                const firstActive = this.businesses.find(b => this.isBusinessActive(b));
+                this.activeBusinessId = firstActive ? firstActive.id : (this.businesses[0]?.id || null);
+            }
         } else {
             // Comprobar si la URL trae un parámetro de local explícito o si la ruta es /local/biz_ID
             const urlParams = new URLSearchParams(window.location.search);
@@ -324,26 +334,49 @@ class TenantManager {
                 }
             }
 
-            if (urlBizId && this.businesses.some(b => b.id === urlBizId)) {
+            const targetBiz = urlBizId ? this.businesses.find(b => b.id === urlBizId) : null;
+            if (targetBiz && (this.isBusinessActive(targetBiz) || isSuperAdmin)) {
                 this.activeBusinessId = urlBizId;
                 this.isLocalSelected = true;
                 localStorage.setItem(SESSION_LOCKED_KEY, urlBizId);
             } else {
+                // Si el local de la URL está inactivo y no es superadmin, limpiar el parámetro de la URL
+                if (urlBizId && targetBiz && !this.isBusinessActive(targetBiz) && !isSuperAdmin) {
+                    if (window.history.replaceState) {
+                        const cleanUrl = window.location.pathname;
+                        window.history.replaceState({}, '', cleanUrl);
+                    }
+                }
+
                 // Verificar si había un local seleccionado y bloqueado en sesión
                 const savedLocked = localStorage.getItem(SESSION_LOCKED_KEY);
-                if (savedLocked && this.businesses.some(b => b.id === savedLocked)) {
+                const savedBiz = savedLocked ? this.businesses.find(b => b.id === savedLocked) : null;
+                if (savedBiz && (this.isBusinessActive(savedBiz) || isSuperAdmin)) {
                     this.activeBusinessId = savedLocked;
                     this.isLocalSelected = true;
                 } else {
-                    // No hay local seleccionado todavía -> Debe mostrar el index de bienvenida con selector
+                    // No hay local seleccionado todavía o el guardado está inactivo -> Debe mostrar el index de bienvenida
                     this.isLocalSelected = false;
-                    this.activeBusinessId = this.businesses[0]?.id || null;
+                    localStorage.removeItem(SESSION_LOCKED_KEY);
+                    const firstActive = this.businesses.find(b => this.isBusinessActive(b));
+                    this.activeBusinessId = firstActive ? firstActive.id : (this.businesses[0]?.id || null);
                 }
             }
         }
 
         syncMetadataToServer(this.businesses);
         return this.getActiveBusiness();
+    }
+
+    isCurrentUserSuperAdmin() {
+        const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
+        if (sessionRaw) {
+            try {
+                const sess = JSON.parse(sessionRaw);
+                return sess && (sess.role === 'SUPERADMIN' || sess.isSuperAdmin === true);
+            } catch (e) {}
+        }
+        return false;
     }
 
     saveLocally(businesses) {
@@ -354,18 +387,37 @@ class TenantManager {
         return this.businesses;
     }
 
+    getActiveBusinesses() {
+        return this.businesses.filter(b => this.isBusinessActive(b));
+    }
+
     getBusinessById(id) {
         return this.businesses.find(b => b.id === id);
     }
 
     getActiveBusiness() {
-        return this.businesses.find(b => b.id === this.activeBusinessId) || this.businesses[0];
+        const activeBiz = this.businesses.find(b => b.id === this.activeBusinessId);
+        if (activeBiz && (this.isBusinessActive(activeBiz) || this.isCurrentUserSuperAdmin())) {
+            return activeBiz;
+        }
+        const firstActive = this.businesses.find(b => this.isBusinessActive(b));
+        return firstActive || this.businesses[0];
     }
 
     /**
      * El usuario selecciona un local desde la pantalla de bienvenida (Index)
      */
     async selectLocal(businessId) {
+        const isSuperAdmin = this.isCurrentUserSuperAdmin();
+        const targetBiz = this.businesses.find(b => b.id === businessId);
+        if (!targetBiz) return null;
+
+        // Candado estricto: Si el local está deshabilitado y no es Superadmin, denegar acceso
+        if (!this.isBusinessActive(targetBiz) && !isSuperAdmin) {
+            console.warn(`[TenantManager] Acceso denegado a sucursal inactiva: ${businessId}`);
+            return null;
+        }
+
         const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
         if (sessionRaw) {
             try {
@@ -376,15 +428,12 @@ class TenantManager {
             } catch (e) {}
         }
 
-        if (this.businesses.some(b => b.id === businessId)) {
-            this.activeBusinessId = businessId;
-            this.isLocalSelected = true;
-            localStorage.setItem(SESSION_LOCKED_KEY, businessId);
-            localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
-            this.notify();
-            return this.getActiveBusiness();
-        }
-        return null;
+        this.activeBusinessId = businessId;
+        this.isLocalSelected = true;
+        localStorage.setItem(SESSION_LOCKED_KEY, businessId);
+        localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
+        this.notify();
+        return this.getActiveBusiness();
     }
 
     /**
@@ -400,7 +449,7 @@ class TenantManager {
                     // El encargado no puede salir de su sucursal asignada
                     return;
                 }
-                if (sess && sess.role === 'SUPERADMIN') {
+                if (sess && (sess.role === 'SUPERADMIN' || sess.isSuperAdmin === true)) {
                     isSuperAdmin = true;
                 }
             } catch (e) {}
@@ -422,15 +471,20 @@ class TenantManager {
     }
 
     async setActiveBusiness(businessId) {
-        if (this.businesses.some(b => b.id === businessId)) {
-            this.activeBusinessId = businessId;
-            this.isLocalSelected = true;
-            localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
-            localStorage.setItem(SESSION_LOCKED_KEY, businessId);
-            this.notify();
-            return this.getActiveBusiness();
+        const isSuperAdmin = this.isCurrentUserSuperAdmin();
+        const targetBiz = this.businesses.find(b => b.id === businessId);
+        if (!targetBiz) return null;
+
+        if (!this.isBusinessActive(targetBiz) && !isSuperAdmin) {
+            return null;
         }
-        return null;
+
+        this.activeBusinessId = businessId;
+        this.isLocalSelected = true;
+        localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
+        localStorage.setItem(SESSION_LOCKED_KEY, businessId);
+        this.notify();
+        return this.getActiveBusiness();
     }
 
     async createBusiness(businessData, autoSelect = true) {

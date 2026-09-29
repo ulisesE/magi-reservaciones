@@ -5,10 +5,57 @@ import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.7.5',
+        date: '28 de Septiembre de 2026',
+        badge: '⚡ Versión Actual (Reordenar Máquinas, Descarga PWA & Privacidad)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '⇅ Reordenamiento de Máquinas en Vista de Día',
+                icon: '🕹️',
+                items: [
+                    'Exclusivo para locatarios y staff: reordena las columnas de máquinas para que se muestren en el orden personalizado en la Vista de Día.',
+                    'Modal interactivo con vista previa en tiempo real de las columnas del calendario y controles de subir / bajar.',
+                    'Botones directos de reordenamiento en el catálogo de máquinas y acceso directo desde el encabezado de Vista de Día.',
+                    'Persistencia atómica en Firestore, caché local y auditoría de cambios.'
+                ]
+            },
+            {
+                title: '📲 Página y Módulo de Descarga PWA Exclusiva por Local',
+                icon: '🚀',
+                items: [
+                    'Nueva vista dedicada (/download o ?view=DOWNLOAD) vinculada y personalizada para cada sucursal.',
+                    'Instalación nativa directa en 1 clic para celulares y computadoras.',
+                    'Generador y descarga de código QR imprimible de alta resolución para colocar en la sala.',
+                    'Enlace directo para compartir por WhatsApp con mensaje arcade preconfigurado.',
+                    'Guías visuales paso a paso para Android (Chrome), iPhone / iPad (Safari) y PC.'
+                ]
+            },
+            {
+                title: '👁️ Ocultamiento Inteligente de Botones de Descarga',
+                icon: '✨',
+                items: [
+                    'Detección automática de la App instalada (Modo Standalone / PWA).',
+                    'Si el usuario ya tiene la App descargada, los botones de descarga en cabecera, inicio y bienvenida se ocultan para mantener una interfaz limpia y libre de saturación.',
+                    'Los encargados y jugadores pueden seguir accediendo a las herramientas de compartir y código QR desde la vista de descarga.'
+                ]
+            },
+            {
+                title: '🔒 Seguridad y Filtrado de Locales Deshabilitados',
+                icon: '🛡️',
+                items: [
+                    'Los locales deshabilitados se ocultan automáticamente en la pantalla de bienvenida para clientes.',
+                    'Bloqueo estricto de acceso por URL a locales inactivos para cualquier usuario que no sea Super Admin.',
+                    'El Super Admin mantiene visualización completa con la insignia ⏸️ DESHABILITADO.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.7.4',
         date: '23 de Septiembre de 2026',
-        badge: '⚡ Versión Actual (PWA Móvil & Caja Unificada)',
-        isCurrent: true,
+        badge: 'PWA Móvil & Caja Unificada',
+        isCurrent: false,
         highlights: [
             {
                 title: '📲 Experiencia PWA Móvil Completa e Instalable',
@@ -357,7 +404,7 @@ export function openChangelogModal() {
     const footerHtml = `
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:10px;">
-                <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.4</small>
+                <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.5</small>
                 <button type="button" class="btn btn-outline btn-sm" id="btn-check-updates-changelog" style="font-size:0.75rem; padding:3px 8px;">
                     🔄 Buscar Actualizaciones
                 </button>

@@ -1,5 +1,5 @@
 // js/core/pwaManager.js
-// Gestor de Instalación PWA (Progressive Web App) — Pump It Up Hub (v1.7.4)
+// Gestor de Instalación PWA (Progressive Web App) — Pump It Up Hub (v1.7.5)
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 
@@ -17,10 +17,16 @@ class PWAManager {
         // 1. Detectar si ya corre como Standalone / App instalada
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
             || window.navigator.standalone === true 
-            || document.referrer.includes('android-app://');
+            || document.referrer.includes('android-app://')
+            || window.location.search.includes('source=pwa')
+            || window.location.search.includes('utm_source=pwa')
+            || localStorage.getItem('piu_pwa_installed_v1') === 'true';
 
         if (isStandalone) {
             this.isInstalled = true;
+            try {
+                localStorage.setItem('piu_pwa_installed_v1', 'true');
+            } catch (e) {}
             console.log("📱 [PWA] Ejecutándose en modo Standalone (App Instalada).");
         }
 
@@ -37,6 +43,9 @@ class PWAManager {
         window.addEventListener('appinstalled', () => {
             this.isInstalled = true;
             this.deferredPrompt = null;
+            try {
+                localStorage.setItem('piu_pwa_installed_v1', 'true');
+            } catch (e) {}
             console.log("🎉 [PWA] Aplicación instalada exitosamente en el dispositivo.");
             toast.success("¡Pump It Up Hub instalado exitosamente en tu dispositivo! 🕹️");
             this.notify();
@@ -44,10 +53,28 @@ class PWAManager {
     }
 
     /**
+     * Retorna si la aplicación ya está instalada en el dispositivo
+     */
+    isAppInstalled() {
+        if (typeof window === 'undefined') return false;
+        if (this.isInstalled) return true;
+        const installed = window.matchMedia('(display-mode: standalone)').matches 
+            || window.navigator.standalone === true 
+            || document.referrer.includes('android-app://')
+            || window.location.search.includes('source=pwa')
+            || window.location.search.includes('utm_source=pwa')
+            || localStorage.getItem('piu_pwa_installed_v1') === 'true';
+        if (installed) {
+            this.isInstalled = true;
+        }
+        return !!installed;
+    }
+
+    /**
      * Retorna si la aplicación puede ser promovida para instalación
      */
     canInstall() {
-        if (this.isInstalled) return false;
+        if (this.isAppInstalled()) return false;
         return !!this.deferredPrompt || this.isIos();
     }
 
@@ -146,10 +173,94 @@ class PWAManager {
         });
     }
 
+    /**
+     * Actualiza dinámicamente el Web App Manifest y metadatos de iOS para la sucursal activa
+     */
+    updateDynamicManifest(business) {
+        if (typeof window === 'undefined' || !business) return;
+
+        try {
+            let manifestEl = document.querySelector('link[rel="manifest"]');
+            if (!manifestEl) {
+                manifestEl = document.createElement('link');
+                manifestEl.rel = 'manifest';
+                document.head.appendChild(manifestEl);
+            }
+
+            const cleanBizName = business.name || 'PIU Hub';
+            const shortBizName = cleanBizName.length > 12 ? cleanBizName.substring(0, 12) : cleanBizName;
+
+            const dynamicManifest = {
+                name: `${cleanBizName} • Pump It Up Hub`,
+                short_name: shortBizName,
+                description: `Sistema de reservaciones de maquinitas Pump It Up y retas Versus para ${cleanBizName} (${business.city || 'Arcade'}).`,
+                id: `/?local=${business.id}`,
+                start_url: `/?local=${business.id}&source=pwa`,
+                scope: "/",
+                display: "standalone",
+                orientation: "portrait-primary",
+                background_color: "#080a0f",
+                theme_color: "#080a0f",
+                lang: "es-MX",
+                categories: ["entertainment", "games", "sports"],
+                icons: [
+                    {
+                        src: "icons/icon-192.png",
+                        sizes: "192x192",
+                        type: "image/png",
+                        purpose: "any"
+                    },
+                    {
+                        src: "icons/icon-512.png",
+                        sizes: "512x512",
+                        type: "image/png",
+                        purpose: "any"
+                    },
+                    {
+                        src: "icons/icon-maskable.png",
+                        sizes: "512x512",
+                        type: "image/png",
+                        purpose: "maskable"
+                    },
+                    {
+                        src: "icons/icon.svg",
+                        sizes: "512x512",
+                        type: "image/svg+xml",
+                        purpose: "any"
+                    }
+                ]
+            };
+
+            const manifestBlob = new Blob([JSON.stringify(dynamicManifest, null, 2)], { type: 'application/json' });
+            if (this.currentManifestBlobUrl) {
+                URL.revokeObjectURL(this.currentManifestBlobUrl);
+            }
+            this.currentManifestBlobUrl = URL.createObjectURL(manifestBlob);
+            manifestEl.setAttribute('href', this.currentManifestBlobUrl);
+
+            // Actualizar meta tags para dispositivos Apple iOS
+            let appleTitleEl = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+            if (appleTitleEl) {
+                appleTitleEl.setAttribute('content', shortBizName);
+            }
+        } catch (e) {
+            console.warn("[PWA] Error actualizando manifest dinámico:", e);
+        }
+    }
+
+    /**
+     * Retorna la URL directa de descarga e instalación para una sucursal específica
+     */
+    getInstallShareUrl(businessId) {
+        if (typeof window === 'undefined') return '';
+        const base = window.location.origin + window.location.pathname;
+        return `${base}?local=${businessId || ''}`;
+    }
+
     subscribe(callback) {
         this.listeners.push(callback);
         // Notificar inmediatamente el estado actual
-        callback(this.canInstall(), this.isInstalled);
+        callback(this.canInstall(), this.isAppInstalled());
         return () => {
             this.listeners = this.listeners.filter(cb => cb !== callback);
         };
@@ -157,9 +268,10 @@ class PWAManager {
 
     notify() {
         const canInst = this.canInstall();
+        const isInst = this.isAppInstalled();
         this.listeners.forEach(cb => {
             try {
-                cb(canInst, this.isInstalled);
+                cb(canInst, isInst);
             } catch (e) {
                 console.warn("[PWA] Error en listener:", e);
             }
@@ -168,3 +280,4 @@ class PWAManager {
 }
 
 export const pwaManager = new PWAManager();
+
