@@ -144,19 +144,21 @@ async function loadAndRenderAnalyticsData(container, business) {
 
     try {
         const bizId = business?.id;
-        let allReservations = [];
+        let allReservations = cachedReservations.length > 0 ? [...cachedReservations] : [];
 
-        // Consultar reservas de Firestore
-        if (isFirebaseAvailable && db && bizId) {
+        // Consultar reservas de Firestore (solo si no están en caché en memoria)
+        if (allReservations.length === 0 && isFirebaseAvailable && db && bizId && canMakeFirestoreRead()) {
             try {
                 const q = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", bizId)
+                    where("businessId", "==", bizId),
+                    limit(200)
                 );
                 const snap = await getDocs(q);
                 snap.forEach(d => {
                     allReservations.push({ id: d.id, ...d.data() });
                 });
+                cachedReservations = [...allReservations];
             } catch (err) {
                 console.warn("Fallo lectura directa Firestore en Analytics, usando store local:", err);
             }

@@ -17,12 +17,12 @@ import {
     doc, 
     updateDoc, 
     deleteDoc, 
-    onSnapshot, 
+    onSnapshot as _onSnapshot, 
     query, 
     where, 
-    getDocs, 
+    getDocs as _getDocs, 
     setDoc, 
-    getDoc,
+    getDoc as _getDoc,
     runTransaction,
     writeBatch,
     serverTimestamp,
@@ -165,7 +165,79 @@ export function canMakeFirestoreRead() {
     return isFirebaseAvailable && db && !isQuotaExhausted() && isOnline();
 }
 
+// =========================================================================
+// MONITOR DE LECTURAS DE FIRESTORE EN TIEMPO REAL (ZERO-LEAK AUDITOR)
+// =========================================================================
+let totalSessionReads = 0;
+const readListeners = new Set();
 
+export function onReadCountChange(fn) {
+    if (typeof fn === 'function') readListeners.add(fn);
+}
+
+export function getTotalSessionReads() {
+    return totalSessionReads;
+}
+
+function notifyReadCount() {
+    readListeners.forEach(fn => {
+        try { fn(totalSessionReads); } catch (e) {}
+    });
+}
+
+export async function getDocs(q) {
+    if (!canMakeFirestoreRead()) {
+        throw new Error("QUOTA_EXHAUSTED_OR_OFFLINE");
+    }
+    const snap = await _getDocs(q);
+    const count = snap.size || 0;
+    totalSessionReads += count;
+    notifyReadCount();
+    console.log(`%c📊 [FIRESTORE MONITOR] getDocs: ${count} documentos leídos | Total en esta sesión: ${totalSessionReads}`, "color:#00ff88; font-weight:bold;");
+    return snap;
+}
+
+export function onSnapshot(q, onNext, onError) {
+    let isFirstSnapshot = true;
+    return _onSnapshot(q, (snapshot) => {
+        if (isFirstSnapshot) {
+            const count = snapshot.size || 0;
+            totalSessionReads += count;
+            notifyReadCount();
+            console.log(`%c📡 [FIRESTORE MONITOR] onSnapshot (carga inicial): ${count} documentos | Total en esta sesión: ${totalSessionReads}`, "color:#00ddff; font-weight:bold;");
+            isFirstSnapshot = false;
+        } else {
+            const changesCount = snapshot.docChanges().length;
+            if (changesCount > 0) {
+                totalSessionReads += changesCount;
+                notifyReadCount();
+                console.log(`%c📡 [FIRESTORE MONITOR] onSnapshot (cambios reactivos): ${changesCount} documentos | Total en esta sesión: ${totalSessionReads}`, "color:#FFB800; font-weight:bold;");
+            }
+        }
+        if (onNext) onNext(snapshot);
+    }, (err) => {
+        if (err?.code === 'resource-exhausted') {
+            markQuotaExhausted();
+        }
+        if (onError) onError(err);
+    });
+}
+
+export async function getDoc(docRef) {
+    if (!canMakeFirestoreRead()) {
+        throw new Error("QUOTA_EXHAUSTED_OR_OFFLINE");
+    }
+    const snap = await _getDoc(docRef);
+    totalSessionReads += (snap.exists() ? 1 : 1);
+    notifyReadCount();
+    console.log(`%c📄 [FIRESTORE MONITOR] getDoc: 1 documento (${snap.id}) | Total en esta sesión: ${totalSessionReads}`, "color:#C3D91E; font-weight:bold;");
+    return snap;
+}
+
+if (typeof window !== 'undefined') {
+    window.__getFirestoreReads = () => totalSessionReads;
+    window.__resetFirestoreReads = () => { totalSessionReads = 0; notifyReadCount(); };
+}
 
 export { 
     app, 
@@ -183,12 +255,9 @@ export {
     doc, 
     updateDoc, 
     deleteDoc, 
-    onSnapshot, 
     query, 
     where, 
-    getDocs, 
     setDoc, 
-    getDoc,
     runTransaction,
     writeBatch,
     serverTimestamp,

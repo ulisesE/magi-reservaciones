@@ -87,6 +87,7 @@ class AccountManager {
     constructor() {
         this.cache = new Map();
         this.productsCache = new Map();
+        this.consumptionsCache = new Map();
         this.processedIdempotencyKeys = new Set();
     }
 
@@ -1041,32 +1042,39 @@ class AccountManager {
         };
     }
 
-    /**
-     * Obtiene todos los movimientos de la sucursal con filtros de cliente, estado y fecha.
-     */
-    async getBusinessTransactions(businessId, { playerId = null, dateFilter = 'ALL', status = 'ALL' } = {}) {
+    async fetchAllBusinessConsumptions(businessId, force = false) {
         if (!businessId) return [];
-        let list = [];
+        const now = Date.now();
+        const cached = this.consumptionsCache?.get(businessId);
+        if (!force && cached && (now - cached.timestamp < 120000)) {
+            return [...cached.list];
+        }
 
-        if (isFirebaseAvailable && db) {
+        let list = [];
+        if (isFirebaseAvailable && db && canMakeFirestoreRead()) {
             try {
-                let q = query(
+                const q = query(
                     collection(db, COLLECTIONS.CONSUMPTIONS),
-                    where("businessId", "==", businessId)
+                    where("businessId", "==", businessId),
+                    limit(250)
                 );
-                if (playerId) {
-                    q = query(
-                        collection(db, COLLECTIONS.CONSUMPTIONS),
-                        where("businessId", "==", businessId),
-                        where("playerId", "==", playerId)
-                    );
-                }
                 const snap = await getDocs(q);
                 snap.forEach(d => list.push({ id: d.id, ...d.data() }));
             } catch (err) {
                 handleAppError(err, { context: "Error cargando movimientos del negocio", showToast: false });
             }
         }
+        if (!this.consumptionsCache) this.consumptionsCache = new Map();
+        this.consumptionsCache.set(businessId, { list, timestamp: now });
+        return [...list];
+    }
+
+    /**
+     * Obtiene todos los movimientos de la sucursal con filtros de cliente, estado y fecha.
+     */
+    async getBusinessTransactions(businessId, { playerId = null, dateFilter = 'ALL', status = 'ALL' } = {}) {
+        if (!businessId) return [];
+        let list = await this.fetchAllBusinessConsumptions(businessId);
 
         list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
@@ -1107,19 +1115,7 @@ class AccountManager {
     async getDebtorsSummary(businessId) {
         if (!businessId) return { totalReceivableDebt: 0, totalDebtorsCount: 0, totalCreditSales: 0, debtorsList: [] };
 
-        let allTransactions = [];
-        if (isFirebaseAvailable && db) {
-            try {
-                const q = query(
-                    collection(db, COLLECTIONS.CONSUMPTIONS),
-                    where("businessId", "==", businessId)
-                );
-                const snap = await getDocs(q);
-                snap.forEach(d => allTransactions.push({ id: d.id, ...d.data() }));
-            } catch (err) {
-                handleAppError(err, { context: "Error consultando resumen de deudores", showToast: false });
-            }
-        }
+        const allTransactions = await this.fetchAllBusinessConsumptions(businessId);
 
         const activeTx = allTransactions.filter(t => t.status !== 'CANCELLED' && t.status !== 'VOIDED');
         const playerMap = new Map();

@@ -367,10 +367,11 @@ class NotificationManager {
             // B. NOTIFICACIONES PARA ENCARGADOS / LOCATARIOS (MANAGER / STAFF)
             // =========================================================================
             if (isStaff && userBizId) {
-                // Escuchar nuevas solicitudes de reservación en SU sucursal
+                // Escuchar únicamente nuevas solicitudes PENDING en SU sucursal (evita descargar miles de reservas históricas)
                 const qStaffReservations = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", userBizId)
+                    where("businessId", "==", userBizId),
+                    where("status", "==", "PENDING")
                 );
 
                 const unsubStaffRes = onSnapshot(qStaffReservations, (snapshot) => {

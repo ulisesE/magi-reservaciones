@@ -26,7 +26,7 @@ import { notificationManager } from './core/notificationManager.js';
 import { pwaManager } from './core/pwaManager.js';
 import { openChangelogModal } from './components/changelogModal.js';
 import { updateManager } from './core/updateManager.js';
-import { isFirebaseAvailable, isQuotaExhausted, canMakeFirestoreRead } from './firebaseConfig.js';
+import { isFirebaseAvailable, isQuotaExhausted, canMakeFirestoreRead, onReadCountChange, getTotalSessionReads } from './firebaseConfig.js';
 import './core/financialTests.js';
 
 class App {
@@ -120,7 +120,8 @@ class App {
             this.render();
         });
 
-        // 7. Actualizar indicador de conexión
+        // 7. Actualizar indicador de conexión y escuchar lecturas en tiempo real
+        onReadCountChange(() => this.updateSyncIndicator());
         this.updateSyncIndicator();
     }
 
@@ -138,20 +139,23 @@ class App {
 
     updateSyncIndicator() {
         if (this.syncStatusEl) {
+            const reads = getTotalSessionReads();
+            const readPill = reads > 0 ? ` • 📊 ${reads} doc${reads === 1 ? '' : 's'}` : '';
+
             if (isQuotaExhausted()) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#FFB800; box-shadow: 0 0 8px #FFB800;"></span>
-                    <span style="color:#FFB800; border-bottom: 1px dotted rgba(255,184,0,0.5); cursor:pointer;">Modo Local (Cuota Protegida 🛡️)</span>
+                    <span style="color:#FFB800; border-bottom: 1px dotted rgba(255,184,0,0.5); cursor:pointer;">Modo Local (Cuota Protegida 🛡️${readPill})</span>
                 `;
             } else if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Conexión Segura (v1.9.0 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Conexión Segura (v1.9.0${readPill} • Novedades 📜)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Modo Local (v1.9.0 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Modo Local (v1.9.0${readPill} • Novedades 📜)</span>
                 `;
             }
         }
