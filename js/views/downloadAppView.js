@@ -64,6 +64,7 @@ export function renderDownloadAppView(container) {
     const downloadPageUrl = `${baseUrl}?local=${business.id}&view=DOWNLOAD`;
     const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=10&data=${encodeURIComponent(directLocalUrl)}`;
     const isStandalone = pwaManager.isStandaloneMode();
+    const isIos = pwaManager.isIos();
 
     container.innerHTML = `
         <div class="download-app-view-container animate-fade-in">
