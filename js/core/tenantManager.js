@@ -375,19 +375,24 @@ class TenantManager {
         this.listeners = [];
         this.unsubscribeBusinesses = null;
         this.unsubscribeGlobalConfig = null;
-        this.disableChangeLocalGlobally = false;
+        this.disableChangeLocalGlobally = true; // Por defecto desactivada la opción de cambiar de local (bloqueada globalmente)
     }
 
     async init() {
         let loaded = [];
 
-        // 1. Cargar Configuración Global desde LocalStorage (Zero-Read)
+        // 1. Cargar Configuración Global desde LocalStorage (Zero-Read fallback)
         const localConfig = localStorage.getItem('piu_global_config_v1');
         if (localConfig) {
             try {
                 const parsed = JSON.parse(localConfig);
-                this.disableChangeLocalGlobally = !!parsed.disableChangeLocalGlobally;
+                if (typeof parsed.disableChangeLocalGlobally === 'boolean') {
+                    this.disableChangeLocalGlobally = parsed.disableChangeLocalGlobally;
+                }
             } catch (e) {}
+        } else {
+            // Predeterminado en el sistema: opción de cambiar de local desactivada (bloqueada)
+            this.disableChangeLocalGlobally = true;
         }
 
         // 2. Cargar Negocios desde LocalStorage o Semillas en Memoria (Zero-Read)
@@ -500,6 +505,8 @@ class TenantManager {
         // Si hay conexión y cuota disponible, sincronizar cambios frescos en segundo plano sin bloquear el arranque
         if (canMakeFirestoreRead()) {
             this.syncFromFirestore().catch(e => console.warn("[TenantManager] Sync Firestore diferido:", e));
+            this.syncGlobalConfigFromFirestore().catch(e => console.warn("[TenantManager] Sync config global diferido:", e));
+            this.setupGlobalConfigListener();
         }
 
         syncMetadataToServer(this.businesses);
@@ -518,12 +525,54 @@ class TenantManager {
                 this.businesses = remote;
                 this.saveLocally(this.businesses);
                 syncMetadataToServer(this.businesses);
-                this.notify();
             }
+            await this.syncGlobalConfigFromFirestore();
+            this.notify();
         } catch (err) {
             if (err?.code === 'resource-exhausted') markQuotaExhausted();
             console.warn("Error sincronizando negocios de Firestore:", err);
         }
+    }
+
+    async syncGlobalConfigFromFirestore() {
+        if (!canMakeFirestoreRead()) return;
+        try {
+            const configRef = doc(db, 'piu_system_settings', 'global_config');
+            const snap = await getDoc(configRef);
+            if (snap.exists()) {
+                const data = snap.data();
+                if (typeof data.disableChangeLocalGlobally === 'boolean') {
+                    this.disableChangeLocalGlobally = data.disableChangeLocalGlobally;
+                    localStorage.setItem('piu_global_config_v1', JSON.stringify({
+                        disableChangeLocalGlobally: this.disableChangeLocalGlobally
+                    }));
+                }
+            }
+        } catch (err) {
+            if (err?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("[TenantManager] Error cargando config global de Firestore:", err);
+        }
+    }
+
+    setupGlobalConfigListener() {
+        if (!isFirebaseAvailable || !db || this.unsubscribeGlobalConfig || !canMakeFirestoreRead()) return;
+        try {
+            const configRef = doc(db, 'piu_system_settings', 'global_config');
+            this.unsubscribeGlobalConfig = onSnapshot(configRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (typeof data.disableChangeLocalGlobally === 'boolean' && this.disableChangeLocalGlobally !== data.disableChangeLocalGlobally) {
+                        this.disableChangeLocalGlobally = data.disableChangeLocalGlobally;
+                        localStorage.setItem('piu_global_config_v1', JSON.stringify({
+                            disableChangeLocalGlobally: this.disableChangeLocalGlobally
+                        }));
+                        this.notify();
+                    }
+                }
+            }, (err) => {
+                if (err?.code === 'resource-exhausted') markQuotaExhausted();
+            });
+        } catch (e) {}
     }
 
     detachListeners() {
@@ -629,6 +678,11 @@ class TenantManager {
 
         // Si el cambio de local está bloqueado globalmente, el superadmin sí puede salir, pero otros no
         if (this.disableChangeLocalGlobally && !isSuperAdmin) {
+            return;
+        }
+
+        const activeBiz = this.getActiveBusiness();
+        if (activeBiz?.disableChangeLocal && !isSuperAdmin) {
             return;
         }
 

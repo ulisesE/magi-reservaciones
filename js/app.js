@@ -277,11 +277,13 @@ class App {
                     </div>
                 ` : ''}
 
-                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                    <button type="button" class="btn btn-outline" id="btn-back-to-landing-paused">
-                        <span>🏠 Cambiar de Sucursal</span>
-                    </button>
-                </div>
+                ${(!tenantManager.disableChangeLocalGlobally || authManager.isSuperAdmin()) ? `
+                    <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-outline" id="btn-back-to-landing-paused">
+                            <span>🏠 Cambiar de Sucursal</span>
+                        </button>
+                    </div>
+                ` : ''}
             </div>
         `;
 
