@@ -6,6 +6,25 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.9.0] - 2026-09-29
+
+### 🛡️ Optimización de Rendimiento y Arquitectura
+- **Arquitectura Zero-Read (Cero Lecturas Previas)**:
+  - Carga diferida de colecciones: La aplicación opera 100% en memoria y LocalStorage hasta que el usuario inicia sesión.
+  - Eliminación del bug de doble fetch (`getDocs` previo a `onSnapshot`).
+  - Carga única en memoria para catálogos estáticos (máquinas, modelos de gabinetes, versiones de juego).
+
+- **Escudo Inteligente Anti-Cuota de Firestore (Anti-429 Shield)**:
+  - Detección inmediata de errores `429` / `resource-exhausted`.
+  - Desconexión preventiva de la red Firestore (`disableNetwork`) para erradicar las cascadas de reintentos y spam en consola.
+  - Activación fluida del modo local sin interrupción de la experiencia del usuario.
+
+- **Aislamiento Multi-App en Despliegue CI/CD**:
+  - Configuración del flujo de GitHub Actions para desplegar exclusivamente `--only hosting:magi-suite`, protegiendo la coexistencia de múltiples aplicaciones en el proyecto Firebase `test-89a00`.
+  - Enrutamiento directo y ultraligero de sucursales (`/local/:id`) en cliente sin requerir Cloud Functions.
+
+---
+
 ## [1.7.5] - 2026-09-28
 
 ### 🚀 Nuevas Características

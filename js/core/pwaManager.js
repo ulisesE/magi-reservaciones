@@ -1,5 +1,5 @@
 // js/core/pwaManager.js
-// Gestor de Instalación PWA (Progressive Web App) — Pump It Up Hub (v1.7.5)
+// Gestor de Instalación PWA (Progressive Web App) — Pump It Up Hub (v1.9.0)
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 

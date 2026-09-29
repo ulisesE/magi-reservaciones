@@ -5,10 +5,35 @@ import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.9.0',
+        date: '29 de Septiembre de 2026',
+        badge: '🛡️ Versión Actual (Zero-Read, Escudo Anti-Cuota & Despliegue Aislado)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🛡️ Arquitectura Zero-Read y Escudo Anti-Cuota',
+                icon: '⚡',
+                items: [
+                    'Eliminación de lecturas previas al inicio de sesión: el sistema opera 100% en memoria y caché local hasta autenticar al usuario.',
+                    'Escudo inteligente contra cuota diaria de Firestore agotada (429): desconexión preventiva para evitar spam en consola y garantizar modo offline fluido.',
+                    'Optimización de consultas a Firestore: eliminación de listeners redundantes y duplicación de peticiones.'
+                ]
+            },
+            {
+                title: '🌐 Despliegue Multi-App Aislado',
+                icon: '🚀',
+                items: [
+                    'Aislamiento completo en CI/CD para coexistir pacíficamente con múltiples aplicaciones en el mismo proyecto Firebase (test-89a00).',
+                    'Enrutamiento directo y ultraligero de sucursales sin depender de Cloud Functions.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.7.5',
         date: '28 de Septiembre de 2026',
-        badge: '⚡ Versión Actual (Reordenar Máquinas, Descarga PWA & Privacidad)',
-        isCurrent: true,
+        badge: '⇅ Reordenar Máquinas, Descarga PWA & Privacidad',
+        isCurrent: false,
         highlights: [
             {
                 title: '⇅ Reordenamiento de Máquinas en Vista de Día',
@@ -404,7 +429,7 @@ export function openChangelogModal() {
     const footerHtml = `
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:10px;">
-                <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.5</small>
+                <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.9.0</small>
                 <button type="button" class="btn btn-outline btn-sm" id="btn-check-updates-changelog" style="font-size:0.75rem; padding:3px 8px;">
                     🔄 Buscar Actualizaciones
                 </button>
