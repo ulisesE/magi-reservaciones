@@ -50,9 +50,8 @@ export function renderHeader(container) {
                             <div class="brand-title">
                                 <span class="piu-highlight">PUMP IT UP</span> HUB
                             </div>
-                            <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
+                            <div class="brand-subtitle">
                                 <span>Plataforma Modular de Reservaciones</span>
-                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.9.0">v1.9.0</button>
                             </div>
                         </div>
                     </div>
@@ -111,20 +110,14 @@ export function renderHeader(container) {
                         <div class="brand-title" style="font-size:1.15rem;">
                             <span class="piu-highlight">${business?.name || 'Pump It Up'}</span>
                         </div>
-                        <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
+                        <div class="brand-subtitle">
                             <span>${business?.city || 'Arcade'}</span>
-                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.9.0">v1.9.0</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Control de Acceso, Red y Acciones -->
+                <!-- Control de Acceso, Notificaciones y Acciones -->
                 <div class="header-actions">
-                    <!-- Indicador de Conexión de Red -->
-                    <div id="header-network-status" class="network-status-badge ${navigator.onLine ? 'online' : 'offline'}" style="display:flex; align-items:center; gap:5px; font-size:0.72rem; padding:3px 8px; border-radius:12px; background:${navigator.onLine ? 'rgba(104,242,5,0.1)' : 'rgba(255,184,0,0.15)'}; border:1px solid ${navigator.onLine ? 'rgba(104,242,5,0.3)' : 'rgba(255,184,0,0.4)'}; color:${navigator.onLine ? 'var(--color-neon-lime)' : 'var(--color-neon-gold)'}; font-weight:700;" title="${navigator.onLine ? 'Conectado a Firestore' : 'Modo Sin Conexión'}">
-                        <span style="font-size:0.6rem;">${navigator.onLine ? '🟢' : '🟡'}</span>
-                        <span class="network-status-text">${navigator.onLine ? 'En Línea' : 'Offline'}</span>
-                    </div>
 
                     <!-- Botón de Notificaciones del Navegador -->
                     <button id="btn-toggle-notifs" class="btn btn-outline btn-xs" style="border-radius:var(--radius-full); padding:4px 8px; font-size:0.85rem;" title="${notificationManager.getPermissionStatus() === 'granted' ? 'Notificaciones activadas (clic para probar)' : 'Activar notificaciones del navegador'}">
@@ -203,7 +196,7 @@ export function renderHeader(container) {
                                     </div>
                                 </button>
 
-                                <button class="dropdown-item btn-open-changelog-header" type="button">
+                                <button class="dropdown-item btn-open-changelog-menu" type="button">
                                     <span class="item-icon">📜</span>
                                     <div class="item-info">
                                         <strong>Novedades (v1.9.0)</strong>
@@ -364,8 +357,8 @@ export function renderHeader(container) {
         </header>
     `;
 
-    // Evento para abrir el Changelog modal
-    container.querySelectorAll('.btn-open-changelog-header').forEach(btn => {
+    // Evento para abrir el Changelog modal desde el menú desplegable
+    container.querySelectorAll('.btn-open-changelog-menu, .btn-open-changelog-header').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             openChangelogModal();

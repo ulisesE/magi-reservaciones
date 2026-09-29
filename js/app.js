@@ -33,14 +33,18 @@ class App {
     constructor() {
         this.headerContainer = document.getElementById('header-container');
         this.mainContent = document.getElementById('main-content');
-        this.syncStatusEl = document.getElementById('cloud-sync-status');
         
-        // Listener para abrir el Changelog al hacer clic en el indicador de versión
-        if (this.syncStatusEl) {
-            this.syncStatusEl.addEventListener('click', () => {
+        // Listener global para abrir el Changelog desde el footer (botón o contenedor de estado)
+        document.addEventListener('click', (e) => {
+            const changelogTrigger = e.target.closest('#btn-open-changelog-footer, .btn-open-changelog-footer, #cloud-sync-status');
+            if (changelogTrigger) {
+                e.preventDefault();
                 openChangelogModal();
-            });
-        }
+            }
+        });
+
+        // Configurar estado de conexión a Firestore en el footer
+        this.setupFooterNetworkStatus();
     }
 
     async init() {
@@ -290,6 +294,45 @@ class App {
         container.querySelector('#btn-back-to-landing-paused')?.addEventListener('click', () => {
             tenantManager.clearSelectedLocal();
         });
+    }
+
+    setupFooterNetworkStatus() {
+        const updateNetworkStatus = () => {
+            const footerStatus = document.getElementById('footer-network-status');
+            if (!footerStatus) return;
+
+            const isOnline = navigator.onLine;
+            const dot = footerStatus.querySelector('.status-indicator-dot');
+            const text = footerStatus.querySelector('.network-status-text');
+
+            if (isOnline) {
+                footerStatus.className = 'network-status-badge online';
+                footerStatus.style.background = 'rgba(104,242,5,0.1)';
+                footerStatus.style.borderColor = 'rgba(104,242,5,0.3)';
+                footerStatus.style.color = 'var(--color-neon-lime)';
+                footerStatus.title = 'Conectado en tiempo real a Firebase / Firestore';
+                if (dot) {
+                    dot.style.background = '#68F205';
+                    dot.style.boxShadow = '0 0 8px #68F205';
+                }
+                if (text) text.textContent = 'Conectado a Firestore';
+            } else {
+                footerStatus.className = 'network-status-badge offline';
+                footerStatus.style.background = 'rgba(255,184,0,0.15)';
+                footerStatus.style.borderColor = 'rgba(255,184,0,0.4)';
+                footerStatus.style.color = 'var(--color-neon-gold)';
+                footerStatus.title = 'Modo Sin Conexión';
+                if (dot) {
+                    dot.style.background = '#FFB800';
+                    dot.style.boxShadow = '0 0 8px #FFB800';
+                }
+                if (text) text.textContent = 'Modo Sin Conexión';
+            }
+        };
+
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+        updateNetworkStatus();
     }
 }
 
