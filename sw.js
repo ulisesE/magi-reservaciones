@@ -102,11 +102,24 @@ self.addEventListener('fetch', (event) => {
     if (url.origin === self.location.origin && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.includes('/js/') || url.pathname.includes('/css/'))) {
         event.respondWith(
             fetch(request).then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
-                    const responseToCache = networkResponse.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(request, responseToCache);
-                    });
+                if (networkResponse) {
+                    const contentType = networkResponse.headers.get('content-type') || '';
+                    // NUNCA guardar en caché ni devolver text/html para archivos JS/CSS (ej. si el servidor SPA devuelve index.html ante 404)
+                    if (networkResponse.status === 200 && !contentType.includes('text/html')) {
+                        const responseToCache = networkResponse.clone();
+                        caches.open(CACHE_NAME).then((cache) => {
+                            cache.put(request, responseToCache);
+                        });
+                        return networkResponse;
+                    }
+                    if (contentType.includes('text/html')) {
+                        console.warn('[SW] Respuesta text/html recibida para recurso script/estilo:', request.url);
+                        return new Response('/* Error: Recurso no encontrado (el servidor respondió con HTML) */', {
+                            status: 404,
+                            statusText: 'Not Found',
+                            headers: { 'Content-Type': 'application/javascript; charset=utf-8' }
+                        });
+                    }
                 }
                 return networkResponse;
             }).catch(() => {

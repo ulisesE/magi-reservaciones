@@ -121,7 +121,14 @@ try {
             $response.OutputStream.Write($bytes, 0, $bytes.Length)
         } else {
             $response.StatusCode = 404
-            $buffer = [System.Text.Encoding]::UTF8.GetBytes("404 Not Found: $url")
+            $ext = [System.IO.Path]::GetExtension($urlClean).ToLower()
+            if ($ext -eq ".js") {
+                $response.ContentType = "application/javascript; charset=utf-8"
+                $buffer = [System.Text.Encoding]::UTF8.GetBytes("/* 404 Not Found: $url */")
+            } else {
+                $response.ContentType = "text/plain; charset=utf-8"
+                $buffer = [System.Text.Encoding]::UTF8.GetBytes("404 Not Found: $url")
+            }
             $response.ContentLength64 = $buffer.Length
             $response.OutputStream.Write($buffer, 0, $buffer.Length)
         }
