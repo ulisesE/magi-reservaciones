@@ -16,7 +16,10 @@ import {
     runTransaction,
     query, 
     where,
-    limit 
+    limit,
+    canMakeFirestoreRead,
+    markQuotaExhausted,
+    isQuotaExhausted 
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
@@ -265,57 +268,86 @@ class Store {
         await this.loadBusinessData();
     }
 
-    async loadBusinessData() {
-        if (!this.currentBusiness) return;
-        const bizId = this.currentBusiness.id;
-
+    detachAllListeners() {
         this.unsubscribeReservations?.();
         this.unsubscribePendingReservations?.();
         this.unsubscribeMachines?.();
         this.unsubscribeReservations = null;
         this.unsubscribePendingReservations = null;
         this.unsubscribeMachines = null;
+    }
+
+    async loadBusinessData() {
+        if (!this.currentBusiness) return;
+        const bizId = this.currentBusiness.id;
+
+        this.detachAllListeners();
 
         let loadedMachines = [];
         let loadedReservations = [];
         let loadedFromFirestore = false;
 
-        if (isFirebaseAvailable && db) {
-            try {
-                const machQuery = query(collection(db, COLLECTIONS.MACHINES), where("businessId", "==", bizId));
-                const machSnap = await getDocs(machQuery);
-                machSnap.forEach(d => loadedMachines.push({ id: d.id, ...d.data() }));
+        const isUserLoggedIn = !!authManager.getCurrentUser();
 
-                // Inicialmente cargamos las reservas de la fecha seleccionada/hoy usando la zona horaria local
-                const todayStr = this.selectedDate || formatDateKey(new Date());
-                this.currentSubscriptionRange = { start: todayStr, end: todayStr };
+        // 1. SI NO HAY USUARIO LOGUEADO O LA CUOTA ESTÁ AGOTADA:
+        // Cargar exclusivamente de LocalStorage y semillas (ZERO READS A FIRESTORE)
+        if (!isUserLoggedIn || !canMakeFirestoreRead()) {
+            const localMach = localStorage.getItem(`piu_machines_${bizId}`);
+            if (localMach) {
+                try { loadedMachines = JSON.parse(localMach); } catch (e) { loadedMachines = []; }
+            }
+            if (loadedMachines.length === 0) {
+                loadedMachines = DEFAULT_MACHINES_BY_BIZ[bizId] || [];
+            }
+            this.machines = loadedMachines;
 
-                const resQuery = query(
-                    collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", bizId),
-                    where("date", "==", todayStr)
-                );
-                const resSnap = await getDocs(resQuery);
-                resSnap.forEach(d => loadedReservations.push({ id: d.id, ...d.data() }));
+            const localRes = localStorage.getItem(`piu_reservations_${bizId}`);
+            if (localRes) {
+                try { loadedReservations = JSON.parse(localRes); } catch (e) { loadedReservations = []; }
+            }
+            this.reservations = loadedReservations;
+            this.pendingReservations = loadedReservations.filter(r => r.status === 'PENDING');
+            this.notify();
+            return;
+        }
+
+        // 2. SI HAY USUARIO AUTENTICADO Y CUOTA DISPONIBLE:
+        try {
+            // A. Cargar catálogo de máquinas UNA SOLA VEZ (sin listener onSnapshot permanente)
+            const machQuery = query(collection(db, COLLECTIONS.MACHINES), where("businessId", "==", bizId));
+            const machSnap = await getDocs(machQuery);
+            machSnap.forEach(d => loadedMachines.push({ id: d.id, ...d.data() }));
+            if (loadedMachines.length > 0) {
+                this.machines = loadedMachines;
+                this.saveLocalMachines(bizId, this.machines);
                 loadedFromFirestore = true;
+            }
 
-                this.unsubscribeMachines = onSnapshot(machQuery, (snapshot) => {
-                    this.machines = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                    this.saveLocalMachines(bizId, this.machines);
-                    this.notify();
-                }, (error) => console.warn('Error de sincronización de máquinas:', error));
+            // B. Reservaciones: Suscribirse con onSnapshot DIRECTO (sin getDocs previo para evitar doble cobro)
+            const todayStr = this.selectedDate || formatDateKey(new Date());
+            this.currentSubscriptionRange = { start: todayStr, end: todayStr };
 
-                this.unsubscribeReservations = onSnapshot(resQuery, (snapshot) => {
-                    const realtimeRes = [];
-                    snapshot.forEach(docSnap => {
-                        realtimeRes.push({ id: docSnap.id, ...docSnap.data() });
-                    });
-                    this.reservations = realtimeRes;
-                    this.saveLocalReservations(bizId, realtimeRes);
-                    this.notify();
-                }, (error) => console.warn('Error de sincronización de reservas:', error));
+            const resQuery = query(
+                collection(db, COLLECTIONS.RESERVATIONS),
+                where("businessId", "==", bizId),
+                where("date", "==", todayStr)
+            );
 
-                // Suscripción permanente en tiempo real para solicitudes PENDING de este local
+            this.unsubscribeReservations = onSnapshot(resQuery, (snapshot) => {
+                const realtimeRes = [];
+                snapshot.forEach(docSnap => {
+                    realtimeRes.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                this.reservations = realtimeRes;
+                this.saveLocalReservations(bizId, realtimeRes);
+                this.notify();
+            }, (error) => {
+                if (error?.code === 'resource-exhausted') markQuotaExhausted();
+                console.warn('Error en listener de reservas:', error);
+            });
+
+            // C. Solicitudes PENDING: Solo para Encargados y Staff
+            if (authManager.isStaff()) {
                 const pendingQuery = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
                     where("businessId", "==", bizId),
@@ -328,10 +360,14 @@ class Store {
                     });
                     this.pendingReservations = pendingList;
                     this.notify();
-                }, (error) => console.warn('Error de sincronización de pendientes en tiempo real:', error));
-            } catch (err) {
-                console.warn("Error Firebase:", err);
+                }, (error) => {
+                    if (error?.code === 'resource-exhausted') markQuotaExhausted();
+                    console.warn('Error en listener de pendientes:', error);
+                });
             }
+        } catch (err) {
+            if (err?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("Error cargando datos de sucursal desde Firestore:", err);
         }
 
         if (!loadedFromFirestore && loadedMachines.length === 0) {
@@ -350,6 +386,7 @@ class Store {
 
         if (!loadedFromFirestore && loadedMachines.length === 0) {
             loadedMachines = DEFAULT_MACHINES_BY_BIZ[bizId] || [
+
                 {
                     id: `mach_${bizId}_01`,
                     businessId: bizId,
@@ -945,23 +982,17 @@ class Store {
     }
 
     async getOrFetchReservation(reservationId) {
-        // 1. Buscar en memoria local
+        if (!reservationId) return null;
+
+        // 1. Buscar en memoria local de reservaciones activas
         let res = this.reservations.find(r => r.id === reservationId);
         if (res) return res;
 
-        // 2. Buscar en Firestore si está disponible
-        if (isFirebaseAvailable && db) {
-            try {
-                const snap = await getDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId));
-                if (snap.exists()) {
-                    return { id: snap.id, ...snap.data() };
-                }
-            } catch (e) {
-                console.warn("Error buscando reservación en Firestore:", e);
-            }
-        }
+        // 2. Buscar en memoria de reservaciones pendientes
+        res = this.pendingReservations.find(r => r.id === reservationId);
+        if (res) return res;
 
-        // 3. Fallback a LocalStorage
+        // 3. Fallback a LocalStorage antes de ir a Firestore (Zero-Read)
         if (this.currentBusiness?.id) {
             try {
                 const localRes = localStorage.getItem(`piu_reservations_${this.currentBusiness.id}`);
@@ -974,8 +1005,25 @@ class Store {
                 console.warn("Error leyendo reservaciones locales:", e);
             }
         }
+
+        // 4. Buscar en Firestore solo si la cuota lo permite
+        if (canMakeFirestoreRead()) {
+            try {
+                const snap = await getDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId));
+                if (snap.exists()) {
+                    const data = { id: snap.id, ...snap.data() };
+                    this.reservations.push(data);
+                    return data;
+                }
+            } catch (e) {
+                if (e?.code === 'resource-exhausted') markQuotaExhausted();
+                console.warn("Error buscando reservación en Firestore:", e);
+            }
+        }
+
         return null;
     }
+
 
     async cancelReservationByClient(reservationId) {
         assertFinancialOnline();

@@ -1,6 +1,4 @@
-// js/core/notificationManager.js
-// Gestor Centralizado de Notificaciones del Navegador y Comunicación con Service Worker (v1.9.0)
-import { isFirebaseAvailable, db, COLLECTIONS, collection, query, where, onSnapshot } from '../firebaseConfig.js';
+import { isFirebaseAvailable, db, COLLECTIONS, collection, query, where, onSnapshot, canMakeFirestoreRead, markQuotaExhausted } from '../firebaseConfig.js';
 import { toast } from '../components/toast.js';
 import { updateManager } from './updateManager.js';
 
@@ -242,7 +240,7 @@ class NotificationManager {
         this.realtimeUnsubscribers.forEach(unsub => unsub());
         this.realtimeUnsubscribers = [];
 
-        if (!currentUser || !isFirebaseAvailable || !db) return;
+        if (!currentUser || !canMakeFirestoreRead()) return;
 
         const role = currentUser.role || 'CLIENT';
         const isClient = role === 'CLIENT';

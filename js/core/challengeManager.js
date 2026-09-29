@@ -14,8 +14,11 @@ import {
     query, 
     where, 
     orderBy,
-    limit as firestoreLimit 
+    limit as firestoreLimit,
+    canMakeFirestoreRead,
+    markQuotaExhausted 
 } from '../firebaseConfig.js';
+
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
 import { store } from './store.js';
@@ -1354,16 +1357,20 @@ class ChallengeManager {
         let players = [...allPlayers];
 
         if (players.length === 0) {
-            if (isFirebaseAvailable && db) {
-                try {
-                    const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
-                    snap.forEach(d => players.push({ id: d.id, ...d.data() }));
-                } catch (e) {}
-            }
+            players = authManager.getClientUsers() || [];
             if (players.length === 0) {
                 players = JSON.parse(localStorage.getItem('piu_registered_players_cache') || '[]');
             }
+            if (players.length === 0 && canMakeFirestoreRead()) {
+                try {
+                    const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                    snap.forEach(d => players.push({ id: d.id, ...d.data() }));
+                } catch (e) {
+                    if (e?.code === 'resource-exhausted') markQuotaExhausted();
+                }
+            }
         }
+
 
         // Filtro por Liga
         if (filterLeague && filterLeague !== 'ALL') {

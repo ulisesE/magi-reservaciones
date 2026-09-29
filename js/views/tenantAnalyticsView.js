@@ -190,25 +190,15 @@ async function loadAndRenderAnalyticsData(container, business) {
         // Obtener catálogo de máquinas del local
         const machines = store.machines.length > 0 ? store.machines : (business?.machines || []);
 
-        // Obtener catálogo de jugadores registrados
-        let allPlayers = [];
-        if (isFirebaseAvailable && db) {
-            try {
-                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
-                snap.forEach(d => allPlayers.push({ id: d.id, ...d.data() }));
-            } catch (e) {
-                console.warn("Error cargando jugadores para analíticas:", e);
-            }
-        }
+        // Obtener catálogo de jugadores registrados desde memoria (Zero-Read)
+        let allPlayers = authManager.getClientUsers() || [];
         if (allPlayers.length === 0) {
             const localPlayers = localStorage.getItem('piu_registered_players_cache');
             if (localPlayers) {
                 try { allPlayers = JSON.parse(localPlayers); } catch(e) {}
             }
         }
-        if (allPlayers.length === 0) {
-            allPlayers = authManager.getClientUsers() || [];
-        }
+
 
         // Obtener logs de auditoría inmutables del local
         let auditLogs = [];

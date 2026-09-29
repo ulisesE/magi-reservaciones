@@ -1,4 +1,4 @@
-﻿// js/views/clientsView.js
+// js/views/clientsView.js
 // Directorio Global de Clientes y Jugadores de la Plataforma
 import { store } from '../core/store.js';
 import { authManager } from '../core/authManager.js';
@@ -15,7 +15,9 @@ import {
     deleteDoc,
     query, 
     where, 
-    limit 
+    limit,
+    canMakeFirestoreRead,
+    markQuotaExhausted 
 } from '../firebaseConfig.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
@@ -35,29 +37,32 @@ class ClientDirectoryManager {
         this.allClients = [];
     }
 
-    async loadClients(searchQuery = '') {
+    async loadClients(searchQuery = '', forceRefresh = false) {
         let loaded = [];
-        
-        if (isFirebaseAvailable && db) {
-            try {
-                // Traer la lista completa de jugadores desde Firestore (colección principal piu_players)
-                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
-                const isMalicious = (str) => {
-                    if (!str) return false;
-                    const s = String(str).toLowerCase();
-                    return s.includes('<img') || s.includes('<script') || s.includes('onerror') || s.includes('javascript:') || s.includes('eval(') || s.includes('xsstest');
-                };
 
+        // 1. PRIMERO: Si ya están en memoria en authManager o en this.allClients, usarlos (Zero-Read)
+        if (!forceRefresh && authManager.clientUsers && authManager.clientUsers.length > 0) {
+            loaded = [...authManager.clientUsers];
+        } else if (!forceRefresh && this.allClients && this.allClients.length > 0) {
+            loaded = [...this.allClients];
+        } else {
+            const local = localStorage.getItem('piu_registered_players_cache');
+            if (local) {
+                try {
+                    const parsed = JSON.parse(local);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        loaded = parsed;
+                    }
+                } catch (e) {}
+            }
+        }
+        
+        // 2. SEGUNDO: Solo si no hay datos en memoria/local Y la cuota lo permite, consultar Firestore
+        if (loaded.length === 0 && canMakeFirestoreRead()) {
+            try {
+                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
                 for (const d of snap.docs) {
                     const data = d.data();
-                    // Si detectamos un registro de inyección XSS de prueba en Firestore, lo eliminamos de inmediato
-                    if (isMalicious(d.id) || isMalicious(data.name) || isMalicious(data.username) || isMalicious(data.avatar)) {
-                        try {
-                            deleteDoc(doc(db, COLLECTIONS.PLAYERS, d.id));
-                        } catch (err) {}
-                        continue;
-                    }
-
                     loaded.push({
                         id: d.id,
                         name: data.name || data.displayName || data.clientName || data.username || 'Jugador',
@@ -77,24 +82,12 @@ class ClientDirectoryManager {
                         ...data
                     });
                 }
-
             } catch (e) {
+                if (e?.code === 'resource-exhausted') markQuotaExhausted();
                 console.warn("Error cargando clientes de Firestore:", e);
             }
         }
 
-        // Fallback local solo si Firebase no está disponible o no devolvió datos
-        if (!isFirebaseAvailable || !db || loaded.length === 0) {
-            const local = localStorage.getItem('piu_registered_players_cache');
-            if (local) {
-                try {
-                    const parsed = JSON.parse(local);
-                    if (loaded.length === 0 && Array.isArray(parsed)) {
-                        loaded = parsed;
-                    }
-                } catch (e) {}
-            }
-        }
 
         // Sincronizar memoria de authManager con los datos autoritativos
         if (authManager) {

@@ -26,7 +26,7 @@ import { notificationManager } from './core/notificationManager.js';
 import { pwaManager } from './core/pwaManager.js';
 import { openChangelogModal } from './components/changelogModal.js';
 import { updateManager } from './core/updateManager.js';
-import { isFirebaseAvailable } from './firebaseConfig.js';
+import { isFirebaseAvailable, isQuotaExhausted, canMakeFirestoreRead } from './firebaseConfig.js';
 import './core/financialTests.js';
 
 class App {
@@ -46,22 +46,30 @@ class App {
     async init() {
         console.log("🎮 Inicializando Pump It Up Hub v1.9.0 (Versus & Notifications)...");
 
-        // 1. Inicializar Gestor de Negocios
+        // 1. Inicializar Gestor de Negocios (Zero-Read: Caché / Semillas)
         await tenantManager.init();
 
-        // 2. Inicializar Autenticación y Roles
+        // 2. Inicializar Autenticación y Roles (Zero-Read: Caché / Semillas)
         await authManager.init();
 
         // 2.5. Inicializar Service Worker de Notificaciones y Gestor de Actualizaciones
         await notificationManager.init();
         updateManager.init();
-        notificationManager.setupRealtimeListeners(authManager.getCurrentUser());
 
-        // 3. Inicializar Catálogos Maestros (Versiones de Juego, Reglas)
+        // 3. Inicializar Catálogos Maestros (Zero-Read: Caché / Semillas)
         await catalogsManager.init();
 
-        // 4. Inicializar Store y datos de la sucursal activa
+        // 4. Inicializar Store (Solo lee Firestore si hay usuario logueado)
         await store.init();
+
+        // Si ya hay usuario autenticado en sesión, activar listeners y mapas
+        const currentUser = authManager.getCurrentUser();
+        if (currentUser) {
+            notificationManager.setupRealtimeListeners(currentUser);
+            if (canMakeFirestoreRead()) {
+                this.syncAuthenticatedSession(currentUser);
+            }
+        }
 
         // 4.5. Inicializar Gestor de Temas
         themeManager.init();
@@ -96,8 +104,19 @@ class App {
         // 6. Suscripciones para reactividad
         store.subscribe(() => this.render());
         tenantManager.subscribe(() => this.render());
-        authManager.subscribe(() => {
-            notificationManager.setupRealtimeListeners(authManager.getCurrentUser());
+        authManager.subscribe(async () => {
+            const current = authManager.getCurrentUser();
+            if (current) {
+                notificationManager.setupRealtimeListeners(current);
+                await store.loadBusinessData();
+                this.syncAuthenticatedSession(current);
+            } else {
+                notificationManager.setupRealtimeListeners(null);
+                store.detachAllListeners();
+                tenantManager.detachListeners();
+                await store.loadBusinessData();
+            }
+            this.updateSyncIndicator();
             this.render();
         });
 
@@ -105,21 +124,39 @@ class App {
         this.updateSyncIndicator();
     }
 
+    async syncAuthenticatedSession(user) {
+        if (!user || !canMakeFirestoreRead()) return;
+        try {
+            if (user.role === 'SUPERADMIN' || user.role === 'MANAGER') {
+                await authManager.loadStaffUsers();
+                await tenantManager.syncFromFirestore();
+            }
+        } catch (e) {
+            console.warn("Sincronización suave de sesión falló:", e);
+        }
+    }
+
     updateSyncIndicator() {
         if (this.syncStatusEl) {
-            if (isFirebaseAvailable) {
+            if (isQuotaExhausted()) {
+                this.syncStatusEl.innerHTML = `
+                    <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#FFB800; box-shadow: 0 0 8px #FFB800;"></span>
+                    <span style="color:#FFB800; border-bottom: 1px dotted rgba(255,184,0,0.5); cursor:pointer;">Modo Local (Cuota Protegida 🛡️)</span>
+                `;
+            } else if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.7.5 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Conexión Segura (v1.9.0 • Novedades 📜)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.7.5 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Modo Local (v1.9.0 • Novedades 📜)</span>
                 `;
             }
         }
     }
+
 
     render() {
         if (this.headerContainer) {

@@ -14,7 +14,9 @@ import {
     onSnapshot,
     runTransaction,
     query,
-    where 
+    where,
+    canMakeFirestoreRead,
+    markQuotaExhausted
 } from '../firebaseConfig.js';
 import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
 
@@ -149,7 +151,7 @@ class TenantManager {
         let loaded = [];
         let loadedFromFirestore = false;
 
-        // 1. Cargar Configuración Global (Firestore es el Mandante)
+        // 1. Cargar Configuración Global desde LocalStorage (Zero-Read)
         const localConfig = localStorage.getItem('piu_global_config_v1');
         if (localConfig) {
             try {
@@ -158,142 +160,19 @@ class TenantManager {
             } catch (e) {}
         }
 
-        if (isFirebaseAvailable && db) {
-            try {
-                const docSnap = await getDoc(doc(db, 'piu_system_settings', 'global_config'));
-                if (docSnap.exists()) {
-                    this.disableChangeLocalGlobally = !!docSnap.data().disableChangeLocalGlobally;
-                    localStorage.setItem('piu_global_config_v1', JSON.stringify({
-                        disableChangeLocalGlobally: this.disableChangeLocalGlobally
-                    }));
-                }
-            } catch (err) {
-                console.warn("Error cargando config global de Firebase:", err);
-            }
-
-            // Suscripción reactiva en tiempo real a la configuración global
-            this.unsubscribeGlobalConfig?.();
-            this.unsubscribeGlobalConfig = onSnapshot(doc(db, 'piu_system_settings', 'global_config'), (snapshot) => {
-                if (snapshot.exists()) {
-                    this.disableChangeLocalGlobally = !!snapshot.data().disableChangeLocalGlobally;
-                    localStorage.setItem('piu_global_config_v1', JSON.stringify({
-                        disableChangeLocalGlobally: this.disableChangeLocalGlobally
-                    }));
-                    this.notify();
-                }
-            }, (error) => console.warn('Error sincronizando config global:', error));
+        // 2. Cargar Negocios desde LocalStorage o Semillas (Zero-Read)
+        const localData = localStorage.getItem(TENANTS_STORAGE_KEY);
+        if (localData) {
+            try { loaded = JSON.parse(localData); } catch (e) { loaded = []; }
         }
 
-        if (isFirebaseAvailable && db) {
-            try {
-                const querySnapshot = await getDocs(collection(db, COLLECTIONS.BUSINESSES));
-                loadedFromFirestore = true;
-                if (!querySnapshot.empty) {
-                    querySnapshot.forEach(docSnap => {
-                        loaded.push({ id: docSnap.id, ...docSnap.data() });
-                    });
-                }
-            } catch (err) {
-                console.warn("Error cargando negocios desde Firebase, usando LocalStorage:", err);
-            }
-        }
-
-        if (!loadedFromFirestore && loaded.length === 0) {
-            const localData = localStorage.getItem(TENANTS_STORAGE_KEY);
-            if (localData) {
-                try { loaded = JSON.parse(localData); } catch (e) { loaded = []; }
-            }
-        }
-
-        if (!loadedFromFirestore && loaded.length === 0) {
+        if (loaded.length === 0) {
             loaded = [...DEFAULT_BUSINESSES];
             this.saveLocally(loaded);
-            if (isFirebaseAvailable && db) {
-                for (const b of loaded) {
-                    try { await setDoc(doc(db, COLLECTIONS.BUSINESSES, b.id), b); } catch (e) {}
-                }
-            }
-        }
-
-        // Asegurar que los locales tengan operatingHours y aplicar el horario solicitado en 'biz_piu_centro'
-        let modified = false;
-        loaded = loaded.map(b => {
-            if (b.id === 'biz_piu_centro' && !b.hasSeededOvernightSchedule) {
-                b.operatingHours = {
-                    0: { open: '15:00', close: '04:00', closed: false },
-                    1: { open: '11:00', close: '22:00', closed: false },
-                    2: { open: '11:00', close: '22:00', closed: false },
-                    3: { open: '11:00', close: '22:00', closed: false },
-                    4: { open: '11:00', close: '22:00', closed: false },
-                    5: { open: '12:00', close: '04:00', closed: false },
-                    6: { open: '12:00', close: '04:00', closed: false }
-                };
-                b.openingTime = '12:00';
-                b.closingTime = '04:00';
-                b.hasSeededOvernightSchedule = true;
-                modified = true;
-            } else if (!b.operatingHours) {
-                b.operatingHours = {};
-                for (let i = 0; i < 7; i++) {
-                    b.operatingHours[i] = {
-                        open: b.openingTime || '11:00',
-                        close: b.closingTime || '22:00',
-                        closed: false
-                    };
-                }
-                modified = true;
-            }
-
-            if (b.id === 'biz_piu_centro' && !b.customRates) {
-                b.customRates = [
-                    { players: 1, duration: 5, price: 7 },
-                    { players: 1, duration: 10, price: 14 },
-                    { players: 1, duration: 15, price: 20 },
-                    { players: 1, duration: 30, price: 40 },
-                    { players: 1, duration: 60, price: 80 },
-                    { players: 1, duration: 90, price: 120 },
-                    { players: 1, duration: 105, price: 140 },
-                    { players: 1, duration: 120, price: 160 },
-                    { players: 2, duration: 15, price: 32.5 },
-                    { players: 2, duration: 30, price: 65 },
-                    { players: 2, duration: 60, price: 130 },
-                    { players: 2, duration: 90, price: 195 },
-                    { players: 2, duration: 105, price: 230 },
-                    { players: 2, duration: 120, price: 260 }
-                ];
-                modified = true;
-            } else if (!b.customRates) {
-                b.customRates = [];
-                modified = true;
-            }
-            return b;
-        });
-
-        if (modified) {
-            this.saveLocally(loaded);
-            if (isFirebaseAvailable && db) {
-                for (const b of loaded) {
-                    try {
-                        const businessRef = doc(db, COLLECTIONS.BUSINESSES, b.id);
-                        setDoc(businessRef, b).catch(() => {});
-                    } catch (e) {
-                        console.warn("Error guardando negocio migrado en Firebase:", e);
-                    }
-                }
-            }
         }
 
         this.businesses = loaded;
 
-        if (isFirebaseAvailable && db) {
-            this.unsubscribeBusinesses?.();
-            this.unsubscribeBusinesses = onSnapshot(collection(db, COLLECTIONS.BUSINESSES), (snapshot) => {
-                this.businesses = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                this.saveLocally(this.businesses);
-                syncMetadataToServer(this.businesses);
-                this.notify();
-            }, (error) => console.warn('Error de sincronización de locales:', error));
-        }
 
         // Comprobar si hay una sesión activa de Encargado bloqueada a una sucursal específica
         const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
@@ -366,6 +245,33 @@ class TenantManager {
 
         syncMetadataToServer(this.businesses);
         return this.getActiveBusiness();
+    }
+
+    async syncFromFirestore() {
+        if (!canMakeFirestoreRead()) return;
+        try {
+            const querySnapshot = await getDocs(collection(db, COLLECTIONS.BUSINESSES));
+            if (!querySnapshot.empty) {
+                const remote = [];
+                querySnapshot.forEach(docSnap => {
+                    remote.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                this.businesses = remote;
+                this.saveLocally(this.businesses);
+                syncMetadataToServer(this.businesses);
+                this.notify();
+            }
+        } catch (err) {
+            if (err?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("Error sincronizando negocios de Firestore:", err);
+        }
+    }
+
+    detachListeners() {
+        this.unsubscribeBusinesses?.();
+        this.unsubscribeGlobalConfig?.();
+        this.unsubscribeBusinesses = null;
+        this.unsubscribeGlobalConfig = null;
     }
 
     isCurrentUserSuperAdmin() {

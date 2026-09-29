@@ -13,7 +13,9 @@ import {
     updateDoc, 
     deleteDoc, 
     query, 
-    where 
+    where,
+    canMakeFirestoreRead,
+    markQuotaExhausted 
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { store } from './store.js';
@@ -133,60 +135,50 @@ class CatalogsManager {
     }
 
     async init() {
-        // 1. Cargar Modelos de Gabinete (Global)
+        // 1. Cargar Modelos de Gabinete desde LocalStorage o Semilla (Zero-Read)
         let loadedCabinets = [];
-        if (isFirebaseAvailable && db) {
-            try {
-                const snap = await getDocs(collection(db, COLLECTIONS.CABINET_MODELS));
-                snap.forEach(d => loadedCabinets.push({ id: d.id, ...d.data() }));
-            } catch (e) {
-                console.warn("Error cargando modelos de gabinete de Firebase:", e);
-            }
-        }
-        if (loadedCabinets.length === 0) {
-            const local = localStorage.getItem('piu_cabinet_models_cache');
-            if (local) {
-                try { loadedCabinets = JSON.parse(local); } catch (e) { loadedCabinets = []; }
-            }
+        const localCabinets = localStorage.getItem('piu_cabinet_models_cache');
+        if (localCabinets) {
+            try { loadedCabinets = JSON.parse(localCabinets); } catch (e) { loadedCabinets = []; }
         }
         if (loadedCabinets.length === 0) {
             loadedCabinets = [...DEFAULT_CABINET_MODELS];
             localStorage.setItem('piu_cabinet_models_cache', JSON.stringify(loadedCabinets));
-            if (isFirebaseAvailable && db) {
-                for (const c of loadedCabinets) {
-                    try { await setDoc(doc(db, COLLECTIONS.CABINET_MODELS, c.id), c); } catch (e) {}
-                }
-            }
         }
         this.cabinetModels = loadedCabinets;
 
-        // 2. Cargar Versiones de Juego (Global)
+        // 2. Cargar Versiones de Juego desde LocalStorage o Semilla (Zero-Read)
         let loadedVersions = [];
-        if (isFirebaseAvailable && db) {
-            try {
-                const snap = await getDocs(collection(db, COLLECTIONS.GAME_VERSIONS));
-                snap.forEach(d => loadedVersions.push({ id: d.id, ...d.data() }));
-            } catch (e) {
-                console.warn("Error cargando versiones de Firebase:", e);
-            }
-        }
-        if (loadedVersions.length === 0) {
-            const local = localStorage.getItem('piu_game_versions_cache');
-            if (local) {
-                try { loadedVersions = JSON.parse(local); } catch (e) { loadedVersions = []; }
-            }
+        const localVersions = localStorage.getItem('piu_game_versions_cache');
+        if (localVersions) {
+            try { loadedVersions = JSON.parse(localVersions); } catch (e) { loadedVersions = []; }
         }
         if (loadedVersions.length === 0) {
             loadedVersions = [...DEFAULT_GAME_VERSIONS];
             localStorage.setItem('piu_game_versions_cache', JSON.stringify(loadedVersions));
-            if (isFirebaseAvailable && db) {
-                for (const v of loadedVersions) {
-                    try { await setDoc(doc(db, COLLECTIONS.GAME_VERSIONS, v.id), v); } catch (e) {}
-                }
-            }
         }
         this.gameVersions = loadedVersions;
     }
+
+    async syncFromFirestore() {
+        if (!canMakeFirestoreRead()) return;
+        try {
+            const snapC = await getDocs(collection(db, COLLECTIONS.CABINET_MODELS));
+            if (!snapC.empty) {
+                this.cabinetModels = snapC.docs.map(d => ({ id: d.id, ...d.data() }));
+                localStorage.setItem('piu_cabinet_models_cache', JSON.stringify(this.cabinetModels));
+            }
+            const snapV = await getDocs(collection(db, COLLECTIONS.GAME_VERSIONS));
+            if (!snapV.empty) {
+                this.gameVersions = snapV.docs.map(d => ({ id: d.id, ...d.data() }));
+                localStorage.setItem('piu_game_versions_cache', JSON.stringify(this.gameVersions));
+            }
+        } catch (e) {
+            if (e?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("Error sincronizando catálogos de Firestore:", e);
+        }
+    }
+
 
     // ==========================================
     // 1. CATÁLOGO GLOBAL: MODELOS DE GABINETE (CRUD)

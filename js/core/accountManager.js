@@ -14,7 +14,9 @@ import {
     where, 
     limit,
     runTransaction,
-    onSnapshot 
+    onSnapshot,
+    canMakeFirestoreRead,
+    markQuotaExhausted 
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
@@ -112,40 +114,49 @@ class AccountManager {
     /**
      * Carga el catálogo de productos y precios de una sucursal específica.
      */
-    async getProducts(businessId) {
+    async getProducts(businessId, forceRefresh = false) {
         if (!businessId) return [];
+        
+        // 1. Memoria en caliente (Zero-Read)
+        if (!forceRefresh && this.productsCache.has(businessId) && this.productsCache.get(businessId).length > 0) {
+            return this.productsCache.get(businessId);
+        }
+
         let list = [];
 
-        // 1. Cargar desde Firestore (Firestore es el Mandante)
-        if (isFirebaseAvailable && db) {
+        // 2. Caché local de LocalStorage
+        const localKey = `piu_products_${businessId}`;
+        const localData = localStorage.getItem(localKey);
+        if (localData) {
+            try { list = JSON.parse(localData); } catch (e) { list = []; }
+        }
+
+        // 3. Firestore solo si está vacío o se pide forzar refresco y hay cuota
+        if ((list.length === 0 || forceRefresh) && canMakeFirestoreRead()) {
             try {
                 const q = query(
                     collection(db, COLLECTIONS.PRODUCTS),
                     where("businessId", "==", businessId)
                 );
                 const snap = await getDocs(q);
-                snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+                const remoteList = [];
+                snap.forEach(d => remoteList.push({ id: d.id, ...d.data() }));
+                if (remoteList.length > 0) {
+                    list = remoteList;
+                    localStorage.setItem(localKey, JSON.stringify(list));
+                }
             } catch (err) {
-                handleAppError(err, { context: "Error cargando catálogo de productos de Firestore", showToast: false });
+                if (err?.code === 'resource-exhausted') markQuotaExhausted();
+                console.warn("Error cargando productos de Firestore, usando local:", err);
             }
-        }
-
-        // 2. Fallback de LocalStorage si no hay conexión
-        if (list.length === 0) {
-            const localKey = `piu_products_${businessId}`;
-            const localData = localStorage.getItem(localKey);
-            if (localData) {
-                try { list = JSON.parse(localData); } catch (e) { list = []; }
-            }
-        } else {
-            localStorage.setItem(`piu_products_${businessId}`, JSON.stringify(list));
         }
 
         // Ordenar alfabéticamente por nombre
-        list.sort((a, b) => a.name.localeCompare(b.name));
+        list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         this.productsCache.set(businessId, list);
         return list;
     }
+
 
     /**
      * Guarda o actualiza un producto en el catálogo del local.

@@ -28,7 +28,9 @@ import {
     serverTimestamp,
     orderBy,
     limit,
-    startAfter
+    startAfter,
+    disableNetwork,
+    enableNetwork
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
 // Configuración de Firebase
@@ -61,6 +63,10 @@ try {
     }
     isFirebaseAvailable = true;
     console.log("⚡ Firebase y Auth conectados exitosamente al proyecto: test-89a00");
+    if (isQuotaExhausted() && db) {
+        disableNetwork(db).catch(() => {});
+        console.warn("🛡️ [QUOTA_SHIELD] Cuota agotada detectada previamente. Red de Firestore desconectada al inicio para evitar errores 429.");
+    }
 } catch (error) {
     console.warn("⚠️ No se pudo inicializar Firebase, operando en modo LocalStorage:", error);
 }
@@ -106,6 +112,60 @@ export const COLLECTIONS = {
 export function isOnline() {
     return typeof navigator !== 'undefined' ? navigator.onLine : true;
 }
+
+// ============================================================================
+// ESCUDO DE PROTECCIÓN CONTRA CUOTA AGOTADA (429 / RESOURCE EXHAUSTED)
+// ============================================================================
+const QUOTA_STORAGE_KEY = 'piu_quota_exhausted_date_v1';
+
+export function isQuotaExhausted() {
+    try {
+        const storedDate = localStorage.getItem(QUOTA_STORAGE_KEY);
+        if (!storedDate) return false;
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (storedDate === todayStr) {
+            return true;
+        } else {
+            // Nuevo día: restablecer el flag de cuota
+            localStorage.removeItem(QUOTA_STORAGE_KEY);
+            return false;
+        }
+    } catch (e) {
+        return false;
+    }
+}
+
+export function markQuotaExhausted() {
+    try {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        localStorage.setItem(QUOTA_STORAGE_KEY, todayStr);
+        if (db) {
+            disableNetwork(db).catch(() => {});
+        }
+        console.warn("🛡️ [QUOTA_SHIELD] Cuota diaria de Firestore alcanzada. Desconectando red de Firestore (disableNetwork) para evitar errores 429 y operar 100% en memoria/LocalStorage.");
+    } catch (e) {}
+}
+
+export function resetQuotaShield() {
+    try {
+        localStorage.removeItem(QUOTA_STORAGE_KEY);
+        if (db) {
+            enableNetwork(db).catch(() => {});
+        }
+        console.log("🔄 [QUOTA_SHIELD] Cuota restablecida manualmente y red de Firestore reconectada.");
+    } catch (e) {}
+}
+
+if (typeof window !== 'undefined') {
+    window.markQuotaExhausted = markQuotaExhausted;
+    window.resetQuotaShield = resetQuotaShield;
+}
+
+export function canMakeFirestoreRead() {
+    return isFirebaseAvailable && db && !isQuotaExhausted() && isOnline();
+}
+
+
 
 export { 
     app, 

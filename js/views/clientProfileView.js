@@ -17,7 +17,9 @@ import {
     doc, 
     getDoc, 
     query, 
-    where 
+    where,
+    canMakeFirestoreRead,
+    markQuotaExhausted 
 } from '../firebaseConfig.js';
 import { loyaltyManager, TIERS } from '../core/loyaltyManager.js';
 import { accountManager } from '../core/accountManager.js';
@@ -63,47 +65,11 @@ export async function renderClientProfileView(container) {
         return renderStaffProfileView(container, currentUser);
     }
 
-    // Carga exhaustiva y unificada de reservaciones de este cliente (por ID, Username, Teléfono o Nombre)
+    // Carga unificada de reservaciones de este cliente (Memoria en Store + Caché Local)
     const myReservationsMap = new Map();
 
-    if (isFirebaseAvailable && db) {
-        try {
-            // 1. Consulta por ID único de cliente
-            if (currentUser.id) {
-                const q1 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientId", "==", currentUser.id));
-                const snap1 = await getDocs(q1);
-                snap1.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-            }
-            // 2. Consulta por nombre de usuario (@username)
-            if (currentUser.username) {
-                const q2 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientUsername", "==", currentUser.username));
-                const snap2 = await getDocs(q2);
-                snap2.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-
-                // Si el encargado escribió el username como clientName
-                const q2b = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientName", "==", currentUser.username));
-                const snap2b = await getDocs(q2b);
-                snap2b.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-            }
-            // 3. Consulta por teléfono registrado
-            if (currentUser.phone) {
-                const q3 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientPhone", "==", currentUser.phone));
-                const snap3 = await getDocs(q3);
-                snap3.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-            }
-            // 4. Consulta por nombre completo
-            if (currentUser.name) {
-                const q4 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientName", "==", currentUser.name));
-                const snap4 = await getDocs(q4);
-                snap4.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-            }
-        } catch (e) {
-            console.warn("Error cargando reservas desde Firestore:", e);
-        }
-    }
-
-    // Merge con datos locales / store
-    const allLocalReservations = store.getReservations ? store.getReservations() : [...store.reservations, ...store.pendingReservations];
+    // 1. PRIMERO: Obtener desde la memoria activa del store (Zero-Read)
+    const allLocalReservations = store.getReservations ? store.getReservations() : [...(store.reservations || []), ...(store.pendingReservations || [])];
     allLocalReservations.forEach(r => {
         const matchesId = r.clientId && r.clientId === currentUser.id;
         const matchesUser = r.clientUsername && currentUser.username && r.clientUsername.toLowerCase() === currentUser.username.toLowerCase();
@@ -116,6 +82,19 @@ export async function renderClientProfileView(container) {
             myReservationsMap.set(r.id, r);
         }
     });
+
+    // 2. SEGUNDO: Si no hay ninguna en memoria y la cuota lo permite, hacer UNA SOLA consulta a Firestore
+    if (myReservationsMap.size === 0 && canMakeFirestoreRead() && currentUser.id) {
+        try {
+            const q1 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientId", "==", currentUser.id));
+            const snap1 = await getDocs(q1);
+            snap1.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
+        } catch (e) {
+            if (e?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("Error cargando reservas desde Firestore:", e);
+        }
+    }
+
 
     let myReservations = Array.from(myReservationsMap.values());
     myReservations.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
