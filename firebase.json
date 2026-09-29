@@ -57,10 +57,6 @@
     ],
     "rewrites": [
       {
-        "source": "/local/**",
-        "function": "serveLocalMetadata"
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }
