@@ -167,7 +167,24 @@ class App {
     }
 
 
-    render() {
+    render(immediate = false) {
+        if (immediate) {
+            if (this._renderRaf) cancelAnimationFrame(this._renderRaf);
+            this._renderRaf = null;
+            this._executeRender();
+            return;
+        }
+
+        if (this._renderRaf) {
+            cancelAnimationFrame(this._renderRaf);
+        }
+        this._renderRaf = requestAnimationFrame(() => {
+            this._renderRaf = null;
+            this._executeRender();
+        });
+    }
+
+    _executeRender() {
         if (this.headerContainer) {
             renderHeader(this.headerContainer);
         }

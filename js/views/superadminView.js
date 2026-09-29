@@ -15,7 +15,10 @@ import {
     collection, 
     getDocs, 
     setDoc, 
-    doc 
+    doc,
+    query,
+    limit,
+    where 
 } from '../firebaseConfig.js';
 import { formatFriendlyDate, format12Hour } from '../core/timeUtils.js';
 import { showReservationTicket } from './clientBookingModal.js';
@@ -47,7 +50,8 @@ export async function renderSuperadminView(container) {
     const totalBusinesses = businesses.length;
 
     let globalReservations = cachedGlobalReservations || [];
-    if (!cachedGlobalReservations && isFirebaseAvailable && db) {
+    // Carga perezosa (Lazy Load): Solo consultar reservaciones si el superadmin está en la pestaña RESERVATIONS
+    if (activeSuperTab === 'RESERVATIONS' && !cachedGlobalReservations && isFirebaseAvailable && db) {
         try {
             const q = query(
                 collection(db, COLLECTIONS.RESERVATIONS),

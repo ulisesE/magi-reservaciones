@@ -35,70 +35,92 @@ class ClientDirectoryManager {
     constructor() {
         this.clients = [];
         this.allClients = [];
+        this._inFlightPromise = null;
     }
 
     async loadClients(searchQuery = '', forceRefresh = false) {
-        let loaded = [];
-
-        // 1. PRIMERO: Si ya están en memoria en authManager o en this.allClients, usarlos (Zero-Read)
-        if (!forceRefresh && authManager.clientUsers && authManager.clientUsers.length > 0) {
-            loaded = [...authManager.clientUsers];
-        } else if (!forceRefresh && this.allClients && this.allClients.length > 0) {
-            loaded = [...this.allClients];
-        } else {
-            const local = localStorage.getItem('piu_registered_players_cache');
-            if (local) {
-                try {
-                    const parsed = JSON.parse(local);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        loaded = parsed;
-                    }
-                } catch (e) {}
-            }
+        if (!forceRefresh && this._inFlightPromise) {
+            await this._inFlightPromise;
+            return this.filterClients(searchQuery);
         }
-        
-        // 2. SEGUNDO: Solo si no hay datos en memoria/local Y la cuota lo permite, consultar Firestore
-        if (loaded.length === 0 && canMakeFirestoreRead()) {
-            try {
-                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
-                for (const d of snap.docs) {
-                    const data = d.data();
-                    loaded.push({
-                        id: d.id,
-                        name: data.name || data.displayName || data.clientName || data.username || 'Jugador',
-                        username: data.username || data.gamerTag || (data.name ? data.name.toLowerCase().replace(/\s+/g, '_') : ''),
-                        piuGameId: data.piuGameId || data.piuId || '',
-                        phone: data.phone || data.clientPhone || data.tel || '',
-                        email: data.email || data.clientEmail || '',
-                        authUid: data.authUid || (d.id.length > 20 && !d.id.startsWith('usr_') && !d.id.startsWith('p_') ? d.id : null),
-                        pinHash: data.pinHash || null,
-                        avatar: data.avatar || '🕺',
-                        skillLevel: data.skillLevel || data.level || 'Liga C',
-                        preferredMode: data.preferredMode || 'Single / Double',
-                        notes: data.notes || '',
-                        loyalty: data.loyalty || {},
-                        accounts: data.accounts || {},
-                        role: data.role || 'CLIENT',
-                        ...data
-                    });
+
+        if (!forceRefresh && (this.allClients.length > 0 || (authManager.clientUsers && authManager.clientUsers.length > 0))) {
+            if (this.allClients.length === 0 && authManager.clientUsers) {
+                this.allClients = [...authManager.clientUsers];
+            }
+            return this.filterClients(searchQuery);
+        }
+
+        const fetchOperation = async () => {
+            let loaded = [];
+
+            // 1. PRIMERO: Si ya están en memoria en authManager o en this.allClients, usarlos (Zero-Read)
+            if (!forceRefresh && authManager.clientUsers && authManager.clientUsers.length > 0) {
+                loaded = [...authManager.clientUsers];
+            } else if (!forceRefresh && this.allClients && this.allClients.length > 0) {
+                loaded = [...this.allClients];
+            } else {
+                const local = localStorage.getItem('piu_registered_players_cache');
+                if (local) {
+                    try {
+                        const parsed = JSON.parse(local);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            loaded = parsed;
+                        }
+                    } catch (e) {}
                 }
-            } catch (e) {
-                if (e?.code === 'resource-exhausted') markQuotaExhausted();
-                console.warn("Error cargando clientes de Firestore:", e);
             }
-        }
+            
+            // 2. SEGUNDO: Solo si no hay datos en memoria/local Y la cuota lo permite, consultar Firestore
+            if (loaded.length === 0 && canMakeFirestoreRead()) {
+                try {
+                    const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                    for (const d of snap.docs) {
+                        const data = d.data();
+                        loaded.push({
+                            id: d.id,
+                            name: data.name || data.displayName || data.clientName || data.username || 'Jugador',
+                            username: data.username || data.gamerTag || (data.name ? data.name.toLowerCase().replace(/\s+/g, '_') : ''),
+                            piuGameId: data.piuGameId || data.piuId || '',
+                            phone: data.phone || data.clientPhone || data.tel || '',
+                            email: data.email || data.clientEmail || '',
+                            authUid: data.authUid || (d.id.length > 20 && !d.id.startsWith('usr_') && !d.id.startsWith('p_') ? d.id : null),
+                            pinHash: data.pinHash || null,
+                            avatar: data.avatar || '🕺',
+                            skillLevel: data.skillLevel || data.level || 'Liga C',
+                            preferredMode: data.preferredMode || 'Single / Double',
+                            notes: data.notes || '',
+                            loyalty: data.loyalty || {},
+                            accounts: data.accounts || {},
+                            role: data.role || 'CLIENT',
+                            ...data
+                        });
+                    }
+                } catch (e) {
+                    if (e?.code === 'resource-exhausted') markQuotaExhausted();
+                    console.warn("Error cargando clientes de Firestore:", e);
+                }
+            }
 
+            // Sincronizar memoria de authManager con los datos autoritativos
+            if (authManager) {
+                authManager.clientUsers = [...loaded];
+            }
 
-        // Sincronizar memoria de authManager con los datos autoritativos
-        if (authManager) {
-            authManager.clientUsers = [...loaded];
-        }
+            // Guardar la lista autoritativa en caché y memoria
+            this.allClients = [...loaded];
+            this.saveLocally(this.allClients);
+        };
 
-        // Guardar la lista autoritativa en caché y memoria
-        this.allClients = [...loaded];
-        this.saveLocally(this.allClients);
+        this._inFlightPromise = fetchOperation().finally(() => {
+            this._inFlightPromise = null;
+        });
 
-        // Si hay una consulta de búsqueda, filtrar sobre la lista completa
+        await this._inFlightPromise;
+        return this.filterClients(searchQuery);
+    }
+
+    filterClients(searchQuery = '') {
         let result = [...this.allClients];
         if (searchQuery && searchQuery.trim()) {
             const term = searchQuery.toLowerCase().trim();

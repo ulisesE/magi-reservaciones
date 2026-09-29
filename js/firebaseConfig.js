@@ -193,7 +193,8 @@ export async function getDocs(q) {
     const count = snap.size || 0;
     totalSessionReads += count;
     notifyReadCount();
-    console.log(`%c📊 [FIRESTORE MONITOR] getDocs: ${count} documentos leídos | Total en esta sesión: ${totalSessionReads}`, "color:#00ff88; font-weight:bold;");
+    const collName = q?.id || q?._query?.path?.segments?.join('/') || 'consulta';
+    console.log(`%c📊 [FIRESTORE MONITOR] getDocs (${collName}): ${count} documentos leídos | Total en esta sesión: ${totalSessionReads}`, "color:#00ff88; font-weight:bold;");
     return snap;
 }
 

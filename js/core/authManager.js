@@ -159,55 +159,63 @@ class AuthManager {
         return this.staffUsers;
     }
 
-    async loadStaffUsers() {
-        if (isFirebaseAvailable && db) {
-            try {
-                const snap = await getDocs(collection(db, COLLECTIONS.STAFF_USERS));
-                if (!snap.empty) {
-                    this.staffUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
+    async loadStaffUsers(forceRefresh = false) {
+        if (!forceRefresh && this.staffUsers && this.staffUsers.length > 0) {
+            return this.staffUsers;
+        }
+
+        if (this._inFlightStaffPromise) {
+            return this._inFlightStaffPromise;
+        }
+
+        this._inFlightStaffPromise = (async () => {
+            if (isFirebaseAvailable && db && canMakeFirestoreRead()) {
+                try {
+                    const snap = await getDocs(collection(db, COLLECTIONS.STAFF_USERS));
+                    if (!snap.empty) {
+                        this.staffUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
+                    }
+                } catch (e) {
+                    console.warn("Error cargando staff de Firestore:", e);
                 }
-            } catch (e) {
-                console.warn("Error cargando staff de Firestore:", e);
             }
-        }
-        return this.staffUsers.length > 0 ? this.staffUsers : DEFAULT_STAFF_USERS;
-    }
-async loadClientUsers() {
-    if (isFirebaseAvailable && db) {
-        try {
-            console.log("🔄 Actualizando jugadores desde Firestore...");
+            return this.staffUsers.length > 0 ? this.staffUsers : DEFAULT_STAFF_USERS;
+        })().finally(() => {
+            this._inFlightStaffPromise = null;
+        });
 
-            const snap = await getDocs(
-                collection(db, COLLECTIONS.PLAYERS)
-            );
-
-            // Firestore es la fuente de verdad
-            this.clientUsers = snap.docs.map(d => ({
-                id: d.id,
-                ...d.data()
-            }));
-
-            // Reemplazar el cache viejo
-            localStorage.setItem(
-                'piu_registered_players_cache',
-                JSON.stringify(this.clientUsers)
-            );
-
-            console.log(
-                `✅ Jugadores actualizados: ${this.clientUsers.length}`
-            );
-
-        } catch (e) {
-            console.warn(
-                "⚠️ Error cargando jugadores de Firestore:",
-                e
-            );
-        }
+        return this._inFlightStaffPromise;
     }
 
-    return this.clientUsers;
-}
+    async loadClientUsers(forceRefresh = false) {
+        if (!forceRefresh && this.clientUsers && this.clientUsers.length > 0) {
+            return this.clientUsers;
+        }
+
+        if (this._inFlightClientPromise) {
+            return this._inFlightClientPromise;
+        }
+
+        this._inFlightClientPromise = (async () => {
+            if (isFirebaseAvailable && db && canMakeFirestoreRead()) {
+                try {
+                    console.log("🔄 Actualizando jugadores desde Firestore...");
+                    const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                    this.clientUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    localStorage.setItem('piu_registered_players_cache', JSON.stringify(this.clientUsers));
+                    console.log(`✅ Jugadores actualizados: ${this.clientUsers.length}`);
+                } catch (e) {
+                    console.warn("⚠️ Error cargando jugadores de Firestore:", e);
+                }
+            }
+            return this.clientUsers;
+        })().finally(() => {
+            this._inFlightClientPromise = null;
+        });
+
+        return this._inFlightClientPromise;
+    }
     getRole() {
         return this.currentUser ? this.currentUser.role : 'CLIENT';
     }
