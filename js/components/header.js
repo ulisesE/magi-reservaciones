@@ -195,15 +195,13 @@ export function renderHeader(container) {
                                     </button>
                                 ` : ''}
 
-                                ${!isAppInstalled ? `
-                                    <button class="dropdown-item ${currentView === 'DOWNLOAD' ? 'active' : ''}" data-view="DOWNLOAD" type="button">
-                                        <span class="item-icon">📲</span>
-                                        <div class="item-info">
-                                            <strong style="color:var(--color-neon-cyan);">Descargar App (PWA)</strong>
-                                            <small>Instalar y enlace exclusivo del local</small>
-                                        </div>
-                                    </button>
-                                ` : ''}
+                                <button class="dropdown-item ${currentView === 'DOWNLOAD' ? 'active' : ''}" data-view="DOWNLOAD" type="button">
+                                    <span class="item-icon">📲</span>
+                                    <div class="item-info">
+                                        <strong style="color:var(--color-neon-cyan);">${isAppInstalled ? 'Compartir App / Código QR' : 'Descargar App (PWA)'}</strong>
+                                        <small>${isAppInstalled ? 'Código QR y enlace exclusivo del local' : 'Instalar y enlace exclusivo del local'}</small>
+                                    </div>
+                                </button>
 
                                 <button class="dropdown-item btn-open-changelog-header" type="button">
                                     <span class="item-icon">📜</span>
@@ -390,9 +388,6 @@ export function renderHeader(container) {
         });
         if (isInstalled) {
             container.querySelector('#btn-header-download-app')?.remove();
-            if (store.currentView !== 'DOWNLOAD') {
-                container.querySelectorAll('[data-view="DOWNLOAD"]').forEach(el => el.remove());
-            }
         }
     });
 

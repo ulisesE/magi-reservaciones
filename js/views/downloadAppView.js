@@ -63,7 +63,7 @@ export function renderDownloadAppView(container) {
     const directLocalUrl = `${baseUrl}?local=${business.id}`;
     const downloadPageUrl = `${baseUrl}?local=${business.id}&view=DOWNLOAD`;
     const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=10&data=${encodeURIComponent(directLocalUrl)}`;
-    const isInstalled = pwaManager.isAppInstalled();
+    const isStandalone = pwaManager.isStandaloneMode();
 
     container.innerHTML = `
         <div class="download-app-view-container animate-fade-in">
@@ -84,9 +84,9 @@ export function renderDownloadAppView(container) {
                 <!-- Tarjeta Principal de Instalación Inmediata -->
                 <div class="download-cta-box">
                     <div id="pwa-status-badge-wrap" style="margin-bottom:12px;">
-                        ${isInstalled ? `
+                        ${isStandalone ? `
                             <span class="badge badge-success" style="font-size:0.85rem; padding:6px 14px;">
-                                ✅ APP YA INSTALADA EN ESTE DISPOSITIVO
+                                ✅ EJECUTÁNDOSE EN MODO APP (STANDALONE)
                             </span>
                         ` : `
                             <span class="badge badge-primary" style="font-size:0.82rem; padding:5px 12px; background:rgba(0, 229, 255, 0.15); border-color:var(--color-neon-cyan); color:var(--color-neon-cyan);">
@@ -97,7 +97,7 @@ export function renderDownloadAppView(container) {
 
                     <div class="download-cta-actions">
                         <button type="button" class="btn btn-primary glow-red btn-install-direct-action" id="btn-install-direct" style="padding:12px 28px; font-size:1.05rem; font-weight:800; border-radius:var(--radius-full); display:inline-flex; align-items:center; gap:8px;">
-                            <span>${isInstalled ? '✅ App ya Instalada' : '📲 Instalar App en este Dispositivo'}</span>
+                            <span>${isStandalone ? '🕹️ App Ya Instalada (Ver Opciones)' : '📲 Instalar App en este Dispositivo'}</span>
                         </button>
                         
                         <button type="button" class="btn btn-outline btn-share-wa" id="btn-share-whatsapp" style="border-radius:var(--radius-full); padding:12px 20px; font-size:0.92rem; border-color:#25D366; color:#25D366; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
@@ -324,15 +324,11 @@ export function renderDownloadAppView(container) {
     const installBtn = container.querySelector('#btn-install-direct');
     if (installBtn) {
         installBtn.addEventListener('click', async () => {
-            if (pwaManager.isAppInstalled()) {
-                toast.info("La App ya está instalada en tu dispositivo. ¡Puedes abrirla desde tu pantalla de inicio o menú de apps! 🕹️");
+            if (pwaManager.isStandaloneMode()) {
+                pwaManager.showAlreadyInstalledModal(business);
                 return;
             }
-            if (pwaManager.isIos()) {
-                pwaManager.showIosInstructionsModal();
-            } else {
-                pwaManager.promptInstall();
-            }
+            await pwaManager.promptInstall();
         });
     }
 
@@ -415,10 +411,10 @@ export function renderDownloadAppView(container) {
         if (statusBadge && isInstalled) {
             statusBadge.innerHTML = `
                 <span class="badge badge-success" style="font-size:0.85rem; padding:6px 14px;">
-                    ✅ APP YA INSTALADA EN ESTE DISPOSITIVO
+                    ✅ EJECUTÁNDOSE EN MODO APP (STANDALONE)
                 </span>
             `;
-            if (installBtnLabel) installBtnLabel.textContent = '📲 Abrir / Reinstalar App';
+            if (installBtnLabel) installBtnLabel.textContent = '🕹️ App Ya Instalada (Ver Opciones)';
         }
     });
 }

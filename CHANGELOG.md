@@ -23,6 +23,11 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
   - Configuración del flujo de GitHub Actions para desplegar exclusivamente `--only hosting:magi-suite`, protegiendo la coexistencia de múltiples aplicaciones en el proyecto Firebase `test-89a00`.
   - Enrutamiento directo y ultraligero de sucursales (`/local/:id`) en cliente sin requerir Cloud Functions.
 
+- **Corrección Crítica de Instalación PWA (Descargar App)**:
+  - Eliminada la asignación de URLs `blob:` en `<link rel="manifest">` que provocaba el rechazo del manifest en Chromium y Android (`Unsupported URL scheme`).
+  - Corrección de falso positivo en `isAppInstalled()`: erradicado el bloqueo por `LocalStorage` para que los botones de instalación no queden inhabilitados en navegadores estándar.
+  - Nuevos modales interactivos ilustrados de instalación para Android (con detección de navegador interno de WhatsApp/Instagram) y Computadoras de escritorio (Chrome/Edge).
+
 ---
 
 ## [1.7.5] - 2026-09-28
