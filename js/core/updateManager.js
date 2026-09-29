@@ -22,6 +22,20 @@ class UpdateManager {
     init() {
         if (typeof window === 'undefined') return;
 
+        // 0. Protección estricta anti-bucle de recargas (Anti-Loop Shield)
+        const now = Date.now();
+        const lastReloadStr = sessionStorage.getItem('piu_last_update_reload');
+        const reloadCount = parseInt(sessionStorage.getItem('piu_update_reload_count') || '0', 10);
+
+        if (lastReloadStr && (now - parseInt(lastReloadStr, 10)) < 15000 && reloadCount >= 1) {
+            console.warn('🛡️ [UpdateManager] Recarga reciente detectada (hace menos de 15s). Desactivando auto-recargas automáticas para cortar bucle.');
+            sessionStorage.removeItem('piu_pending_reload');
+            sessionStorage.setItem('piu_update_reload_count', '0');
+            return;
+        }
+
+        sessionStorage.removeItem('piu_pending_reload');
+
         // Guardar versión actual en almacenamiento local
         try {
             localStorage.setItem('piu_current_version', this.currentVersion);
@@ -343,6 +357,11 @@ class UpdateManager {
         toast.info("🚀 Aplicando actualización y limpiando caché...", 2500);
 
         try {
+            // Registrar recarga en sessionStorage para evitar loops sucesivos
+            const currentCount = parseInt(sessionStorage.getItem('piu_update_reload_count') || '0', 10);
+            sessionStorage.setItem('piu_last_update_reload', Date.now().toString());
+            sessionStorage.setItem('piu_update_reload_count', (currentCount + 1).toString());
+
             // 1. Enviar mensaje de activación inmediata (SKIP_WAITING) al SW en espera
             if (this.swRegistration && this.swRegistration.waiting) {
                 this.swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
@@ -359,16 +378,15 @@ class UpdateManager {
                 console.log('🧹 [UpdateManager] Todas las cachés locales han sido purgadas.');
             }
 
-            // 3. Marcar recarga en sessionStorage para evitar loops
-            sessionStorage.setItem('piu_pending_reload', 'true');
             if (this.pendingUpdate?.version) {
                 localStorage.setItem('piu_current_version', this.pendingUpdate.version);
             }
 
-            // 4. Pequeño delay visual para que el usuario perciba la acción
+            // 3. Recarga limpia con bypass de caché agregando parámetro único
             setTimeout(() => {
-                // Forzar recarga con bypass de caché en el navegador
-                window.location.reload();
+                const url = new URL(window.location.href);
+                url.searchParams.set('_v', Date.now().toString());
+                window.location.replace(url.toString());
             }, 600);
 
         } catch (err) {

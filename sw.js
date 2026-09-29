@@ -1,6 +1,6 @@
 // sw.js
-// Service Worker PWA & Notificaciones — Pump It Up Hub (v1.9.0)
-const CACHE_NAME = 'piu-hub-pwa-v1.9.0';
+// Service Worker PWA & Notificaciones — Pump It Up Hub (v1.9.1)
+const CACHE_NAME = 'piu-hub-pwa-v1.9.1';
 
 const PRECACHE_ASSETS = [
     '/',
@@ -97,7 +97,26 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Recursos estáticos locales (CSS, JS, iconos, imágenes) -> Stale While Revalidate
+    // Scripts JS y estilos CSS -> Network-First (con actualización de caché y fallback offline)
+    // Esto garantiza que el navegador obtenga el código JavaScript nuevo de inmediato y evita loops de actualización
+    if (url.origin === self.location.origin && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.includes('/js/') || url.pathname.includes('/css/'))) {
+        event.respondWith(
+            fetch(request).then((networkResponse) => {
+                if (networkResponse && networkResponse.status === 200) {
+                    const responseToCache = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(request, responseToCache);
+                    });
+                }
+                return networkResponse;
+            }).catch(() => {
+                return caches.match(request);
+            })
+        );
+        return;
+    }
+
+    // Resto de recursos estáticos (iconos, imágenes, fuentes) -> Stale While Revalidate
     if (url.origin === self.location.origin) {
         event.respondWith(
             caches.match(request).then((cachedResponse) => {
