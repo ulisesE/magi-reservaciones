@@ -78,7 +78,8 @@ class App {
         const urlParams = new URLSearchParams(window.location.search);
         const hasBusinessInUrl = urlParams.has('local')
             || urlParams.has('business')
-            || urlParams.has('sucursal');
+            || urlParams.has('sucursal')
+            || window.location.pathname.includes('/local/');
         const viewFromUrl = urlParams.get('view')?.toUpperCase();
 
         if (viewFromUrl === 'DOWNLOAD' || viewFromUrl === 'INSTALL') {

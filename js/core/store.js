@@ -43,6 +43,202 @@ function findReservationConflict(reservations, machineId, date, startTime, endTi
 
 // Modelos y datos de prueba predeterminados de Pump It Up
 const DEFAULT_MACHINES_BY_BIZ = {
+    'biz_1786567885850': [ // X-Games
+        {
+            id: 'mach_1786873314925',
+            businessId: 'biz_1786567885850',
+            name: 'Máquina Entrada',
+            model: 'Gabinete Personalizado',
+            version: 'Otra Versión',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 160,
+            padsCondition: 'En buen estado.',
+            order: 1,
+            displayOrder: 1,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-16T09:41:54.928Z'
+        },
+        {
+            id: 'mach_1786873456497',
+            businessId: 'biz_1786567885850',
+            name: 'Máquina Enmedio',
+            model: 'Gabinete Personalizado',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 160,
+            padsCondition: 'En buen estado.',
+            order: 2,
+            displayOrder: 2,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-16T09:44:16.497Z'
+        },
+        {
+            id: 'mach_1786675126892',
+            businessId: 'biz_1786567885850',
+            name: 'Vitrina',
+            model: 'Gabinete Personalizado',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 160,
+            padsCondition: 'En buen estado.',
+            order: 3,
+            displayOrder: 3,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-14T02:38:46.892Z'
+        },
+        {
+            id: 'mach_biz_1786567885850_01',
+            businessId: 'biz_1786567885850',
+            name: 'VIP',
+            model: 'Gabinete Personalizado',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 160,
+            padsCondition: 'Calibrado y listo.',
+            order: 4,
+            displayOrder: 4,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-12T20:51:26.512Z'
+        }
+    ],
+    'biz_1786547370675': [ // SKY GAMES
+        {
+            id: 'mach_1786559514339',
+            businessId: 'biz_1786547370675',
+            name: 'PIU SX',
+            model: 'CX 43',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            order: 1,
+            displayOrder: 1,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-12T18:31:54.339Z'
+        },
+        {
+            id: 'mach_biz_1786547370675_01',
+            businessId: 'biz_1786547370675',
+            name: 'MOD',
+            model: 'CX 43',
+            version: 'Otra Versión',
+            status: 'AVAILABLE',
+            hourlyRate: 60,
+            hourlyRate2P: 120,
+            padsCondition: 'Calibrado y listo.',
+            order: 2,
+            displayOrder: 2,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-12T15:09:31.730Z'
+        },
+        {
+            id: 'mach_1786563819128',
+            businessId: 'biz_1786547370675',
+            name: 'PIU TX',
+            model: 'CX 43',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            order: 3,
+            displayOrder: 3,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-12T19:43:39.128Z'
+        }
+    ],
+    'biz_1787248656226': [ // Eugenia Games
+        {
+            id: 'mach_eee78575-937b-490f-a5db-6beac581d267',
+            businessId: 'biz_1787248656226',
+            name: 'Máquina CX',
+            model: 'CX 43',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'OUT_OF_ORDER',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            order: 1,
+            displayOrder: 1,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: ['Agua', 'AM.PASS Oficial Andamiro', 'AM.PASS Card Reader', 'Cámara Stream Integrada', 'Iluminación Neón LED RGB', 'Subwoofer High-Power'],
+            createdAt: '2026-09-29T00:32:33.754Z'
+        },
+        {
+            id: 'mach_1787249215444',
+            businessId: 'biz_1787248656226',
+            name: 'Máquina LX',
+            model: 'LX 55',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 130,
+            hourlyRate2P: 210,
+            padsCondition: 'En buen estado.',
+            order: 2,
+            displayOrder: 2,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: ['Agua', 'AM.PASS Oficial Andamiro', 'AM.PASS Card Reader', 'Cámara Stream Integrada', 'Iluminación Neón LED RGB', 'Pads Suaves Recreativos'],
+            createdAt: '2026-08-20T18:06:55.445Z'
+        },
+        {
+            id: 'mach_1787249073805',
+            businessId: 'biz_1787248656226',
+            name: 'Máquina FX',
+            model: 'FX 42',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            order: 3,
+            displayOrder: 3,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: ['Agua', 'AM.PASS Card Reader', 'Cámara Stream Integrada', 'Pads Suaves Recreativos'],
+            createdAt: '2026-08-20T18:04:33.805Z'
+        }
+    ],
+    'biz_1786986908881': [ // DemoApp
+        {
+            id: 'mach_1786987846596',
+            businessId: 'biz_1786986908881',
+            name: 'Maquina1',
+            model: 'CX 43',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-17T17:30:46.596Z'
+        },
+        {
+            id: 'mach_1786987869765',
+            businessId: 'biz_1786986908881',
+            name: 'Maquina2',
+            model: 'FX 42',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 160,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: ['AM.PASS Oficial Andamiro', 'AM.PASS Card Reader', 'Barra Pro Reforzada', 'Cámara Stream Integrada', 'Iluminación Neón LED RGB', 'Sensores FSR Competición', 'Subwoofer High-Power'],
+            createdAt: '2026-08-17T17:31:09.765Z'
+        }
+    ],
     'biz_piu_centro': [
         {
             id: 'mach_lx_phoenix_01',
@@ -56,64 +252,6 @@ const DEFAULT_MACHINES_BY_BIZ = {
             hourlyRate2P: 195,
             imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
             features: ['55" 120Hz Display', 'Sound Subwoofer 2.1', 'AM.PASS Card Reader', 'Barra Pro'],
-            createdAt: new Date().toISOString()
-        },
-        {
-            id: 'mach_tx_xx_02',
-            businessId: 'biz_piu_centro',
-            name: 'PIU XX 20th Anniv. TX #2',
-            model: 'TX 50" HD Cabinet',
-            version: 'XX 20th Anniversary (v2.08)',
-            status: 'AVAILABLE',
-            padsCondition: 'Sensibilidad media-alta, pads originales Andamiro.',
-            hourlyRate: 100,
-            hourlyRate2P: 160,
-            imageUrl: 'https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?auto=format&fit=crop&w=600&q=80',
-            features: ['50" HD Screen', 'Iluminación Neón LED', 'AM.PASS Compatible'],
-            createdAt: new Date().toISOString()
-        },
-        {
-            id: 'mach_fx_prime_03',
-            businessId: 'biz_piu_centro',
-            name: 'PIU Prime 2 FX #3',
-            model: 'FX 42" Cabinet',
-            version: 'Prime 2 (v2.05)',
-            status: 'AVAILABLE',
-            padsCondition: 'Ideal para principiantes y freestyle.',
-            hourlyRate: 80,
-            hourlyRate2P: 130,
-            imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=600&q=80',
-            features: ['42" Screen', 'Clásico Sound System', 'Pads Suaves'],
-            createdAt: new Date().toISOString()
-        }
-    ],
-    'biz_arcade_galaxy': [
-        {
-            id: 'mach_gal_lx_01',
-            businessId: 'biz_arcade_galaxy',
-            name: 'PIU Phoenix Premium LX',
-            model: 'LX 55" White Special',
-            version: 'Phoenix 2024',
-            status: 'AVAILABLE',
-            padsCondition: 'Pads FSR de competición ultra-sensibles.',
-            hourlyRate: 130,
-            hourlyRate2P: 210,
-            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
-            features: ['55" 4K', 'Camara Stream integrada', 'AM.PASS'],
-            createdAt: new Date().toISOString()
-        },
-        {
-            id: 'mach_gal_xx_02',
-            businessId: 'biz_arcade_galaxy',
-            name: 'PIU XX TX Galaxy',
-            model: 'TX 50" Black Edition',
-            version: 'XX 20th Anniversary',
-            status: 'MAINTENANCE',
-            padsCondition: 'Calibración de sensor flecha azul superior izquierda en progreso.',
-            hourlyRate: 95,
-            hourlyRate2P: 150,
-            imageUrl: 'https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?auto=format&fit=crop&w=600&q=80',
-            features: ['50" HD', 'Subwoofer High-Power'],
             createdAt: new Date().toISOString()
         }
     ]
@@ -296,8 +434,9 @@ class Store {
             if (localMach) {
                 try { loadedMachines = JSON.parse(localMach); } catch (e) { loadedMachines = []; }
             }
-            if (loadedMachines.length === 0) {
-                loadedMachines = DEFAULT_MACHINES_BY_BIZ[bizId] || [];
+            if (loadedMachines.length === 0 && DEFAULT_MACHINES_BY_BIZ[bizId]) {
+                loadedMachines = [...(DEFAULT_MACHINES_BY_BIZ[bizId] || [])];
+                this.saveLocalMachines(bizId, loadedMachines);
             }
             this.machines = loadedMachines;
 

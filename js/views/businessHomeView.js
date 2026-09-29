@@ -1,5 +1,6 @@
 // Página pública principal de la sucursal seleccionada.
 import { store } from '../core/store.js';
+import { tenantManager } from '../core/tenantManager.js';
 import { pwaManager } from '../core/pwaManager.js';
 import { format12Hour, getBusinessHoursForDate, DAYS_OF_WEEK } from '../core/timeUtils.js';
 
@@ -11,7 +12,7 @@ function mapsLink(business) {
 }
 
 export function renderBusinessHomeView(container) {
-    const business = store.currentBusiness;
+    const business = store.currentBusiness || tenantManager.getActiveBusiness();
     if (!business) return;
 
     const isAppInstalled = pwaManager.isAppInstalled();
