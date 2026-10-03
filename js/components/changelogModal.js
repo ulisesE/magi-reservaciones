@@ -1,13 +1,126 @@
 // js/components/changelogModal.js
 // Modal público e interactivo para consultar el Registro de Cambios (Changelog) del sistema
 import { modal } from './modal.js';
+import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.9.0',
+        date: '29 de Septiembre de 2026',
+        badge: '🛡️ Versión Actual (Zero-Read, Escudo Anti-Cuota & Despliegue Aislado)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🛡️ Arquitectura Zero-Read y Escudo Anti-Cuota',
+                icon: '⚡',
+                items: [
+                    'Eliminación de lecturas previas al inicio de sesión: el sistema opera 100% en memoria y caché local hasta autenticar al usuario.',
+                    'Escudo inteligente contra cuota diaria de Firestore agotada (429): desconexión preventiva para evitar spam en consola y garantizar modo offline fluido.',
+                    'Optimización de consultas a Firestore: eliminación de listeners redundantes y duplicación de peticiones.'
+                ]
+            },
+            {
+                title: '🌐 Despliegue Multi-App Aislado',
+                icon: '🚀',
+                items: [
+                    'Aislamiento completo en CI/CD para coexistir pacíficamente con múltiples aplicaciones en el mismo proyecto Firebase (test-89a00).',
+                    'Enrutamiento directo y ultraligero de sucursales sin depender de Cloud Functions.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.7.5',
+        date: '28 de Septiembre de 2026',
+        badge: '⇅ Reordenar Máquinas, Descarga PWA & Privacidad',
+        isCurrent: false,
+        highlights: [
+            {
+                title: '⇅ Reordenamiento de Máquinas en Vista de Día',
+                icon: '🕹️',
+                items: [
+                    'Exclusivo para locatarios y staff: reordena las columnas de máquinas para que se muestren en el orden personalizado en la Vista de Día.',
+                    'Modal interactivo con vista previa en tiempo real de las columnas del calendario y controles de subir / bajar.',
+                    'Botones directos de reordenamiento en el catálogo de máquinas y acceso directo desde el encabezado de Vista de Día.',
+                    'Persistencia atómica en Firestore, caché local y auditoría de cambios.'
+                ]
+            },
+            {
+                title: '📲 Página y Módulo de Descarga PWA Exclusiva por Local',
+                icon: '🚀',
+                items: [
+                    'Nueva vista dedicada (/download o ?view=DOWNLOAD) vinculada y personalizada para cada sucursal.',
+                    'Instalación nativa directa en 1 clic para celulares y computadoras.',
+                    'Generador y descarga de código QR imprimible de alta resolución para colocar en la sala.',
+                    'Enlace directo para compartir por WhatsApp con mensaje arcade preconfigurado.',
+                    'Guías visuales paso a paso para Android (Chrome), iPhone / iPad (Safari) y PC.'
+                ]
+            },
+            {
+                title: '👁️ Ocultamiento Inteligente de Botones de Descarga',
+                icon: '✨',
+                items: [
+                    'Detección automática de la App instalada (Modo Standalone / PWA).',
+                    'Si el usuario ya tiene la App descargada, los botones de descarga en cabecera, inicio y bienvenida se ocultan para mantener una interfaz limpia y libre de saturación.',
+                    'Los encargados y jugadores pueden seguir accediendo a las herramientas de compartir y código QR desde la vista de descarga.'
+                ]
+            },
+            {
+                title: '🔒 Seguridad y Filtrado de Locales Deshabilitados',
+                icon: '🛡️',
+                items: [
+                    'Los locales deshabilitados se ocultan automáticamente en la pantalla de bienvenida para clientes.',
+                    'Bloqueo estricto de acceso por URL a locales inactivos para cualquier usuario que no sea Super Admin.',
+                    'El Super Admin mantiene visualización completa con la insignia ⏸️ DESHABILITADO.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.7.4',
+        date: '23 de Septiembre de 2026',
+        badge: 'PWA Móvil & Caja Unificada',
+        isCurrent: false,
+        highlights: [
+            {
+                title: '📲 Experiencia PWA Móvil Completa e Instalable',
+                icon: '📱',
+                items: [
+                    'Web App Manifest (manifest.json) con colores arcade (#080a0f), orientación vertical y accesos directos rápidos.',
+                    'Conjunto de iconos vectoriales y de alta resolución (192px, 512px, maskable, apple-touch-icon y SVG).',
+                    'Soporte nativo para pantalla completa en iPhone/iPad (iOS Safari) y Android (Chrome).',
+                    'Service Worker (sw.js) con estrategia de caché inteligente para navegación rápida y offline.',
+                    'Gestor de instalación PWA con botón arcade "📲 Instalar App" en cabecera y guía visual para iOS.'
+                ]
+            },
+            {
+                title: '💳 Desacoplamiento y Unificación de Caja en Cuenta Fácil',
+                icon: '🛒',
+                items: [
+                    'Eliminación del flujo legacy y más de 500 líneas redundantes en el Directorio de Jugadores.',
+                    'El botón "Estado de Cuenta" en las tarjetas de jugador abre directamente el modal autoritativo de Cuenta Fácil.',
+                    'Integración completa desde el estado de cuenta con el POS de productos del catálogo oficial, abonos con saldo a favor y liquidación de tickets fiados.',
+                    'Arquitectura centralizada para garantizar consistencia transaccional atómica en Firestore.'
+                ]
+            },
+            {
+                title: '🔄 Sistema de Actualización Forzada y Detección Automática',
+                icon: '⚡',
+                items: [
+                    'Manifiesto de despliegue version.json con control de versión semántica y directiva forceUpdate.',
+                    'Encabezados HTTP anti-caché en firebase.json para sw.js, version.json y manifest.json.',
+                    'updateManager con monitoreo activo del ciclo de vida del Service Worker y chequeos automáticos.',
+                    'Banner arcade Cyberpunk flotante con cuenta regresiva interactiva y botón "Actualizar Ahora".',
+                    'Botón "Buscar Actualizaciones" integrado en el menú de usuario y modal de novedades para control en 1 clic.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.7.3',
         date: '18 de Septiembre de 2026',
-        badge: '⚡ Versión Actual (Políticas, Bloqueos & Mobile)',
-        isCurrent: true,
+        badge: 'Políticas, Bloqueos & Mobile',
+        isCurrent: false,
         highlights: [
             {
                 title: '🚫 Control de Cancelaciones y Bloqueo de Jugadores',
@@ -314,8 +427,13 @@ export function openChangelogModal() {
     `;
 
     const footerHtml = `
-        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-            <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.7.3</small>
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.9.0</small>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-check-updates-changelog" style="font-size:0.75rem; padding:3px 8px;">
+                    🔄 Buscar Actualizaciones
+                </button>
+            </div>
             <button type="button" class="btn btn-primary" id="btn-close-changelog">
                 <span>Entendido</span>
             </button>
@@ -331,4 +449,7 @@ export function openChangelogModal() {
     });
 
     modalEl.querySelector('#btn-close-changelog')?.addEventListener('click', () => modal.close());
+    modalEl.querySelector('#btn-check-updates-changelog')?.addEventListener('click', () => {
+        updateManager.checkForUpdates(true);
+    });
 }

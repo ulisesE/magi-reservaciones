@@ -16,7 +16,10 @@ import {
     runTransaction,
     query, 
     where,
-    limit 
+    limit,
+    canMakeFirestoreRead,
+    markQuotaExhausted,
+    isQuotaExhausted 
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
@@ -40,6 +43,202 @@ function findReservationConflict(reservations, machineId, date, startTime, endTi
 
 // Modelos y datos de prueba predeterminados de Pump It Up
 const DEFAULT_MACHINES_BY_BIZ = {
+    'biz_1786567885850': [ // X-Games
+        {
+            id: 'mach_1786873314925',
+            businessId: 'biz_1786567885850',
+            name: 'Máquina Entrada',
+            model: 'Gabinete Personalizado',
+            version: 'Otra Versión',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 160,
+            padsCondition: 'En buen estado.',
+            order: 1,
+            displayOrder: 1,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-16T09:41:54.928Z'
+        },
+        {
+            id: 'mach_1786873456497',
+            businessId: 'biz_1786567885850',
+            name: 'Máquina Enmedio',
+            model: 'Gabinete Personalizado',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 160,
+            padsCondition: 'En buen estado.',
+            order: 2,
+            displayOrder: 2,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-16T09:44:16.497Z'
+        },
+        {
+            id: 'mach_1786675126892',
+            businessId: 'biz_1786567885850',
+            name: 'Vitrina',
+            model: 'Gabinete Personalizado',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 160,
+            padsCondition: 'En buen estado.',
+            order: 3,
+            displayOrder: 3,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-14T02:38:46.892Z'
+        },
+        {
+            id: 'mach_biz_1786567885850_01',
+            businessId: 'biz_1786567885850',
+            name: 'VIP',
+            model: 'Gabinete Personalizado',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 160,
+            padsCondition: 'Calibrado y listo.',
+            order: 4,
+            displayOrder: 4,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-12T20:51:26.512Z'
+        }
+    ],
+    'biz_1786547370675': [ // SKY GAMES
+        {
+            id: 'mach_1786559514339',
+            businessId: 'biz_1786547370675',
+            name: 'PIU SX',
+            model: 'CX 43',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            order: 1,
+            displayOrder: 1,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-12T18:31:54.339Z'
+        },
+        {
+            id: 'mach_biz_1786547370675_01',
+            businessId: 'biz_1786547370675',
+            name: 'MOD',
+            model: 'CX 43',
+            version: 'Otra Versión',
+            status: 'AVAILABLE',
+            hourlyRate: 60,
+            hourlyRate2P: 120,
+            padsCondition: 'Calibrado y listo.',
+            order: 2,
+            displayOrder: 2,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-12T15:09:31.730Z'
+        },
+        {
+            id: 'mach_1786563819128',
+            businessId: 'biz_1786547370675',
+            name: 'PIU TX',
+            model: 'CX 43',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            order: 3,
+            displayOrder: 3,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-12T19:43:39.128Z'
+        }
+    ],
+    'biz_1787248656226': [ // Eugenia Games
+        {
+            id: 'mach_eee78575-937b-490f-a5db-6beac581d267',
+            businessId: 'biz_1787248656226',
+            name: 'Máquina CX',
+            model: 'CX 43',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'OUT_OF_ORDER',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            order: 1,
+            displayOrder: 1,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: ['Agua', 'AM.PASS Oficial Andamiro', 'AM.PASS Card Reader', 'Cámara Stream Integrada', 'Iluminación Neón LED RGB', 'Subwoofer High-Power'],
+            createdAt: '2026-09-29T00:32:33.754Z'
+        },
+        {
+            id: 'mach_1787249215444',
+            businessId: 'biz_1787248656226',
+            name: 'Máquina LX',
+            model: 'LX 55',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 130,
+            hourlyRate2P: 210,
+            padsCondition: 'En buen estado.',
+            order: 2,
+            displayOrder: 2,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: ['Agua', 'AM.PASS Oficial Andamiro', 'AM.PASS Card Reader', 'Cámara Stream Integrada', 'Iluminación Neón LED RGB', 'Pads Suaves Recreativos'],
+            createdAt: '2026-08-20T18:06:55.445Z'
+        },
+        {
+            id: 'mach_1787249073805',
+            businessId: 'biz_1787248656226',
+            name: 'Máquina FX',
+            model: 'FX 42',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            order: 3,
+            displayOrder: 3,
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: ['Agua', 'AM.PASS Card Reader', 'Cámara Stream Integrada', 'Pads Suaves Recreativos'],
+            createdAt: '2026-08-20T18:04:33.805Z'
+        }
+    ],
+    'biz_1786986908881': [ // DemoApp
+        {
+            id: 'mach_1786987846596',
+            businessId: 'biz_1786986908881',
+            name: 'Maquina1',
+            model: 'CX 43',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 80,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: [],
+            createdAt: '2026-08-17T17:30:46.596Z'
+        },
+        {
+            id: 'mach_1786987869765',
+            businessId: 'biz_1786986908881',
+            name: 'Maquina2',
+            model: 'FX 42',
+            version: 'Pump It Up Fenix 2 (2026)',
+            status: 'AVAILABLE',
+            hourlyRate: 160,
+            hourlyRate2P: 130,
+            padsCondition: 'En buen estado.',
+            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
+            features: ['AM.PASS Oficial Andamiro', 'AM.PASS Card Reader', 'Barra Pro Reforzada', 'Cámara Stream Integrada', 'Iluminación Neón LED RGB', 'Sensores FSR Competición', 'Subwoofer High-Power'],
+            createdAt: '2026-08-17T17:31:09.765Z'
+        }
+    ],
     'biz_piu_centro': [
         {
             id: 'mach_lx_phoenix_01',
@@ -53,64 +252,6 @@ const DEFAULT_MACHINES_BY_BIZ = {
             hourlyRate2P: 195,
             imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
             features: ['55" 120Hz Display', 'Sound Subwoofer 2.1', 'AM.PASS Card Reader', 'Barra Pro'],
-            createdAt: new Date().toISOString()
-        },
-        {
-            id: 'mach_tx_xx_02',
-            businessId: 'biz_piu_centro',
-            name: 'PIU XX 20th Anniv. TX #2',
-            model: 'TX 50" HD Cabinet',
-            version: 'XX 20th Anniversary (v2.08)',
-            status: 'AVAILABLE',
-            padsCondition: 'Sensibilidad media-alta, pads originales Andamiro.',
-            hourlyRate: 100,
-            hourlyRate2P: 160,
-            imageUrl: 'https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?auto=format&fit=crop&w=600&q=80',
-            features: ['50" HD Screen', 'Iluminación Neón LED', 'AM.PASS Compatible'],
-            createdAt: new Date().toISOString()
-        },
-        {
-            id: 'mach_fx_prime_03',
-            businessId: 'biz_piu_centro',
-            name: 'PIU Prime 2 FX #3',
-            model: 'FX 42" Cabinet',
-            version: 'Prime 2 (v2.05)',
-            status: 'AVAILABLE',
-            padsCondition: 'Ideal para principiantes y freestyle.',
-            hourlyRate: 80,
-            hourlyRate2P: 130,
-            imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=600&q=80',
-            features: ['42" Screen', 'Clásico Sound System', 'Pads Suaves'],
-            createdAt: new Date().toISOString()
-        }
-    ],
-    'biz_arcade_galaxy': [
-        {
-            id: 'mach_gal_lx_01',
-            businessId: 'biz_arcade_galaxy',
-            name: 'PIU Phoenix Premium LX',
-            model: 'LX 55" White Special',
-            version: 'Phoenix 2024',
-            status: 'AVAILABLE',
-            padsCondition: 'Pads FSR de competición ultra-sensibles.',
-            hourlyRate: 130,
-            hourlyRate2P: 210,
-            imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
-            features: ['55" 4K', 'Camara Stream integrada', 'AM.PASS'],
-            createdAt: new Date().toISOString()
-        },
-        {
-            id: 'mach_gal_xx_02',
-            businessId: 'biz_arcade_galaxy',
-            name: 'PIU XX TX Galaxy',
-            model: 'TX 50" Black Edition',
-            version: 'XX 20th Anniversary',
-            status: 'MAINTENANCE',
-            padsCondition: 'Calibración de sensor flecha azul superior izquierda en progreso.',
-            hourlyRate: 95,
-            hourlyRate2P: 150,
-            imageUrl: 'https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?auto=format&fit=crop&w=600&q=80',
-            features: ['50" HD', 'Subwoofer High-Power'],
             createdAt: new Date().toISOString()
         }
     ]
@@ -265,57 +406,87 @@ class Store {
         await this.loadBusinessData();
     }
 
-    async loadBusinessData() {
-        if (!this.currentBusiness) return;
-        const bizId = this.currentBusiness.id;
-
+    detachAllListeners() {
         this.unsubscribeReservations?.();
         this.unsubscribePendingReservations?.();
         this.unsubscribeMachines?.();
         this.unsubscribeReservations = null;
         this.unsubscribePendingReservations = null;
         this.unsubscribeMachines = null;
+    }
+
+    async loadBusinessData() {
+        if (!this.currentBusiness) return;
+        const bizId = this.currentBusiness.id;
+
+        this.detachAllListeners();
 
         let loadedMachines = [];
         let loadedReservations = [];
         let loadedFromFirestore = false;
 
-        if (isFirebaseAvailable && db) {
-            try {
-                const machQuery = query(collection(db, COLLECTIONS.MACHINES), where("businessId", "==", bizId));
-                const machSnap = await getDocs(machQuery);
-                machSnap.forEach(d => loadedMachines.push({ id: d.id, ...d.data() }));
+        const isUserLoggedIn = !!authManager.getCurrentUser();
 
-                // Inicialmente cargamos las reservas de la fecha seleccionada/hoy usando la zona horaria local
-                const todayStr = this.selectedDate || formatDateKey(new Date());
-                this.currentSubscriptionRange = { start: todayStr, end: todayStr };
+        // 1. SI NO HAY USUARIO LOGUEADO O LA CUOTA ESTÁ AGOTADA:
+        // Cargar exclusivamente de LocalStorage y semillas (ZERO READS A FIRESTORE)
+        if (!isUserLoggedIn || !canMakeFirestoreRead()) {
+            const localMach = localStorage.getItem(`piu_machines_${bizId}`);
+            if (localMach) {
+                try { loadedMachines = JSON.parse(localMach); } catch (e) { loadedMachines = []; }
+            }
+            if (loadedMachines.length === 0 && DEFAULT_MACHINES_BY_BIZ[bizId]) {
+                loadedMachines = [...(DEFAULT_MACHINES_BY_BIZ[bizId] || [])];
+                this.saveLocalMachines(bizId, loadedMachines);
+            }
+            this.machines = loadedMachines;
 
-                const resQuery = query(
-                    collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", bizId),
-                    where("date", "==", todayStr)
-                );
-                const resSnap = await getDocs(resQuery);
-                resSnap.forEach(d => loadedReservations.push({ id: d.id, ...d.data() }));
+            const localRes = localStorage.getItem(`piu_reservations_${bizId}`);
+            if (localRes) {
+                try { loadedReservations = JSON.parse(localRes); } catch (e) { loadedReservations = []; }
+            }
+            this.reservations = loadedReservations;
+            this.pendingReservations = loadedReservations.filter(r => r.status === 'PENDING');
+            this.notify();
+            return;
+        }
+
+        // 2. SI HAY USUARIO AUTENTICADO Y CUOTA DISPONIBLE:
+        try {
+            // A. Cargar catálogo de máquinas UNA SOLA VEZ (sin listener onSnapshot permanente)
+            const machQuery = query(collection(db, COLLECTIONS.MACHINES), where("businessId", "==", bizId));
+            const machSnap = await getDocs(machQuery);
+            machSnap.forEach(d => loadedMachines.push({ id: d.id, ...d.data() }));
+            if (loadedMachines.length > 0) {
+                this.machines = loadedMachines;
+                this.saveLocalMachines(bizId, this.machines);
                 loadedFromFirestore = true;
+            }
 
-                this.unsubscribeMachines = onSnapshot(machQuery, (snapshot) => {
-                    this.machines = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                    this.saveLocalMachines(bizId, this.machines);
-                    this.notify();
-                }, (error) => console.warn('Error de sincronización de máquinas:', error));
+            // B. Reservaciones: Suscribirse con onSnapshot DIRECTO (sin getDocs previo para evitar doble cobro)
+            const todayStr = this.selectedDate || formatDateKey(new Date());
+            this.currentSubscriptionRange = { start: todayStr, end: todayStr };
 
-                this.unsubscribeReservations = onSnapshot(resQuery, (snapshot) => {
-                    const realtimeRes = [];
-                    snapshot.forEach(docSnap => {
-                        realtimeRes.push({ id: docSnap.id, ...docSnap.data() });
-                    });
-                    this.reservations = realtimeRes;
-                    this.saveLocalReservations(bizId, realtimeRes);
-                    this.notify();
-                }, (error) => console.warn('Error de sincronización de reservas:', error));
+            const resQuery = query(
+                collection(db, COLLECTIONS.RESERVATIONS),
+                where("businessId", "==", bizId),
+                where("date", "==", todayStr)
+            );
 
-                // Suscripción permanente en tiempo real para solicitudes PENDING de este local
+            this.unsubscribeReservations = onSnapshot(resQuery, (snapshot) => {
+                const realtimeRes = [];
+                snapshot.forEach(docSnap => {
+                    realtimeRes.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                this.reservations = realtimeRes;
+                this.saveLocalReservations(bizId, realtimeRes);
+                this.notify();
+            }, (error) => {
+                if (error?.code === 'resource-exhausted') markQuotaExhausted();
+                console.warn('Error en listener de reservas:', error);
+            });
+
+            // C. Solicitudes PENDING: Solo para Encargados y Staff
+            if (authManager.isStaff()) {
                 const pendingQuery = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
                     where("businessId", "==", bizId),
@@ -328,10 +499,14 @@ class Store {
                     });
                     this.pendingReservations = pendingList;
                     this.notify();
-                }, (error) => console.warn('Error de sincronización de pendientes en tiempo real:', error));
-            } catch (err) {
-                console.warn("Error Firebase:", err);
+                }, (error) => {
+                    if (error?.code === 'resource-exhausted') markQuotaExhausted();
+                    console.warn('Error en listener de pendientes:', error);
+                });
             }
+        } catch (err) {
+            if (err?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("Error cargando datos de sucursal desde Firestore:", err);
         }
 
         if (!loadedFromFirestore && loadedMachines.length === 0) {
@@ -350,6 +525,7 @@ class Store {
 
         if (!loadedFromFirestore && loadedMachines.length === 0) {
             loadedMachines = DEFAULT_MACHINES_BY_BIZ[bizId] || [
+
                 {
                     id: `mach_${bizId}_01`,
                     businessId: bizId,
@@ -481,6 +657,10 @@ class Store {
         }
 
         loaded.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+        
+        // Sincronizar memoria del store y caché local con todas las reservaciones cargadas del local
+        this.reservations = loaded;
+        this.saveLocalReservations(bizId, loaded);
         return loaded;
     }
 
@@ -520,6 +700,12 @@ class Store {
                     m.hourlyRate2P = m.hourlyRate === 80 ? 130 : Math.round(m.hourlyRate * 1.625);
                 }
                 return m;
+            })
+            .sort((a, b) => {
+                const orderA = a.displayOrder !== undefined ? a.displayOrder : (a.order !== undefined ? a.order : 9999);
+                const orderB = b.displayOrder !== undefined ? b.displayOrder : (b.order !== undefined ? b.order : 9999);
+                if (orderA !== orderB) return orderA - orderB;
+                return (a.name || '').localeCompare(b.name || '');
             });
     }
 
@@ -604,32 +790,78 @@ class Store {
         const biz = (tenantManager.getBusinessById && bizId) ? (tenantManager.getBusinessById(bizId) || this.currentBusiness) : this.currentBusiness;
         const { openingTime, closingTime } = getBusinessHoursForDate(biz, date);
 
-        // 1. Verificar directamente en Firestore sobre COLLECTIONS.RESERVATIONS (fuente autoritativa real)
+        // 1. Consultar directamente en Firestore sobre COLLECTIONS.RESERVATIONS (fuente autoritativa real)
         if (isFirebaseAvailable && db && bizId) {
             try {
-                const q = query(
-                    collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", bizId),
-                    where("machineId", "==", machineId),
-                    where("date", "==", date)
-                );
-                const snap = await getDocs(q);
-                snap.forEach(docSnap => {
-                    const r = { id: docSnap.id, ...docSnap.data() };
-                    if (excludeReservationId && r.id === excludeReservationId) return;
-                    if (r.status === 'CANCELLED' || r.status === 'REJECTED') return;
-                    if (onlyConfirmed && r.status !== 'CONFIRMED') return;
+                let snap = null;
+                // Intento A: Por businessId y date (índice nativo en firestore.indexes.json)
+                try {
+                    const qDate = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId),
+                        where("date", "==", date)
+                    );
+                    snap = await getDocs(qDate);
+                } catch(eIndex) {
+                    // Intento B: Por businessId solo (cero requerimiento de índices compuestos)
+                    const qBiz = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId)
+                    );
+                    snap = await getDocs(qBiz);
+                }
 
-                    if (isOverlapping(startTime, endTime, r.startTime, r.endTime, openingTime, closingTime)) {
-                        conflicts.push(r);
-                        if (!this.reservations.some(item => item.id === r.id)) {
+                if (snap) {
+                    snap.forEach(docSnap => {
+                        const r = { id: docSnap.id, ...docSnap.data() };
+                        // Sincronizar en memoria de store
+                        const exIdx = this.reservations.findIndex(x => x.id === r.id);
+                        if (exIdx !== -1) {
+                            this.reservations[exIdx] = r;
+                        } else {
                             this.reservations.push(r);
                         }
-                    }
-                });
+
+                        if (excludeReservationId && r.id === excludeReservationId) return;
+                        if (r.machineId !== machineId || r.date !== date) return;
+                        if (r.status === 'CANCELLED' || r.status === 'REJECTED') return;
+                        if (onlyConfirmed && r.status !== 'CONFIRMED') return;
+
+                        if (isOverlapping(startTime, endTime, r.startTime, r.endTime, openingTime, closingTime)) {
+                            conflicts.push(r);
+                        }
+                    });
+                }
             } catch (err) {
-                console.warn("⚠️ Error consultando conflictos en Firestore:", err);
+                console.warn("⚠️ Error consultando reservaciones en Firestore:", err);
             }
+
+            // 1b. Consultar en MACHINE_SCHEDULES transaccional de Firestore
+            try {
+                const scheduleKey = `${bizId}_${machineId}_${date}`;
+                const scheduleSnap = await getDoc(doc(db, COLLECTIONS.MACHINE_SCHEDULES, scheduleKey));
+                if (scheduleSnap.exists()) {
+                    const slots = scheduleSnap.data().slots || [];
+                    slots.forEach(slot => {
+                        if (excludeReservationId && slot.resId === excludeReservationId) return;
+                        if (slot.status === 'CANCELLED' || slot.status === 'REJECTED') return;
+                        if (onlyConfirmed && slot.status !== 'CONFIRMED') return;
+                        if (isOverlapping(startTime, endTime, slot.startTime, slot.endTime, openingTime, closingTime)) {
+                            if (!conflicts.some(c => c.id === slot.resId)) {
+                                conflicts.push({
+                                    id: slot.resId || 'slot_conflict',
+                                    machineId,
+                                    date,
+                                    startTime: slot.startTime,
+                                    endTime: slot.endTime,
+                                    status: slot.status || 'CONFIRMED',
+                                    clientName: slot.clientName || 'Otro jugador'
+                                });
+                            }
+                        }
+                    });
+                }
+            } catch(e) {}
         }
 
         // 2. Verificar en memoria local y en localStorage
@@ -939,23 +1171,17 @@ class Store {
     }
 
     async getOrFetchReservation(reservationId) {
-        // 1. Buscar en memoria local
+        if (!reservationId) return null;
+
+        // 1. Buscar en memoria local de reservaciones activas
         let res = this.reservations.find(r => r.id === reservationId);
         if (res) return res;
 
-        // 2. Buscar en Firestore si está disponible
-        if (isFirebaseAvailable && db) {
-            try {
-                const snap = await getDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId));
-                if (snap.exists()) {
-                    return { id: snap.id, ...snap.data() };
-                }
-            } catch (e) {
-                console.warn("Error buscando reservación en Firestore:", e);
-            }
-        }
+        // 2. Buscar en memoria de reservaciones pendientes
+        res = this.pendingReservations.find(r => r.id === reservationId);
+        if (res) return res;
 
-        // 3. Fallback a LocalStorage
+        // 3. Fallback a LocalStorage antes de ir a Firestore (Zero-Read)
         if (this.currentBusiness?.id) {
             try {
                 const localRes = localStorage.getItem(`piu_reservations_${this.currentBusiness.id}`);
@@ -968,8 +1194,25 @@ class Store {
                 console.warn("Error leyendo reservaciones locales:", e);
             }
         }
+
+        // 4. Buscar en Firestore solo si la cuota lo permite
+        if (canMakeFirestoreRead()) {
+            try {
+                const snap = await getDoc(doc(db, COLLECTIONS.RESERVATIONS, reservationId));
+                if (snap.exists()) {
+                    const data = { id: snap.id, ...snap.data() };
+                    this.reservations.push(data);
+                    return data;
+                }
+            } catch (e) {
+                if (e?.code === 'resource-exhausted') markQuotaExhausted();
+                console.warn("Error buscando reservación en Firestore:", e);
+            }
+        }
+
         return null;
     }
+
 
     async cancelReservationByClient(reservationId) {
         assertFinancialOnline();
@@ -1085,22 +1328,22 @@ class Store {
         const res = await this.getOrFetchReservation(reservationId);
         if (!res) throw new Error("Reservación no encontrada");
 
-        // 🛡️ CANDADO NIVEL 1 EN APROBACIÓN:
-        // Verificar contra reservaciones confirmadas en memoria y evitar traslapes
-        const existingConfirmed = this.getReservations({
-            date: res.date,
-            machineId: res.machineId,
-            status: 'CONFIRMED'
-        }).filter(r => r.id !== reservationId);
-
-        const biz = tenantManager.getActiveBusiness() || this.currentBusiness;
-        const { openingTime: opt, closingTime: clt } = getBusinessHoursForDate(biz, res.date);
-
-        const localConflict = existingConfirmed.find(r => 
-            isOverlapping(res.startTime, res.endTime, r.startTime, r.endTime, opt, clt)
+        // 🛡️ CANDADO AUTORITATIVO NIVEL 1 EN APROBACIÓN:
+        // Consulta directamente en Firestore COLLECTIONS.RESERVATIONS, MACHINE_SCHEDULES,
+        // memoria y localStorage si ya existe una reservación CONFIRMADA en ese horario
+        const conflicts = await this.getAuthoritativeConflicts(
+            res.businessId || this.currentBusiness?.id,
+            res.machineId,
+            res.date,
+            res.startTime,
+            res.endTime,
+            reservationId,
+            true // ONLY CONFIRMED
         );
-        if (localConflict) {
-            throw new Error(`No se puede aprobar: este horario se traslapa con la reservación ya confirmada de ${localConflict.clientName} (${format12Hour(localConflict.startTime)} - ${format12Hour(localConflict.endTime)}).`);
+
+        if (conflicts.length > 0) {
+            const conflict = conflicts[0];
+            throw new Error(`No se puede aprobar: Este horario se traslapa con la reservación ya confirmada de ${conflict.clientName} (${format12Hour(conflict.startTime)} - ${format12Hour(conflict.endTime)}).`);
         }
 
         const nowIso = new Date().toISOString();
@@ -1668,6 +1911,8 @@ class Store {
             hourlyRate2P: Number(machineData.hourlyRate2P) || 130,
             imageUrl: machineData.imageUrl || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80',
             features: machineData.features || ['AM.PASS', 'HD Sound'],
+            displayOrder: (this.machines?.length || 0) + 1,
+            order: (this.machines?.length || 0) + 1,
             createdAt: new Date().toISOString()
         };
 
@@ -1775,6 +2020,86 @@ class Store {
 
         this.notify();
         return true;
+    }
+
+    /**
+     * Reordenar máquinas del local para la Vista de Día (Solo Staff / Locatario)
+     * @param {Array<string>} orderedMachineIds - Lista ordenada de IDs de máquinas
+     */
+    async reorderMachines(orderedMachineIds) {
+        if (!authManager.isStaff()) {
+            throw new Error("Solo el personal locatario o administrador puede reordenar máquinas.");
+        }
+        if (!this.currentBusiness) throw new Error("No hay sucursal activa seleccionada.");
+
+        const bizId = this.currentBusiness.id;
+        const nowIso = new Date().toISOString();
+
+        const orderMap = new Map();
+        orderedMachineIds.forEach((id, idx) => {
+            orderMap.set(id, idx + 1);
+        });
+
+        // Actualizar en memoria local
+        this.machines = this.machines.map(m => {
+            if (orderMap.has(m.id)) {
+                return {
+                    ...m,
+                    displayOrder: orderMap.get(m.id),
+                    order: orderMap.get(m.id),
+                    updatedAt: nowIso
+                };
+            }
+            return m;
+        });
+
+        this.saveLocalMachines(bizId, this.machines);
+
+        if (isFirebaseAvailable && db) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    for (const id of orderedMachineIds) {
+                        const newOrder = orderMap.get(id);
+                        const machRef = doc(db, COLLECTIONS.MACHINES, id);
+                        transaction.update(machRef, {
+                            displayOrder: newOrder,
+                            order: newOrder,
+                            updatedAt: nowIso
+                        });
+                    }
+
+                    auditLogger.appendTransactionAudit(transaction, {
+                        businessId: bizId,
+                        action: AUDIT_ACTIONS.MACHINE_UPDATED,
+                        target: { type: 'BUSINESS', id: bizId, name: this.currentBusiness.name },
+                        details: `Reordenadas ${orderedMachineIds.length} máquinas en Vista de Día por ${authManager.getCurrentUser()?.name || 'Locatario'}`
+                    });
+                });
+            } catch (e) {
+                console.warn("Aviso al guardar orden de máquinas en Firestore (usando LocalStorage):", e);
+            }
+        }
+
+        this.notify();
+        return this.getMachines();
+    }
+
+    /**
+     * Mover máquina una posición arriba o abajo (Solo Staff / Locatario)
+     */
+    async moveMachine(machineId, direction = 'up') {
+        const currentList = this.getMachines();
+        const index = currentList.findIndex(m => m.id === machineId);
+        if (index === -1) return currentList;
+        if (direction === 'up' && index === 0) return currentList;
+        if (direction === 'down' && index === currentList.length - 1) return currentList;
+
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        const reordered = [...currentList];
+        const [movedItem] = reordered.splice(index, 1);
+        reordered.splice(newIndex, 0, movedItem);
+
+        return await this.reorderMachines(reordered.map(m => m.id));
     }
 
     setCurrentView(view) {

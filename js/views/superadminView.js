@@ -15,7 +15,10 @@ import {
     collection, 
     getDocs, 
     setDoc, 
-    doc 
+    doc,
+    query,
+    limit,
+    where 
 } from '../firebaseConfig.js';
 import { formatFriendlyDate, format12Hour } from '../core/timeUtils.js';
 import { showReservationTicket } from './clientBookingModal.js';
@@ -25,21 +28,39 @@ let activeSuperTab = 'BUSINESSES'; // 'BUSINESSES', 'RESERVATIONS', 'PLAYERS', '
 let resSearchQuery = '';
 let resFilterBiz = '';
 let resFilterStatus = 'ALL';
+let cachedGlobalReservations = null;
+let cachedStaffUsers = null;
+let cachedSuperPlayers = null;
+
+export function invalidateSuperadminCache() {
+    cachedGlobalReservations = null;
+    cachedStaffUsers = null;
+    cachedSuperPlayers = null;
+}
 
 export async function renderSuperadminView(container) {
     const businesses = tenantManager.getAllBusinesses();
-    const staffUsers = await authManager.loadStaffUsers();
+    const staffUsers = cachedStaffUsers || await authManager.loadStaffUsers();
+    cachedStaffUsers = staffUsers;
     const managers = staffUsers.filter(u => u.role === 'MANAGER');
     const cabinetModels = catalogsManager.getCabinetModels();
     const gameVersions = catalogsManager.getGameVersions();
-    const players = await clientDirManager.loadClients();
+    const players = cachedSuperPlayers || await clientDirManager.loadClients();
+    cachedSuperPlayers = players;
     const totalBusinesses = businesses.length;
 
-    let globalReservations = [];
-    if (isFirebaseAvailable && db) {
+    let globalReservations = cachedGlobalReservations || [];
+    // Carga perezosa (Lazy Load): Solo consultar reservaciones si el superadmin está en la pestaña RESERVATIONS
+    if (activeSuperTab === 'RESERVATIONS' && !cachedGlobalReservations && isFirebaseAvailable && db) {
         try {
-            const snap = await getDocs(collection(db, COLLECTIONS.RESERVATIONS));
+            const q = query(
+                collection(db, COLLECTIONS.RESERVATIONS),
+                limit(150)
+            );
+            const snap = await getDocs(q);
+            globalReservations = [];
             snap.forEach(d => globalReservations.push({ id: d.id, ...d.data() }));
+            cachedGlobalReservations = globalReservations;
         } catch(e) {
             console.warn("Error cargando reservaciones globales:", e);
         }

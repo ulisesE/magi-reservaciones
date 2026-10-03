@@ -584,7 +584,7 @@ export async function renderAccountsView(container) {
 // =============================================================================
 // MODAL DE CARGA A CUENTA / VENTA RÁPIDA (TERMINAL POS MULTI-PRODUCTO)
 // =============================================================================
-async function openQuickSaleModal(business, preselectedPlayerId = null, mainContainer) {
+export async function openQuickSaleModal(business, preselectedPlayerId = null, mainContainer = null, onSavedCallback = null) {
     const currency = business.currencySymbol || '$';
     const sortedClients = await getAllAvailableClients();
     const products = await accountManager.getProducts(business.id);
@@ -1174,7 +1174,11 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
 
             toast.success(`Venta / Consumo registrado a nombre de "${finalPlayerName}".`);
             modal.close();
-            renderAccountsView(mainContainer);
+            if (onSavedCallback) {
+                onSavedCallback();
+            } else if (mainContainer) {
+                renderAccountsView(mainContainer);
+            }
         } catch (e) {
             toast.error(e.message);
             submitBtn.disabled = false;
@@ -1186,7 +1190,7 @@ async function openQuickSaleModal(business, preselectedPlayerId = null, mainCont
 // =============================================================================
 // MODAL DE LIQUIDACIÓN / ABONO A TICKET FIADO INDIVIDUAL
 // =============================================================================
-async function openSettleTicketModal(business, tx, mainContainer) {
+export async function openSettleTicketModal(business, tx, mainContainer = null, onSavedCallback = null) {
     const currency = business.currencySymbol || '$';
     const totalAmount = Number(tx.totalAmount || 0);
     const paidAmount = Number(tx.paidAmount || 0);
@@ -1296,7 +1300,11 @@ async function openSettleTicketModal(business, tx, mainContainer) {
 
             toast.success(`Pago de ${currency}${payAmount.toFixed(2)} registrado correctamente en el ticket.`);
             modal.close();
-            renderAccountsView(mainContainer);
+            if (onSavedCallback) {
+                onSavedCallback();
+            } else if (mainContainer) {
+                renderAccountsView(mainContainer);
+            }
         } catch (e) {
             errorDiv.textContent = e.message || 'Error al liquidar ticket';
             errorDiv.classList.remove('hidden');
@@ -1309,7 +1317,7 @@ async function openSettleTicketModal(business, tx, mainContainer) {
 // =============================================================================
 // MODAL DE PAGO / ABONO / LIQUIDACIÓN DIRECTA
 // =============================================================================
-async function openPaymentModal(business, playerId, mainContainer) {
+export async function openPaymentModal(business, playerId, mainContainer = null, onSavedCallback = null) {
     const currency = business.currencySymbol || '$';
     const clients = await getAllAvailableClients();
     const client = clients.find(c => c.id === playerId) || { name: 'Jugador', username: '' };
@@ -1405,7 +1413,11 @@ async function openPaymentModal(business, playerId, mainContainer) {
                 toast.success(`Abono de ${currency}${amount.toFixed(2)} registrado exitosamente.`);
             }
             modal.close();
-            renderAccountsView(mainContainer);
+            if (onSavedCallback) {
+                onSavedCallback();
+            } else if (mainContainer) {
+                renderAccountsView(mainContainer);
+            }
         } catch (e) {
             toast.error(e.message);
             savePayBtn.disabled = false;
@@ -1415,80 +1427,229 @@ async function openPaymentModal(business, playerId, mainContainer) {
 }
 
 // =============================================================================
-// MODAL DE ESTADO DE CUENTA DETALLADO DEL CLIENTE
+// MODAL DE ESTADO DE CUENTA DETALLADO DEL CLIENTE (UNIFICADO)
 // =============================================================================
-async function openStatementModal(business, playerId) {
-    const currency = business.currencySymbol || '$';
+export async function openStatementModal(business, playerId, mainContainer = null, onUpdatedCallback = null) {
+    const currency = business?.currencySymbol || '$';
     const clients = await getAllAvailableClients();
-    const client = clients.find(c => c.id === playerId) || { name: 'Jugador', username: '' };
+    const client = clients.find(c => c.id === playerId) || { id: playerId, name: 'Jugador', username: '' };
     const account = await accountManager.getPlayerAccount(business.id, playerId);
 
+    const hasDebt = account.netDebt > 0;
+    const hasCredit = account.creditBalance > 0;
+
     const contentHtml = `
-        <div style="display:flex; flex-direction:column; gap:14px;">
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:10px; text-align:center;">
-                <div style="background:var(--bg-dark-900); padding:10px; border-radius:4px; border:1px solid rgba(255,255,255,0.08);">
-                    <small style="color:var(--text-muted); font-size:0.72rem; text-transform:uppercase;">Consumido</small>
-                    <strong style="display:block; font-size:1.05rem; color:#ffffff; font-family:var(--font-mono);">${currency}${account.totalConsumed.toFixed(2)}</strong>
+        <div style="display:flex; flex-direction:column; gap:16px;">
+            <!-- Hero Balance Card -->
+            <div class="account-balance-hero ${hasDebt ? 'has-debt' : (hasCredit ? 'has-credit' : '')}" style="background:var(--bg-dark-900); padding:16px; border-radius:6px; border:1px solid ${hasDebt ? 'rgba(255,46,126,0.4)' : (hasCredit ? 'rgba(104,242,5,0.4)' : 'rgba(255,255,255,0.1)')}; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+                <div>
+                    <span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.7); font-weight:800; display:block;">
+                        ${hasDebt ? '⚠️ SALDO PENDIENTE DE PAGO' : (hasCredit ? '🟢 SALDO A FAVOR DISPONIBLE' : '✅ CUENTA AL CORRIENTE')}
+                    </span>
+                    <div style="font-size:2rem; font-weight:900; font-family:var(--font-mono); margin:4px 0; color:${hasDebt ? 'var(--color-neon-pink)' : (hasCredit ? 'var(--color-neon-lime)' : '#ffffff')};">
+                        ${hasDebt ? `- ${currency}${account.netDebt.toFixed(2)}` : (hasCredit ? `+ ${currency}${account.creditBalance.toFixed(2)}` : `${currency}0.00`)}
+                    </div>
+                    <small style="font-size:0.75rem; color:var(--text-muted);">
+                        Sucursal: <strong>${escapeHTML(business?.name || 'Esta Sucursal')}</strong>
+                    </small>
                 </div>
-                <div style="background:var(--bg-dark-900); padding:10px; border-radius:4px; border:1px solid rgba(255,255,255,0.08);">
-                    <small style="color:var(--color-neon-lime); font-size:0.72rem; text-transform:uppercase;">Abonado</small>
-                    <strong style="display:block; font-size:1.05rem; color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${account.totalAbonos.toFixed(2)}</strong>
-                </div>
-                <div style="background:var(--bg-dark-900); padding:10px; border-radius:4px; border:1px solid rgba(104,242,5,0.3);">
-                    <small style="color:var(--color-neon-lime); font-size:0.72rem; text-transform:uppercase;">Saldo a Favor</small>
-                    <strong style="display:block; font-size:1.05rem; color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${account.creditBalance.toFixed(2)}</strong>
-                </div>
-                <div style="background:var(--bg-dark-900); padding:10px; border-radius:4px; border:1px solid ${account.netDebt > 0 ? 'var(--color-neon-pink)' : 'rgba(255,255,255,0.08)'};">
-                    <small style="color:var(--color-neon-pink); font-size:0.72rem; text-transform:uppercase;">Deuda Fiada</small>
-                    <strong style="display:block; font-size:1.05rem; color:var(--color-neon-pink); font-family:var(--font-mono);">${currency}${account.netDebt.toFixed(2)}</strong>
+
+                <!-- Métricas Rápidas -->
+                <div style="display:flex; gap:16px; flex-wrap:wrap; text-align:right;">
+                    <div>
+                        <span style="font-size:0.72rem; color:var(--text-muted); display:block; text-transform:uppercase;">Consumido</span>
+                        <strong style="font-size:1.05rem; color:#fff; font-family:var(--font-mono);">${currency}${account.totalConsumed.toFixed(2)}</strong>
+                    </div>
+                    <div>
+                        <span style="font-size:0.72rem; color:var(--text-muted); display:block; text-transform:uppercase;">Abonado</span>
+                        <strong style="font-size:1.05rem; color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${account.totalAbonos.toFixed(2)}</strong>
+                    </div>
                 </div>
             </div>
 
-            <div class="table-responsive" style="max-height:260px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px;">
-                <table class="catalogs-table" style="margin:0; font-size:0.85rem;">
-                    <thead>
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Concepto</th>
-                            <th style="text-align:right;">Monto</th>
-                            <th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${account.transactions.length === 0 ? `
-                            <tr><td colspan="4" style="text-align:center; padding:16px; color:var(--text-muted);">Sin movimientos registrados.</td></tr>
-                        ` : account.transactions.map(t => {
-                            const isCancelled = t.status === 'CANCELLED' || t.status === 'VOIDED';
-                            const isAbono = t.type === 'ABONO' || t.type === 'PAGO';
-                            const isPending = t.type === 'CONSUMO' && t.paymentStatus === 'PENDING';
-                            const paid = Number(t.paidAmount || 0);
-                            const isPartial = isPending && paid > 0;
-                            return `
-                                <tr style="${isCancelled ? 'opacity:0.4; text-decoration:line-through;' : ''}">
-                                    <td style="font-family:var(--font-mono); font-size:0.78rem;">${(t.createdAt || '').slice(0, 10)}</td>
-                                    <td>${isAbono ? '💵 Abono a cuenta' : escapeHTML(t.concept || 'Consumo')}</td>
-                                    <td style="text-align:right; font-family:var(--font-mono); font-weight:700; color:${isAbono ? 'var(--color-neon-lime)' : '#ffffff'};">
-                                        ${isAbono ? '+' : ''}${currency}${Number(t.totalAmount).toFixed(2)}
-                                    </td>
-                                    <td>
-                                        <span class="badge ${isCancelled ? 'badge-danger' : isAbono ? 'badge-success' : isPartial ? 'badge-warning' : t.paymentStatus === 'PAID' ? 'badge-primary' : 'badge-danger'}">
-                                            ${isCancelled ? 'ANULADO' : isAbono ? 'ABONO' : isPartial ? 'PARCIAL' : t.paymentStatus === 'PAID' ? 'PAGADO' : 'FIADO'}
-                                        </span>
-                                    </td>
-                                </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
-                </table>
+            <!-- Botonera de Acciones Inmediatas de Cuenta Fácil -->
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-statement-new-sale" style="flex:1; background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:bold; border:none; padding:9px 14px; font-size:0.85rem;" title="Cargar productos o consumos a la cuenta con el POS">
+                    <span>➕ Cargar Consumo (POS)</span>
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-statement-new-payment" style="flex:1; padding:9px 14px; font-size:0.85rem;" title="Registrar un abono o liquidar saldo">
+                    <span>💵 Registrar Abono / Pago</span>
+                </button>
+            </div>
+
+            <!-- Filtros de Historial -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:8px; flex-wrap:wrap; gap:8px;">
+                <h4 style="margin:0; font-size:0.95rem; color:#fff; display:flex; align-items:center; gap:6px;">
+                    <span>📜 Historial de Movimientos</span>
+                    <span class="badge badge-dark" style="font-size:0.75rem;">${account.transactions.length}</span>
+                </h4>
+                <div style="display:flex; gap:4px;" id="statement-filter-chips">
+                    <button class="btn btn-xs btn-outline active btn-stmt-filter" data-filter="ALL">Todos</button>
+                    <button class="btn btn-xs btn-outline btn-stmt-filter" data-filter="PENDING" style="color:#FF5252;">Fiados</button>
+                    <button class="btn btn-xs btn-outline btn-stmt-filter" data-filter="PAID" style="color:var(--color-neon-lime);">Pagados</button>
+                    <button class="btn btn-xs btn-outline btn-stmt-filter" data-filter="ABONO">Abonos</button>
+                </div>
+            </div>
+
+            <!-- Lista de Movimientos -->
+            <div class="account-movements-container" id="statement-tx-list" style="max-height:280px; overflow-y:auto; padding:2px;">
+                ${account.transactions.length === 0 ? `
+                    <div style="text-align:center; padding:24px 10px; color:var(--text-muted);">
+                        <div style="font-size:2rem; margin-bottom:6px;">📦</div>
+                        <p style="margin:0; font-size:0.9rem;">No hay consumos ni movimientos registrados para este jugador.</p>
+                    </div>
+                ` : account.transactions.map(t => {
+                    const isAbono = t.type === 'ABONO' || t.type === 'PAGO';
+                    const isPending = t.type === 'CONSUMO' && t.paymentStatus === 'PENDING';
+                    const isCancelled = t.status === 'CANCELLED' || t.status === 'VOIDED';
+                    const paid = Number(t.paidAmount || 0);
+                    const isPartial = isPending && paid > 0;
+                    const dateFormatted = new Date(t.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+
+                    let statusBadgeClass = 'badge-primary';
+                    let statusBadgeText = 'PAGADO';
+                    if (isCancelled) {
+                        statusBadgeClass = 'badge-danger';
+                        statusBadgeText = 'ANULADO';
+                    } else if (isAbono) {
+                        statusBadgeClass = 'badge-success';
+                        statusBadgeText = 'ABONO';
+                    } else if (isPartial) {
+                        statusBadgeClass = 'badge-warning';
+                        statusBadgeText = `PARCIAL (${currency}${paid.toFixed(2)})`;
+                    } else if (isPending) {
+                        statusBadgeClass = 'badge-danger';
+                        statusBadgeText = 'FIADO';
+                    }
+
+                    return `
+                        <div class="movement-item-card" data-type="${t.type}" data-status="${t.paymentStatus}" data-cancelled="${isCancelled}" style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; background:var(--bg-dark-900); border:1px solid rgba(255,255,255,0.06); border-radius:6px; ${isCancelled ? 'opacity:0.4; text-decoration:line-through;' : ''}">
+                            <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                                <div style="font-size:1.4rem;">
+                                    ${isAbono ? '💵' : '🛒'}
+                                </div>
+                                <div>
+                                    <div style="font-weight:bold; color:#fff; font-size:0.88rem; display:flex; align-items:center; gap:6px;">
+                                        <span>${escapeHTML(t.concept || (isAbono ? 'Abono a cuenta' : 'Consumo'))}</span>
+                                        ${t.quantity && t.quantity > 1 ? `<span class="badge badge-dark" style="font-size:0.68rem;">x${t.quantity}</span>` : ''}
+                                    </div>
+                                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+                                        <span>${dateFormatted}</span>
+                                        ${t.notes ? ` • <span style="font-style:italic;">${escapeHTML(t.notes)}</span>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                                <strong style="font-family:var(--font-mono); font-size:0.95rem; color:${isCancelled ? 'var(--text-muted)' : (isAbono ? 'var(--color-neon-lime)' : (isPending ? 'var(--color-neon-pink)' : '#ffffff'))};">
+                                    ${isAbono ? '+' : ''}${currency}${Number(t.totalAmount).toFixed(2)}
+                                </strong>
+                                <div style="display:flex; align-items:center; gap:4px;">
+                                    <span class="badge ${statusBadgeClass}" style="font-size:0.65rem;">${statusBadgeText}</span>
+                                    ${!isCancelled && isPending ? `
+                                        <button class="btn btn-outline btn-xs btn-stmt-settle" data-tx-id="${t.id}" title="Liquidar ticket fiado" style="padding:1px 5px; font-size:0.65rem; color:var(--color-neon-lime); border-color:rgba(104,242,5,0.4);">
+                                            Cobrar
+                                        </button>
+                                    ` : ''}
+                                    ${!isCancelled ? `
+                                        <button class="btn btn-outline btn-xs btn-stmt-cancel" data-tx-id="${t.id}" title="Anular este movimiento" style="padding:1px 5px; font-size:0.65rem; color:#ff5252; border-color:rgba(255,82,82,0.4);">
+                                            ✖
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
             </div>
         </div>
     `;
 
-    modal.open({
+    const modalEl = modal.open({
         title: `Estado de Cuenta: ${escapeHTML(client.name)}`,
         icon: '📜',
         contentHtml,
-        footerHtml: `<button type="button" class="btn btn-primary" onclick="window.__closeCurrentModal()">Cerrar</button>`,
-        maxWidth: '560px'
+        footerHtml: `<button type="button" class="btn btn-secondary" id="btn-close-statement">Cerrar</button>`,
+        maxWidth: '580px'
+    });
+
+    modalEl.querySelector('#btn-close-statement')?.addEventListener('click', () => {
+        modal.close();
+        if (onUpdatedCallback) onUpdatedCallback();
+    });
+
+    // Filtros de movimientos
+    modalEl.querySelectorAll('.btn-stmt-filter').forEach(chip => {
+        chip.addEventListener('click', () => {
+            modalEl.querySelectorAll('.btn-stmt-filter').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            const filter = chip.dataset.filter;
+
+            modalEl.querySelectorAll('.movement-item-card').forEach(card => {
+                const type = card.dataset.type;
+                const status = card.dataset.status;
+                const cancelled = card.dataset.cancelled === 'true';
+
+                if (filter === 'ALL') {
+                    card.style.display = 'flex';
+                } else if (filter === 'PENDING') {
+                    card.style.display = (status === 'PENDING' && !cancelled) ? 'flex' : 'none';
+                } else if (filter === 'PAID') {
+                    card.style.display = (status === 'PAID' && type !== 'ABONO' && !cancelled) ? 'flex' : 'none';
+                } else if (filter === 'ABONO') {
+                    card.style.display = (type === 'ABONO' && !cancelled) ? 'flex' : 'none';
+                }
+            });
+        });
+    });
+
+    // Acción Cargar Consumo (POS)
+    modalEl.querySelector('#btn-statement-new-sale')?.addEventListener('click', () => {
+        modal.close();
+        openQuickSaleModal(business, playerId, mainContainer, () => {
+            openStatementModal(business, playerId, mainContainer, onUpdatedCallback);
+            if (onUpdatedCallback) onUpdatedCallback();
+        });
+    });
+
+    // Acción Registrar Abono / Pago
+    modalEl.querySelector('#btn-statement-new-payment')?.addEventListener('click', () => {
+        modal.close();
+        openPaymentModal(business, playerId, mainContainer, () => {
+            openStatementModal(business, playerId, mainContainer, onUpdatedCallback);
+            if (onUpdatedCallback) onUpdatedCallback();
+        });
+    });
+
+    // Acción Liquidar Ticket Fiado
+    modalEl.querySelectorAll('.btn-stmt-settle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const txId = btn.dataset.txId;
+            const tx = account.transactions.find(t => t.id === txId);
+            if (tx) {
+                modal.close();
+                openSettleTicketModal(business, tx, mainContainer, () => {
+                    openStatementModal(business, playerId, mainContainer, onUpdatedCallback);
+                    if (onUpdatedCallback) onUpdatedCallback();
+                });
+            }
+        });
+    });
+
+    // Acción Anular Movimiento
+    modalEl.querySelectorAll('.btn-stmt-cancel').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const txId = btn.dataset.txId;
+            if (confirm("¿Estás seguro de anular este movimiento? El saldo del jugador se recalculará automáticamente de forma segura.")) {
+                try {
+                    await accountManager.cancelTransaction(business.id, playerId, txId);
+                    toast.info("Movimiento anulado correctamente.");
+                    modal.close();
+                    openStatementModal(business, playerId, mainContainer, onUpdatedCallback);
+                    if (onUpdatedCallback) onUpdatedCallback();
+                } catch (e) {
+                    toast.error(e.message || "Error al anular movimiento.");
+                }
+            }
+        });
     });
 }

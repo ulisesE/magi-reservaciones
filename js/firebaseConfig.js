@@ -17,18 +17,20 @@ import {
     doc, 
     updateDoc, 
     deleteDoc, 
-    onSnapshot, 
+    onSnapshot as _onSnapshot, 
     query, 
     where, 
-    getDocs, 
+    getDocs as _getDocs, 
     setDoc, 
-    getDoc,
+    getDoc as _getDoc,
     runTransaction,
     writeBatch,
     serverTimestamp,
     orderBy,
     limit,
-    startAfter
+    startAfter,
+    disableNetwork,
+    enableNetwork
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
 // Configuración de Firebase
@@ -61,6 +63,10 @@ try {
     }
     isFirebaseAvailable = true;
     console.log("⚡ Firebase y Auth conectados exitosamente al proyecto: test-89a00");
+    if (isQuotaExhausted() && db) {
+        disableNetwork(db).catch(() => {});
+        console.warn("🛡️ [QUOTA_SHIELD] Cuota agotada detectada previamente. Red de Firestore desconectada al inicio para evitar errores 429.");
+    }
 } catch (error) {
     console.warn("⚠️ No se pudo inicializar Firebase, operando en modo LocalStorage:", error);
 }
@@ -107,6 +113,133 @@ export function isOnline() {
     return typeof navigator !== 'undefined' ? navigator.onLine : true;
 }
 
+// ============================================================================
+// ESCUDO DE PROTECCIÓN CONTRA CUOTA AGOTADA (429 / RESOURCE EXHAUSTED)
+// ============================================================================
+const QUOTA_STORAGE_KEY = 'piu_quota_exhausted_date_v1';
+
+export function isQuotaExhausted() {
+    try {
+        const storedDate = localStorage.getItem(QUOTA_STORAGE_KEY);
+        if (!storedDate) return false;
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (storedDate === todayStr) {
+            return true;
+        } else {
+            // Nuevo día: restablecer el flag de cuota
+            localStorage.removeItem(QUOTA_STORAGE_KEY);
+            return false;
+        }
+    } catch (e) {
+        return false;
+    }
+}
+
+export function markQuotaExhausted() {
+    try {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        localStorage.setItem(QUOTA_STORAGE_KEY, todayStr);
+        if (db) {
+            disableNetwork(db).catch(() => {});
+        }
+        console.warn("🛡️ [QUOTA_SHIELD] Cuota diaria de Firestore alcanzada. Desconectando red de Firestore (disableNetwork) para evitar errores 429 y operar 100% en memoria/LocalStorage.");
+    } catch (e) {}
+}
+
+export function resetQuotaShield() {
+    try {
+        localStorage.removeItem(QUOTA_STORAGE_KEY);
+        if (db) {
+            enableNetwork(db).catch(() => {});
+        }
+        console.log("🔄 [QUOTA_SHIELD] Cuota restablecida manualmente y red de Firestore reconectada.");
+    } catch (e) {}
+}
+
+if (typeof window !== 'undefined') {
+    window.markQuotaExhausted = markQuotaExhausted;
+    window.resetQuotaShield = resetQuotaShield;
+}
+
+export function canMakeFirestoreRead() {
+    return isFirebaseAvailable && db && !isQuotaExhausted() && isOnline();
+}
+
+// =========================================================================
+// MONITOR DE LECTURAS DE FIRESTORE EN TIEMPO REAL (ZERO-LEAK AUDITOR)
+// =========================================================================
+let totalSessionReads = 0;
+const readListeners = new Set();
+
+export function onReadCountChange(fn) {
+    if (typeof fn === 'function') readListeners.add(fn);
+}
+
+export function getTotalSessionReads() {
+    return totalSessionReads;
+}
+
+function notifyReadCount() {
+    readListeners.forEach(fn => {
+        try { fn(totalSessionReads); } catch (e) {}
+    });
+}
+
+export async function getDocs(q) {
+    if (!canMakeFirestoreRead()) {
+        throw new Error("QUOTA_EXHAUSTED_OR_OFFLINE");
+    }
+    const snap = await _getDocs(q);
+    const count = snap.size || 0;
+    totalSessionReads += count;
+    notifyReadCount();
+    const collName = q?.id || q?._query?.path?.segments?.join('/') || 'consulta';
+    console.log(`%c📊 [FIRESTORE MONITOR] getDocs (${collName}): ${count} documentos leídos | Total en esta sesión: ${totalSessionReads}`, "color:#00ff88; font-weight:bold;");
+    return snap;
+}
+
+export function onSnapshot(q, onNext, onError) {
+    let isFirstSnapshot = true;
+    return _onSnapshot(q, (snapshot) => {
+        if (isFirstSnapshot) {
+            const count = snapshot.size || 0;
+            totalSessionReads += count;
+            notifyReadCount();
+            console.log(`%c📡 [FIRESTORE MONITOR] onSnapshot (carga inicial): ${count} documentos | Total en esta sesión: ${totalSessionReads}`, "color:#00ddff; font-weight:bold;");
+            isFirstSnapshot = false;
+        } else {
+            const changesCount = snapshot.docChanges().length;
+            if (changesCount > 0) {
+                totalSessionReads += changesCount;
+                notifyReadCount();
+                console.log(`%c📡 [FIRESTORE MONITOR] onSnapshot (cambios reactivos): ${changesCount} documentos | Total en esta sesión: ${totalSessionReads}`, "color:#FFB800; font-weight:bold;");
+            }
+        }
+        if (onNext) onNext(snapshot);
+    }, (err) => {
+        if (err?.code === 'resource-exhausted') {
+            markQuotaExhausted();
+        }
+        if (onError) onError(err);
+    });
+}
+
+export async function getDoc(docRef) {
+    if (!canMakeFirestoreRead()) {
+        throw new Error("QUOTA_EXHAUSTED_OR_OFFLINE");
+    }
+    const snap = await _getDoc(docRef);
+    totalSessionReads += (snap.exists() ? 1 : 1);
+    notifyReadCount();
+    console.log(`%c📄 [FIRESTORE MONITOR] getDoc: 1 documento (${snap.id}) | Total en esta sesión: ${totalSessionReads}`, "color:#C3D91E; font-weight:bold;");
+    return snap;
+}
+
+if (typeof window !== 'undefined') {
+    window.__getFirestoreReads = () => totalSessionReads;
+    window.__resetFirestoreReads = () => { totalSessionReads = 0; notifyReadCount(); };
+}
+
 export { 
     app, 
     db, 
@@ -123,12 +256,9 @@ export {
     doc, 
     updateDoc, 
     deleteDoc, 
-    onSnapshot, 
     query, 
     where, 
-    getDocs, 
     setDoc, 
-    getDoc,
     runTransaction,
     writeBatch,
     serverTimestamp,

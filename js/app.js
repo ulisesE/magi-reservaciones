@@ -21,57 +21,86 @@ import { renderSuperadminView } from './views/superadminView.js';
 import { renderClientProfileView } from './views/clientProfileView.js';
 import { renderTenantAnalyticsView } from './views/tenantAnalyticsView.js';
 import { renderVersusView } from './views/versusView.js';
+import { renderDownloadAppView } from './views/downloadAppView.js';
 import { notificationManager } from './core/notificationManager.js';
+import { pwaManager } from './core/pwaManager.js';
 import { openChangelogModal } from './components/changelogModal.js';
-import { isFirebaseAvailable } from './firebaseConfig.js';
+import { updateManager } from './core/updateManager.js';
+import { isFirebaseAvailable, isQuotaExhausted, canMakeFirestoreRead, onReadCountChange, getTotalSessionReads } from './firebaseConfig.js';
 import './core/financialTests.js';
 
 class App {
     constructor() {
         this.headerContainer = document.getElementById('header-container');
         this.mainContent = document.getElementById('main-content');
-        this.syncStatusEl = document.getElementById('cloud-sync-status');
         
-        // Listener para abrir el Changelog al hacer clic en el indicador de versión
-        if (this.syncStatusEl) {
-            this.syncStatusEl.addEventListener('click', () => {
+        // Listener global para abrir el Changelog desde el footer (botón o contenedor de estado)
+        document.addEventListener('click', (e) => {
+            const changelogTrigger = e.target.closest('#btn-open-changelog-footer, .btn-open-changelog-footer, #cloud-sync-status');
+            if (changelogTrigger) {
+                e.preventDefault();
                 openChangelogModal();
-            });
-        }
+            }
+        });
+
+        // Configurar estado de conexión a Firestore en el footer
+        this.setupFooterNetworkStatus();
     }
 
     async init() {
         console.log("🎮 Inicializando Pump It Up Hub v1.9.0 (Versus & Notifications)...");
 
-        // 1. Inicializar Gestor de Negocios
+        // 1. Inicializar Gestor de Negocios (Zero-Read: Caché / Semillas)
         await tenantManager.init();
 
-        // 2. Inicializar Autenticación y Roles
+        // 2. Inicializar Autenticación y Roles (Zero-Read: Caché / Semillas)
         await authManager.init();
 
-        // 2.5. Inicializar Service Worker de Notificaciones
+        // 2.5. Inicializar Service Worker de Notificaciones y Gestor de Actualizaciones
         await notificationManager.init();
-        notificationManager.setupRealtimeListeners(authManager.getCurrentUser());
+        updateManager.init();
 
-        // 3. Inicializar Catálogos Maestros (Versiones de Juego, Reglas)
+        // 3. Inicializar Catálogos Maestros (Zero-Read: Caché / Semillas)
         await catalogsManager.init();
 
-        // 4. Inicializar Store y datos de la sucursal activa
+        // 4. Inicializar Store (Solo lee Firestore si hay usuario logueado)
         await store.init();
+
+        // Si ya hay usuario autenticado en sesión, activar listeners y mapas
+        const currentUser = authManager.getCurrentUser();
+        if (currentUser) {
+            notificationManager.setupRealtimeListeners(currentUser);
+            if (canMakeFirestoreRead()) {
+                this.syncAuthenticatedSession(currentUser);
+            }
+        }
 
         // 4.5. Inicializar Gestor de Temas
         themeManager.init();
 
-        // Los enlaces compartidos de una sucursal abren su página pública.
-        const hasBusinessInUrl = new URLSearchParams(window.location.search).has('local')
-            || new URLSearchParams(window.location.search).has('business')
-            || new URLSearchParams(window.location.search).has('sucursal');
-        if (hasBusinessInUrl && tenantManager.isLocalSelected && store.currentView === 'DAY' && !authManager.isStaff()) {
+        // Los enlaces compartidos de una sucursal abren su página pública o la vista solicitada.
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasBusinessInUrl = urlParams.has('local')
+            || urlParams.has('business')
+            || urlParams.has('sucursal')
+            || window.location.pathname.includes('/local/');
+        const viewFromUrl = urlParams.get('view')?.toUpperCase();
+
+        if (viewFromUrl === 'DOWNLOAD' || viewFromUrl === 'INSTALL') {
+            store.currentView = 'DOWNLOAD';
+        } else if (viewFromUrl) {
+            store.currentView = viewFromUrl;
+        } else if (hasBusinessInUrl && tenantManager.isLocalSelected && store.currentView === 'DAY' && !authManager.isStaff()) {
             store.currentView = 'HOME';
         }
 
         if (authManager.isSuperAdmin() && store.currentView === 'DAY' && !tenantManager.isLocalSelected) {
             store.currentView = 'SUPERADMIN';
+        }
+
+        // Sincronizar Web App Manifest para la sucursal activa
+        if (tenantManager.getActiveBusiness()) {
+            pwaManager.updateDynamicManifest(tenantManager.getActiveBusiness());
         }
 
         // 5. Renderizar Header y Vista Activa
@@ -80,32 +109,82 @@ class App {
         // 6. Suscripciones para reactividad
         store.subscribe(() => this.render());
         tenantManager.subscribe(() => this.render());
-        authManager.subscribe(() => {
-            notificationManager.setupRealtimeListeners(authManager.getCurrentUser());
+        authManager.subscribe(async () => {
+            const current = authManager.getCurrentUser();
+            if (current) {
+                notificationManager.setupRealtimeListeners(current);
+                await store.loadBusinessData();
+                this.syncAuthenticatedSession(current);
+            } else {
+                notificationManager.setupRealtimeListeners(null);
+                store.detachAllListeners();
+                tenantManager.detachListeners();
+                await store.loadBusinessData();
+            }
+            this.updateSyncIndicator();
             this.render();
         });
 
-        // 7. Actualizar indicador de conexión
+        // 7. Actualizar indicador de conexión y escuchar lecturas en tiempo real
+        onReadCountChange(() => this.updateSyncIndicator());
         this.updateSyncIndicator();
+    }
+
+    async syncAuthenticatedSession(user) {
+        if (!user || !canMakeFirestoreRead()) return;
+        try {
+            if (user.role === 'SUPERADMIN' || user.role === 'MANAGER') {
+                await authManager.loadStaffUsers();
+                await tenantManager.syncFromFirestore();
+            }
+        } catch (e) {
+            console.warn("Sincronización suave de sesión falló:", e);
+        }
     }
 
     updateSyncIndicator() {
         if (this.syncStatusEl) {
-            if (isFirebaseAvailable) {
+            const reads = getTotalSessionReads();
+            const readPill = reads > 0 ? ` • 📊 ${reads} doc${reads === 1 ? '' : 's'}` : '';
+
+            if (isQuotaExhausted()) {
+                this.syncStatusEl.innerHTML = `
+                    <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#FFB800; box-shadow: 0 0 8px #FFB800;"></span>
+                    <span style="color:#FFB800; border-bottom: 1px dotted rgba(255,184,0,0.5); cursor:pointer;">Modo Local (Cuota Protegida 🛡️${readPill})</span>
+                `;
+            } else if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Conexión Segura (v1.7.3 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Conexión Segura (v1.9.0${readPill} • Novedades 📜)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3);">Modo Local (v1.7.3 • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Modo Local (v1.9.0${readPill} • Novedades 📜)</span>
                 `;
             }
         }
     }
 
-    render() {
+
+    render(immediate = false) {
+        if (immediate) {
+            if (this._renderRaf) cancelAnimationFrame(this._renderRaf);
+            this._renderRaf = null;
+            this._executeRender();
+            return;
+        }
+
+        if (this._renderRaf) {
+            cancelAnimationFrame(this._renderRaf);
+        }
+        this._renderRaf = requestAnimationFrame(() => {
+            this._renderRaf = null;
+            this._executeRender();
+        });
+    }
+
+    _executeRender() {
         if (this.headerContainer) {
             renderHeader(this.headerContainer);
         }
@@ -128,9 +207,11 @@ class App {
                 return;
             }
 
-            // GUARDIA 1: SUCURSAL EN PAUSA / FUERA DE SERVICIO (Para clientes/staff no Superadmin)
+            // GUARDIA 1: SUCURSAL DESHABILITADA (Solo Superadmin puede acceder)
             if (isLocalSelected && activeBusiness && !tenantManager.isBusinessActive(activeBusiness) && !isSuperAdmin) {
-                this.renderInactiveBusinessView(this.mainContent, activeBusiness);
+                tenantManager.clearSelectedLocal();
+                store.currentView = 'DAY';
+                renderLandingView(this.mainContent);
                 return;
             }
 
@@ -182,6 +263,10 @@ class App {
                 case 'VERSUS':
                     renderVersusView(this.mainContent);
                     break;
+                case 'DOWNLOAD':
+                case 'INSTALL':
+                    renderDownloadAppView(this.mainContent);
+                    break;
                 case 'SUPERADMIN':
                     renderSuperadminView(this.mainContent);
                     break;
@@ -213,17 +298,58 @@ class App {
                     </div>
                 ` : ''}
 
-                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                    <button type="button" class="btn btn-outline" id="btn-back-to-landing-paused">
-                        <span>🏠 Cambiar de Sucursal</span>
-                    </button>
-                </div>
+                ${(!tenantManager.disableChangeLocalGlobally || authManager.isSuperAdmin()) ? `
+                    <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-outline" id="btn-back-to-landing-paused">
+                            <span>🏠 Cambiar de Sucursal</span>
+                        </button>
+                    </div>
+                ` : ''}
             </div>
         `;
 
         container.querySelector('#btn-back-to-landing-paused')?.addEventListener('click', () => {
             tenantManager.clearSelectedLocal();
         });
+    }
+
+    setupFooterNetworkStatus() {
+        const updateNetworkStatus = () => {
+            const footerStatus = document.getElementById('footer-network-status');
+            if (!footerStatus) return;
+
+            const isOnline = navigator.onLine;
+            const dot = footerStatus.querySelector('.status-indicator-dot');
+            const text = footerStatus.querySelector('.network-status-text');
+
+            if (isOnline) {
+                footerStatus.className = 'network-status-badge online';
+                footerStatus.style.background = 'rgba(104,242,5,0.1)';
+                footerStatus.style.borderColor = 'rgba(104,242,5,0.3)';
+                footerStatus.style.color = 'var(--color-neon-lime)';
+                footerStatus.title = 'Conectado en tiempo real a Firebase / Firestore';
+                if (dot) {
+                    dot.style.background = '#68F205';
+                    dot.style.boxShadow = '0 0 8px #68F205';
+                }
+                if (text) text.textContent = 'Conectado a Firestore';
+            } else {
+                footerStatus.className = 'network-status-badge offline';
+                footerStatus.style.background = 'rgba(255,184,0,0.15)';
+                footerStatus.style.borderColor = 'rgba(255,184,0,0.4)';
+                footerStatus.style.color = 'var(--color-neon-gold)';
+                footerStatus.title = 'Modo Sin Conexión';
+                if (dot) {
+                    dot.style.background = '#FFB800';
+                    dot.style.boxShadow = '0 0 8px #FFB800';
+                }
+                if (text) text.textContent = 'Modo Sin Conexión';
+            }
+        };
+
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+        updateNetworkStatus();
     }
 }
 

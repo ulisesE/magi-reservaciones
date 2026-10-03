@@ -15,12 +15,15 @@ import {
     deleteDoc,
     query, 
     where, 
-    limit 
+    limit,
+    canMakeFirestoreRead,
+    markQuotaExhausted 
 } from '../firebaseConfig.js';
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 import { loyaltyManager } from '../core/loyaltyManager.js';
-import { accountManager, CONSUMPTION_TYPES } from '../core/accountManager.js';
+import { accountManager } from '../core/accountManager.js';
+import { openStatementModal, openQuickSaleModal, openPaymentModal as openAccountsPaymentModal } from './accountsView.js';
 import { tenantManager } from '../core/tenantManager.js';
 import { escapeHTML, hashPin } from '../core/securityUtils.js';
 
@@ -32,79 +35,92 @@ class ClientDirectoryManager {
     constructor() {
         this.clients = [];
         this.allClients = [];
+        this._inFlightPromise = null;
     }
 
-    async loadClients(searchQuery = '') {
-        let loaded = [];
-        
-        if (isFirebaseAvailable && db) {
-            try {
-                // Traer la lista completa de jugadores desde Firestore (colección principal piu_players)
-                const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
-                const isMalicious = (str) => {
-                    if (!str) return false;
-                    const s = String(str).toLowerCase();
-                    return s.includes('<img') || s.includes('<script') || s.includes('onerror') || s.includes('javascript:') || s.includes('eval(') || s.includes('xsstest');
-                };
+    async loadClients(searchQuery = '', forceRefresh = false) {
+        if (!forceRefresh && this._inFlightPromise) {
+            await this._inFlightPromise;
+            return this.filterClients(searchQuery);
+        }
 
-                for (const d of snap.docs) {
-                    const data = d.data();
-                    // Si detectamos un registro de inyección XSS de prueba en Firestore, lo eliminamos de inmediato
-                    if (isMalicious(d.id) || isMalicious(data.name) || isMalicious(data.username) || isMalicious(data.avatar)) {
-                        try {
-                            deleteDoc(doc(db, COLLECTIONS.PLAYERS, d.id));
-                        } catch (err) {}
-                        continue;
-                    }
+        if (!forceRefresh && (this.allClients.length > 0 || (authManager.clientUsers && authManager.clientUsers.length > 0))) {
+            if (this.allClients.length === 0 && authManager.clientUsers) {
+                this.allClients = [...authManager.clientUsers];
+            }
+            return this.filterClients(searchQuery);
+        }
 
-                    loaded.push({
-                        id: d.id,
-                        name: data.name || data.displayName || data.clientName || data.username || 'Jugador',
-                        username: data.username || data.gamerTag || (data.name ? data.name.toLowerCase().replace(/\s+/g, '_') : ''),
-                        piuGameId: data.piuGameId || data.piuId || '',
-                        phone: data.phone || data.clientPhone || data.tel || '',
-                        email: data.email || data.clientEmail || '',
-                        authUid: data.authUid || (d.id.length > 20 && !d.id.startsWith('usr_') && !d.id.startsWith('p_') ? d.id : null),
-                        pinHash: data.pinHash || null,
-                        avatar: data.avatar || '🕺',
-                        skillLevel: data.skillLevel || data.level || 'Liga C',
-                        preferredMode: data.preferredMode || 'Single / Double',
-                        notes: data.notes || '',
-                        loyalty: data.loyalty || {},
-                        accounts: data.accounts || {},
-                        role: data.role || 'CLIENT',
-                        ...data
-                    });
+        const fetchOperation = async () => {
+            let loaded = [];
+
+            // 1. PRIMERO: Si ya están en memoria en authManager o en this.allClients, usarlos (Zero-Read)
+            if (!forceRefresh && authManager.clientUsers && authManager.clientUsers.length > 0) {
+                loaded = [...authManager.clientUsers];
+            } else if (!forceRefresh && this.allClients && this.allClients.length > 0) {
+                loaded = [...this.allClients];
+            } else {
+                const local = localStorage.getItem('piu_registered_players_cache');
+                if (local) {
+                    try {
+                        const parsed = JSON.parse(local);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            loaded = parsed;
+                        }
+                    } catch (e) {}
                 }
-
-            } catch (e) {
-                console.warn("Error cargando clientes de Firestore:", e);
             }
-        }
-
-        // Fallback local solo si Firebase no está disponible o no devolvió datos
-        if (!isFirebaseAvailable || !db || loaded.length === 0) {
-            const local = localStorage.getItem('piu_registered_players_cache');
-            if (local) {
+            
+            // 2. SEGUNDO: Solo si no hay datos en memoria/local Y la cuota lo permite, consultar Firestore
+            if (loaded.length === 0 && canMakeFirestoreRead()) {
                 try {
-                    const parsed = JSON.parse(local);
-                    if (loaded.length === 0 && Array.isArray(parsed)) {
-                        loaded = parsed;
+                    const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                    for (const d of snap.docs) {
+                        const data = d.data();
+                        loaded.push({
+                            id: d.id,
+                            name: data.name || data.displayName || data.clientName || data.username || 'Jugador',
+                            username: data.username || data.gamerTag || (data.name ? data.name.toLowerCase().replace(/\s+/g, '_') : ''),
+                            piuGameId: data.piuGameId || data.piuId || '',
+                            phone: data.phone || data.clientPhone || data.tel || '',
+                            email: data.email || data.clientEmail || '',
+                            authUid: data.authUid || (d.id.length > 20 && !d.id.startsWith('usr_') && !d.id.startsWith('p_') ? d.id : null),
+                            pinHash: data.pinHash || null,
+                            avatar: data.avatar || '🕺',
+                            skillLevel: data.skillLevel || data.level || 'Liga C',
+                            preferredMode: data.preferredMode || 'Single / Double',
+                            notes: data.notes || '',
+                            loyalty: data.loyalty || {},
+                            accounts: data.accounts || {},
+                            role: data.role || 'CLIENT',
+                            ...data
+                        });
                     }
-                } catch (e) {}
+                } catch (e) {
+                    if (e?.code === 'resource-exhausted') markQuotaExhausted();
+                    console.warn("Error cargando clientes de Firestore:", e);
+                }
             }
-        }
 
-        // Sincronizar memoria de authManager con los datos autoritativos
-        if (authManager) {
-            authManager.clientUsers = [...loaded];
-        }
+            // Sincronizar memoria de authManager con los datos autoritativos
+            if (authManager) {
+                authManager.clientUsers = [...loaded];
+            }
 
-        // Guardar la lista autoritativa en caché y memoria
-        this.allClients = [...loaded];
-        this.saveLocally(this.allClients);
+            // Guardar la lista autoritativa en caché y memoria
+            this.allClients = [...loaded];
+            this.saveLocally(this.allClients);
+        };
 
-        // Si hay una consulta de búsqueda, filtrar sobre la lista completa
+        this._inFlightPromise = fetchOperation().finally(() => {
+            this._inFlightPromise = null;
+        });
+
+        await this._inFlightPromise;
+        return this.filterClients(searchQuery);
+    }
+
+    filterClients(searchQuery = '') {
         let result = [...this.allClients];
         if (searchQuery && searchQuery.trim()) {
             const term = searchQuery.toLowerCase().trim();
@@ -210,6 +226,25 @@ class ClientDirectoryManager {
         return index !== -1 ? this.clients[index] : (allIdx !== -1 ? this.allClients[allIdx] : null);
     }
 
+    updateClientLocally(clientId, updatedFields) {
+        const index = this.clients.findIndex(c => c.id === clientId);
+        if (index !== -1) {
+            this.clients[index] = { ...this.clients[index], ...updatedFields };
+        }
+        const allIdx = this.allClients ? this.allClients.findIndex(c => c.id === clientId) : -1;
+        if (allIdx !== -1) {
+            this.allClients[allIdx] = { ...this.allClients[allIdx], ...updatedFields };
+        }
+        this.saveLocally(this.allClients || this.clients);
+
+        if (authManager?.clientUsers) {
+            const authIdx = authManager.clientUsers.findIndex(c => c.id === clientId);
+            if (authIdx !== -1) {
+                authManager.clientUsers[authIdx] = { ...authManager.clientUsers[authIdx], ...updatedFields };
+            }
+        }
+    }
+
     async deleteClient(clientId) {
         this.clients = this.clients.filter(c => c.id !== clientId);
         this.allClients = this.allClients.filter(c => c.id !== clientId);
@@ -272,7 +307,7 @@ export async function renderClientsView(container, queryVal = '') {
         currentClientsPage = 1;
     }
     
-    const business = store.currentBusiness;
+    const business = store.currentBusiness || tenantManager.getActiveBusiness();
     const allClients = await clientDirManager.loadClients(currentClientsSearchQuery);
     const reservations = store.getReservations();
     const isSuperAdmin = authManager.isSuperAdmin();
@@ -688,13 +723,13 @@ export async function renderClientsView(container, queryVal = '') {
         });
     });
 
-    // Evento de Cuenta de Jugador (Fase 2)
+    // Evento de Cuenta de Jugador (Integrado con Cuenta Fácil)
     container.querySelectorAll('.btn-open-account').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = btn.dataset.id;
             const client = allClients.find(c => c.id === id);
             if (client && business) {
-                openPlayerAccountModal(client, business, container, () => {
+                openStatementModal(business, client.id, container, () => {
                     renderClientsView(container, currentClientsSearchQuery);
                 });
             }
@@ -710,7 +745,13 @@ export async function renderClientsView(container, queryVal = '') {
 
             if (confirm(`¿Registrar visita para ${client.name}? Esto le sumará 1 visita y 1 punto/crédito de lealtad.`)) {
                 try {
-                    await loyaltyManager.adjustPlayerPoints(business.id, client.id, 1, 1, 'Registro rápido de visita en recepción');
+                    const res = await loyaltyManager.adjustPlayerPoints(business.id, client.id, 1, 1, 'Registro rápido de visita en recepción');
+                    if (res && res.loyalty) {
+                        client.loyalty = res.loyalty;
+                        clientDirManager.updateClientLocally(client.id, { loyalty: res.loyalty });
+                    } else {
+                        await clientDirManager.loadClients(currentClientsSearchQuery, true);
+                    }
                     toast.success(`¡Visita registrada para ${client.name}!`);
                     renderClientsView(container, currentClientsSearchQuery);
                 } catch (e) {
@@ -946,31 +987,53 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
 }
 
 function openAdjustPointsModal(client, mainContainer) {
-    const activeBusinessId = store.currentBusiness?.id || '';
+    const activeBusiness = store.currentBusiness || tenantManager.getActiveBusiness();
+    const activeBusinessId = activeBusiness?.id || '';
     const bizLoyalty = (client.loyalty && activeBusinessId && client.loyalty[activeBusinessId]) ? client.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
 
     const contentHtml = `
         <form id="form-adjust-loyalty" class="cyber-form">
-            <p style="font-size:0.9rem; color:var(--text-secondary);">Ajustando puntos para <strong>${escapeHTML(client.name)}</strong> (@${escapeHTML(client.username || 'gamertag')})</p>
-            <div style="background:var(--bg-dark-700); padding:10px; border-radius:4px; margin-bottom:12px; font-size:0.85rem;">
-                Puntos actuales: <strong style="color:var(--color-neon-lime);">${bizLoyalty.points || 0} Pts</strong><br>
-                Visitas actuales: <strong style="color:var(--piu-cyan);">${bizLoyalty.visits || 0}</strong>
+            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:12px;">Ajustando puntos para <strong>${escapeHTML(client.name)}</strong> (@${escapeHTML(client.username || 'gamertag')})</p>
+            
+            <div style="background:var(--bg-dark-700); padding:12px; border-radius:6px; margin-bottom:14px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Puntos Actuales</span>
+                    <strong style="color:var(--color-neon-lime); font-size:1.2rem;">${bizLoyalty.points || 0} Pts</strong>
+                </div>
+                <div style="text-align:right;">
+                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas Actuales</span>
+                    <strong style="color:var(--piu-cyan); font-size:1.2rem;">${bizLoyalty.visits || 0}</strong>
+                </div>
+            </div>
+
+            <!-- Previsualización en tiempo real del saldo resultante -->
+            <div id="adj-preview-card" style="background:rgba(0, 229, 255, 0.06); border:1px dashed var(--piu-cyan); padding:10px 14px; border-radius:6px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="font-size:0.72rem; color:var(--piu-cyan); display:block; text-transform:uppercase; font-weight:700;">Nuevo Total Puntos</span>
+                    <strong id="preview-new-points" style="color:#ffffff; font-size:1.15rem;">${bizLoyalty.points || 0} Pts</strong>
+                </div>
+                <div style="text-align:right;">
+                    <span style="font-size:0.72rem; color:var(--piu-cyan); display:block; text-transform:uppercase; font-weight:700;">Nuevo Total Visitas</span>
+                    <strong id="preview-new-visits" style="color:#ffffff; font-size:1.15rem;">${bizLoyalty.visits || 0}</strong>
+                </div>
             </div>
             
             <div class="form-row grid-2">
                 <div class="form-group">
                     <label for="adj-points"><span class="neon-arrow">◆</span> Modificar Puntos (+/-)</label>
                     <input type="number" id="adj-points" class="cyber-input" value="0" placeholder="Ej. 20 o -10">
+                    <small style="color:var(--text-muted); font-size:0.72rem; display:block; margin-top:2px;">Usa números positivos o negativos.</small>
                 </div>
                 <div class="form-group">
                     <label for="adj-visits"><span class="neon-arrow">◆</span> Modificar Visitas (+/-)</label>
                     <input type="number" id="adj-visits" class="cyber-input" value="0" placeholder="Ej. 1 o -1">
+                    <small style="color:var(--text-muted); font-size:0.72rem; display:block; margin-top:2px;">Usa números positivos o negativos.</small>
                 </div>
             </div>
             
-            <div class="form-group">
-                <label for="adj-reason"><span class="neon-arrow">◆</span> Motivo del Ajuste</label>
-                <input type="text" id="adj-reason" class="cyber-input" placeholder="Ej. Participación en Torneo, Corrección, etc.">
+            <div class="form-group" style="margin-top:8px;">
+                <label for="adj-reason"><span class="neon-arrow">◆</span> Motivo del Ajuste (Auditoría)</label>
+                <input type="text" id="adj-reason" class="cyber-input" placeholder="Ej. Bonificación torneo, corrección, etc.">
             </div>
         </form>
     `;
@@ -981,32 +1044,68 @@ function openAdjustPointsModal(client, mainContainer) {
     `;
 
     const modalEl = modal.open({
-        title: 'Ajuste Manual de Puntos / Visitas',
+        title: 'Ajuste Manual de Puntos y Visitas',
         icon: '⭐',
         contentHtml,
         footerHtml,
         maxWidth: '460px'
     });
 
+    const inputPts = modalEl.querySelector('#adj-points');
+    const inputVts = modalEl.querySelector('#adj-visits');
+    const prevPts = modalEl.querySelector('#preview-new-points');
+    const prevVts = modalEl.querySelector('#preview-new-visits');
+
+    const updatePreview = () => {
+        const pDelta = parseInt(inputPts.value, 10) || 0;
+        const vDelta = parseInt(inputVts.value, 10) || 0;
+        const finalP = Math.max(0, (bizLoyalty.points || 0) + pDelta);
+        const finalV = Math.max(0, (bizLoyalty.visits || 0) + vDelta);
+        prevPts.textContent = `${finalP} Pts`;
+        prevVts.textContent = `${finalV}`;
+        prevPts.style.color = pDelta !== 0 ? 'var(--color-neon-lime)' : '#ffffff';
+        prevVts.style.color = vDelta !== 0 ? 'var(--color-neon-lime)' : '#ffffff';
+    };
+
+    inputPts.addEventListener('input', updatePreview);
+    inputVts.addEventListener('input', updatePreview);
+
     modalEl.querySelector('#btn-cancel-adj').onclick = () => modal.close();
 
     modalEl.querySelector('#btn-save-adj').onclick = async () => {
-        const ptsChange = parseInt(modalEl.querySelector('#adj-points').value, 10) || 0;
-        const vtsChange = parseInt(modalEl.querySelector('#adj-visits').value, 10) || 0;
-        const reason = modalEl.querySelector('#adj-reason').value.trim();
+        const ptsChange = parseInt(inputPts.value, 10) || 0;
+        const visitsChange = parseInt(inputVts.value, 10) || 0;
+        const reason = modalEl.querySelector('#adj-reason').value.trim() || 'Ajuste manual de encargado';
 
-        if (ptsChange === 0 && vtsChange === 0) {
+        if (ptsChange === 0 && visitsChange === 0) {
             toast.warning("No ingresaste ningún cambio en los puntos ni visitas.");
             return;
         }
 
+        if (!activeBusinessId) {
+            toast.error("No se pudo identificar la sucursal activa para el ajuste.");
+            return;
+        }
+
+        const btnSave = modalEl.querySelector('#btn-save-adj');
+        btnSave.disabled = true;
+        btnSave.textContent = 'Guardando...';
+
         try {
-            await loyaltyManager.adjustPlayerPoints(store.currentBusiness?.id, client.id, ptsChange, vtsChange, reason);
-            toast.success("Puntos/Visitas ajustados correctamente.");
+            const res = await loyaltyManager.adjustPlayerPoints(activeBusinessId, client.id, ptsChange, visitsChange, reason);
+            if (res && res.loyalty) {
+                client.loyalty = res.loyalty;
+                clientDirManager.updateClientLocally(client.id, { loyalty: res.loyalty });
+            } else {
+                await clientDirManager.loadClients(currentClientsSearchQuery, true);
+            }
+            toast.success("Puntos y visitas actualizados correctamente.");
             modal.close();
             renderClientsView(mainContainer, currentClientsSearchQuery);
         } catch (e) {
-            toast.error(e.message);
+            toast.error(e.message || "Error al actualizar puntos.");
+            btnSave.disabled = false;
+            btnSave.textContent = '💾 Guardar Ajuste';
         }
     };
 }
@@ -1125,509 +1224,22 @@ async function openClientRedemptionsModal(client, businessId, mainContainer) {
 
 /**
  * ============================================================================
- * MODAL: REGISTRO DE CONSUMO RÁPIDO (FASE 2)
- * Tipos rápidos: juego, bebida, alimento, ficha, inscripción, producto y otro
- * ============================================================================
- */
-export function openQuickConsumptionModal(client, business, mainContainer = null, onSavedCallback = null) {
-    const quickTypes = accountManager.getQuickTypes();
-    let selectedType = quickTypes[1]; // default Bebida
-
-    const contentHtml = `
-        <div style="padding:4px;">
-            <!-- Header Jugador -->
-            <div style="display:flex; align-items:center; gap:12px; background:var(--bg-dark-700); padding:12px 14px; border-radius:var(--radius-sm); margin-bottom:16px; border-left:3px solid var(--color-neon-lime);">
-                <div style="font-size:2rem; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.3); border-radius:4px;">
-                    ${client.avatar || '🕺'}
-                </div>
-                <div style="flex:1;">
-                    <div style="font-weight:bold; color:#fff; font-size:1.05rem;">${escapeHTML(client.name)}</div>
-                    <div style="display:flex; gap:8px; align-items:center; margin-top:2px;">
-                        <span class="badge badge-primary" style="font-size:0.68rem;">${escapeHTML(client.skillLevel || 'Liga C')}</span>
-                        ${client.username ? `<code style="color:var(--text-muted); font-size:0.75rem;">@${escapeHTML(client.username)}</code>` : ''}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Selector de Tipos Rápidos -->
-            <div style="margin-bottom:14px;">
-                <label style="font-size:0.82rem; font-weight:700; color:var(--text-secondary); display:block; margin-bottom:8px;">
-                    <span class="neon-arrow">◆</span> Tipo de Consumo Rápido:
-                </label>
-                <div class="consumption-types-grid" id="quick-types-container">
-                    ${quickTypes.map(t => `
-                        <div class="consumption-type-chip ${t.id === selectedType.id ? 'active' : ''}" data-type-id="${t.id}" id="chip-type-${t.id}">
-                            <span class="chip-icon">${t.icon}</span>
-                            <span class="chip-label">${t.label}</span>
-                            <span class="chip-price">$${t.defaultPrice}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-
-            <!-- Formulario de Detalle -->
-            <form id="form-quick-consumption" class="cyber-form">
-                <div class="form-group" style="margin-bottom:12px;">
-                    <label for="csm-concept"><span class="neon-arrow">◆</span> Concepto / Descripción *</label>
-                    <input type="text" id="csm-concept" class="cyber-input" value="${escapeHTML(selectedType.defaultConcept)}" placeholder="Ej. Monster Energy / 1 hr Juego" required>
-                </div>
-
-                <div class="form-row grid-2" style="margin-bottom:12px;">
-                    <div class="form-group">
-                        <label for="csm-qty"><span class="neon-arrow">◆</span> Cantidad *</label>
-                        <input type="number" id="csm-qty" class="cyber-input" value="1" min="1" max="999" required style="font-weight:bold; font-size:1.1rem; text-align:center;">
-                    </div>
-                    <div class="form-group">
-                        <label for="csm-price"><span class="neon-arrow">◆</span> Precio Unitario ($) *</label>
-                        <input type="number" id="csm-price" class="cyber-input" value="${selectedType.defaultPrice}" min="0" step="0.5" required style="font-weight:bold; font-size:1.1rem; text-align:center; color:var(--color-chartreuse);">
-                    </div>
-                </div>
-
-                <!-- Banner Total Calculado -->
-                <div style="background:rgba(2, 56, 89, 0.4); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-sm); padding:10px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                    <span style="font-size:0.85rem; color:var(--text-muted); font-weight:700;">TOTAL A REGISTRAR:</span>
-                    <strong id="csm-total-display" style="font-size:1.4rem; color:var(--color-neon-lime); font-family:var(--font-heading);">$${selectedType.defaultPrice.toFixed(2)}</strong>
-                </div>
-
-                <div class="form-row grid-2" style="margin-bottom:12px;">
-                    <div class="form-group">
-                        <label for="csm-payment-status"><span class="neon-arrow">◆</span> Estado del Cobro *</label>
-                        <select id="csm-payment-status" class="cyber-select" style="font-weight:bold;">
-                            <option value="PAID" selected>🟢 Pagado al momento</option>
-                            <option value="PENDING">⏳ A la cuenta (Pendiente de pago)</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="csm-method-group">
-                        <label for="csm-payment-method"><span class="neon-arrow">◆</span> Método de Pago</label>
-                        <select id="csm-payment-method" class="cyber-select">
-                            <option value="CASH" selected>💵 Efectivo</option>
-                            <option value="CARD">💳 Tarjeta / Terminal</option>
-                            <option value="TRANSFER">📱 Transferencia (SPEI)</option>
-                            <option value="ACCOUNT_CREDIT">🪙 Saldo a favor</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-group" style="margin-bottom:8px;">
-                    <label for="csm-notes"><span class="neon-arrow">◆</span> Notas / Observaciones (opcional)</label>
-                    <input type="text" id="csm-notes" class="cyber-input" placeholder="Ej. Entregado en mostrador / Sabor ponche">
-                </div>
-            </form>
-        </div>
-    `;
-
-    const footerHtml = `
-        <button type="button" class="btn btn-secondary" id="btn-cancel-csm">Cancelar</button>
-        <button type="button" class="btn btn-primary glow-red" id="btn-submit-csm" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:bold; border:none;">
-            <span>⚡ Registrar Consumo</span>
-        </button>
-    `;
-
-    const modalEl = modal.open({
-        title: `Registrar Consumo — ${escapeHTML(client.name)}`,
-        icon: '➕',
-        contentHtml,
-        footerHtml,
-        maxWidth: '520px'
-    });
-
-    const form = modalEl.querySelector('#form-quick-consumption');
-    const conceptInput = modalEl.querySelector('#csm-concept');
-    const qtyInput = modalEl.querySelector('#csm-qty');
-    const priceInput = modalEl.querySelector('#csm-price');
-    const totalDisplay = modalEl.querySelector('#csm-total-display');
-    const statusSelect = modalEl.querySelector('#csm-payment-status');
-    const methodGroup = modalEl.querySelector('#csm-method-group');
-    const methodSelect = modalEl.querySelector('#csm-payment-method');
-    const notesInput = modalEl.querySelector('#csm-notes');
-
-    const updateTotal = () => {
-        const q = Math.max(1, Number(qtyInput.value) || 1);
-        const p = Math.max(0, Number(priceInput.value) || 0);
-        const total = q * p;
-        totalDisplay.textContent = `$${total.toFixed(2)}`;
-    };
-
-    qtyInput.addEventListener('input', updateTotal);
-    priceInput.addEventListener('input', updateTotal);
-
-    statusSelect.addEventListener('change', () => {
-        if (statusSelect.value === 'PENDING') {
-            methodGroup.style.opacity = '0.5';
-            methodSelect.disabled = true;
-        } else {
-            methodGroup.style.opacity = '1';
-            methodSelect.disabled = false;
-        }
-    });
-
-    // Eventos para los chips de tipo
-    modalEl.querySelectorAll('.consumption-type-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            modalEl.querySelectorAll('.consumption-type-chip').forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
-            const typeId = chip.dataset.typeId;
-            selectedType = accountManager.getTypeById(typeId);
-            conceptInput.value = selectedType.defaultConcept;
-            priceInput.value = selectedType.defaultPrice;
-            updateTotal();
-        });
-    });
-
-    modalEl.querySelector('#btn-cancel-csm').onclick = () => modal.close();
-
-    modalEl.querySelector('#btn-submit-csm').onclick = async () => {
-        const concept = conceptInput.value.trim();
-        if (!concept) {
-            toast.error("Por favor ingresa un concepto para el consumo.");
-            conceptInput.focus();
-            return;
-        }
-
-        const quantity = Math.max(1, Number(qtyInput.value) || 1);
-        const unitPrice = Math.max(0, Number(priceInput.value) || 0);
-        const paymentStatus = statusSelect.value;
-        const paymentMethod = paymentStatus === 'PENDING' ? 'ON_ACCOUNT' : methodSelect.value;
-        const notes = notesInput.value.trim();
-
-        try {
-            const submitBtn = modalEl.querySelector('#btn-submit-csm');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = `<span>⏳ Registrando...</span>`;
-
-            await accountManager.recordConsumption({
-                businessId: business.id,
-                playerId: client.id,
-                playerUsername: client.username || '',
-                playerName: client.name || '',
-                playerPhone: client.phone || '',
-                itemType: selectedType.id,
-                concept,
-                quantity,
-                unitPrice,
-                notes,
-                paymentStatus,
-                paymentMethod
-            });
-
-            toast.success(`¡Consumo registrado exitosamente por $${(quantity * unitPrice).toFixed(2)}!`);
-            modal.close();
-
-            if (onSavedCallback) onSavedCallback();
-        } catch (err) {
-            toast.error(`Error: ${err.message}`);
-            const submitBtn = modalEl.querySelector('#btn-submit-csm');
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = `<span>⚡ Registrar Consumo</span>`;
-            }
-        }
-    };
-}
-
-/**
- * ============================================================================
- * MODAL: ESTADO DE CUENTA E HISTORIAL CRONOLÓGICO DEL JUGADOR (FASE 2)
+ * PUENTE DE CUENTA FÁCIL: DELEGACIÓN DIRECTA Y UNIFICADA (FASE 3)
+ * Toda la gestión de POS, ventas, fiados, cobros y estados de cuenta está
+ * centralizada en accountsView.js para garantizar transacciones atómicas
  * ============================================================================
  */
 export async function openPlayerAccountModal(client, business, mainContainer = null, onSavedCallback = null) {
-    const modalEl = modal.open({
-        title: `Cuenta de Jugador — ${escapeHTML(client.name)}`,
-        icon: '💳',
-        contentHtml: `
-            <div style="text-align:center; padding:30px;">
-                <div style="font-size:2rem; animation:spin 1s infinite linear;">⚡</div>
-                <p style="color:var(--text-muted); margin-top:10px;">Cargando estado de cuenta e historial...</p>
-            </div>
-        `,
-        footerHtml: `<button type="button" class="btn btn-secondary" id="btn-close-account">Cerrar</button>`,
-        maxWidth: '680px'
-    });
-
-    modalEl.querySelector('#btn-close-account').onclick = () => modal.close();
-
-    // Cargar datos de la cuenta
-    const account = await accountManager.getPlayerAccount(business.id, client.id);
-    const transactions = account.transactions || [];
-
-    const currencySymbol = business?.currencySymbol || '$';
-    const hasDebt = account.netDebt > 0;
-    const hasCredit = account.creditBalance > 0;
-
-    const contentHtml = `
-        <div style="display:flex; flex-direction:column; gap:16px;">
-            <!-- Tarjeta Hero de Balance -->
-            <div class="account-balance-hero ${hasDebt ? 'has-debt' : (hasCredit ? 'has-credit' : '')}">
-                <div>
-                    <span style="font-size:0.8rem; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.7); font-weight:800; display:block;">
-                        ${hasDebt ? '⚠️ SALDO PENDIENTE DE PAGO' : (hasCredit ? '🟢 SALDO A FAVOR DISPONIBLE' : '✅ SALDO AL CORRIENTE')}
-                    </span>
-                    <div class="balance-amount-display ${hasDebt ? 'debt' : (hasCredit ? 'credit' : 'clean')}">
-                        ${hasDebt ? `- ${currencySymbol}${account.netDebt.toFixed(2)}` : (hasCredit ? `+ ${currencySymbol}${account.creditBalance.toFixed(2)}` : `${currencySymbol}0.00`)}
-                    </div>
-                    <small style="font-size:0.75rem; color:rgba(255,255,255,0.6);">
-                        Local: <strong>${escapeHTML(business?.name || 'Esta Sucursal')}</strong>
-                    </small>
-                </div>
-
-                <!-- Métricas Rápidas -->
-                <div style="display:flex; gap:16px; flex-wrap:wrap; text-align:right;">
-                    <div>
-                        <span style="font-size:0.75rem; color:rgba(255,255,255,0.6); display:block;">Total Consumido</span>
-                        <strong style="font-size:1.1rem; color:#fff;">${currencySymbol}${account.totalConsumed.toFixed(2)}</strong>
-                    </div>
-                    <div>
-                        <span style="font-size:0.75rem; color:rgba(255,255,255,0.6); display:block;">Total Abonado</span>
-                        <strong style="font-size:1.1rem; color:var(--color-neon-lime);">${currencySymbol}${account.totalAbonos.toFixed(2)}</strong>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Botonera de Acciones Inmediatas -->
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button type="button" class="btn btn-primary btn-sm" id="btn-acc-new-csm" style="flex:1; background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:bold; border:none;">
-                    <span>➕ Registrar Consumo</span>
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" id="btn-acc-new-payment" style="flex:1;">
-                    <span>💵 Registrar Abono / Pago</span>
-                </button>
-            </div>
-
-            <!-- Filtros de Historial -->
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:8px; flex-wrap:wrap; gap:8px;">
-                <h4 style="margin:0; font-size:1rem; color:#fff; display:flex; align-items:center; gap:6px;">
-                    <span>📜 Historial de Movimientos</span>
-                    <span class="badge badge-dark" style="font-size:0.75rem;">${transactions.length}</span>
-                </h4>
-                <div style="display:flex; gap:4px;" id="acc-filter-chips">
-                    <button class="btn btn-xs btn-outline active btn-acc-filter" data-filter="ALL">Todos</button>
-                    <button class="btn btn-xs btn-outline btn-acc-filter" data-filter="PENDING" style="color:#FF5252;">Pendientes</button>
-                    <button class="btn btn-xs btn-outline btn-acc-filter" data-filter="PAID" style="color:var(--color-neon-lime);">Pagados</button>
-                    <button class="btn btn-xs btn-outline btn-acc-filter" data-filter="ABONO">Abonos</button>
-                </div>
-            </div>
-
-            <!-- Lista de Transacciones -->
-            <div class="account-movements-container" id="acc-transactions-list" style="max-height:340px; overflow-y:auto; padding:8px;">
-                ${transactions.length === 0 ? `
-                    <div style="text-align:center; padding:28px 10px; color:var(--text-muted);">
-                        <div style="font-size:2rem; margin-bottom:6px;">📦</div>
-                        <p style="margin:0; font-size:0.9rem;">No hay consumos ni movimientos registrados para este jugador.</p>
-                    </div>
-                ` : transactions.map(t => {
-                    const isAbono = t.type === 'ABONO' || t.type === 'PAGO';
-                    const isPending = t.paymentStatus === 'PENDING';
-                    const isCancelled = t.status === 'CANCELLED';
-                    const typeMeta = accountManager.getTypeById(t.itemType);
-                    const dateFormatted = new Date(t.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-
-                    let statusClass = 'is-paid';
-                    if (isCancelled) statusClass = 'is-cancelled';
-                    else if (isAbono) statusClass = 'is-abono';
-                    else if (isPending) statusClass = 'is-pending';
-
-                    return `
-                        <div class="movement-item-card ${statusClass}" data-type="${t.type}" data-status="${t.paymentStatus}" data-cancelled="${isCancelled}">
-                            <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                                <div style="font-size:1.6rem; min-width:32px; text-align:center;">
-                                    ${isAbono ? '💵' : typeMeta.icon}
-                                </div>
-                                <div>
-                                    <div style="font-weight:bold; color:#fff; font-size:0.92rem; display:flex; align-items:center; gap:6px;">
-                                        <span>${escapeHTML(t.concept || 'Consumo')}</span>
-                                        ${!isAbono ? `<span class="badge badge-dark" style="font-size:0.68rem;">x${t.quantity || 1}</span>` : ''}
-                                    </div>
-                                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
-                                        <span>${dateFormatted}</span>
-                                        ${t.createdBy ? ` • <span style="color:var(--text-secondary);">Por: ${escapeHTML(t.createdBy)}</span>` : ''}
-                                        ${t.notes ? ` • <em style="color:var(--piu-cyan);">"${escapeHTML(t.notes)}"</em>` : ''}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
-                                <strong style="font-size:1.05rem; font-family:var(--font-heading); color:${isCancelled ? 'var(--text-muted)' : (isAbono ? 'var(--color-neon-lime)' : (isPending ? '#FF5252' : '#fff'))};">
-                                    ${isAbono ? `+${currencySymbol}${Number(t.totalAmount).toFixed(2)}` : `${currencySymbol}${Number(t.totalAmount).toFixed(2)}`}
-                                </strong>
-                                <div>
-                                    ${isCancelled ? `
-                                        <span class="badge badge-danger" style="font-size:0.65rem;">CANCELADO</span>
-                                    ` : (isAbono ? `
-                                        <span class="badge badge-success" style="font-size:0.65rem;">ABONO A CUENTA</span>
-                                    ` : (isPending ? `
-                                        <span class="badge badge-danger" style="font-size:0.65rem;">PENDIENTE</span>
-                                    ` : `
-                                        <span class="badge badge-dark" style="font-size:0.65rem; color:var(--color-chartreuse); border-color:var(--color-chartreuse);">PAGADO</span>
-                                    `))}
-
-                                    ${!isCancelled ? `
-                                        <button type="button" class="btn btn-outline btn-xs btn-cancel-tx" data-tx-id="${t.id}" style="padding:1px 6px; font-size:0.65rem; margin-left:4px;" title="Anular este registro">
-                                            ✕
-                                        </button>
-                                    ` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        </div>
-    `;
-
-    const bodyEl = modalEl.querySelector('.modal-body') || modalEl;
-    const contentTarget = bodyEl.querySelector('div') || bodyEl;
-    contentTarget.innerHTML = contentHtml;
-
-    // Filtros
-    modalEl.querySelectorAll('.btn-acc-filter').forEach(btn => {
-        btn.addEventListener('click', () => {
-            modalEl.querySelectorAll('.btn-acc-filter').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const filter = btn.dataset.filter;
-            modalEl.querySelectorAll('.movement-item-card').forEach(card => {
-                const type = card.dataset.type;
-                const status = card.dataset.status;
-                if (filter === 'ALL') {
-                    card.style.display = 'flex';
-                } else if (filter === 'PENDING') {
-                    card.style.display = (status === 'PENDING' && card.dataset.cancelled === 'false') ? 'flex' : 'none';
-                } else if (filter === 'PAID') {
-                    card.style.display = (status === 'PAID' && type !== 'ABONO' && card.dataset.cancelled === 'false') ? 'flex' : 'none';
-                } else if (filter === 'ABONO') {
-                    card.style.display = (type === 'ABONO' && card.dataset.cancelled === 'false') ? 'flex' : 'none';
-                }
-            });
-        });
-    });
-
-    // Nuevo Consumo desde la cuenta
-    modalEl.querySelector('#btn-acc-new-csm')?.addEventListener('click', () => {
-        modal.close();
-        openQuickConsumptionModal(client, business, mainContainer, () => {
-            openPlayerAccountModal(client, business, mainContainer, onSavedCallback);
-            if (onSavedCallback) onSavedCallback();
-        });
-    });
-
-    // Nuevo Abono desde la cuenta
-    modalEl.querySelector('#btn-acc-new-payment')?.addEventListener('click', () => {
-        modal.close();
-        openPaymentModal(client, business, mainContainer, () => {
-            openPlayerAccountModal(client, business, mainContainer, onSavedCallback);
-            if (onSavedCallback) onSavedCallback();
-        });
-    });
-
-    // Cancelar transacción
-    modalEl.querySelectorAll('.btn-cancel-tx').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const txId = btn.dataset.txId;
-            if (confirm("¿Estás seguro de anular este movimiento? El saldo del jugador se recalculará automáticamente.")) {
-                try {
-                    await accountManager.cancelTransaction(business.id, client.id, txId);
-                    toast.info("Movimiento anulado.");
-                    modal.close();
-                    openPlayerAccountModal(client, business, mainContainer, onSavedCallback);
-                    if (onSavedCallback) onSavedCallback();
-                } catch (e) {
-                    toast.error(e.message);
-                }
-            }
-        });
-    });
+    const playerId = client?.id || client;
+    return openStatementModal(business, playerId, mainContainer, onSavedCallback);
 }
 
-/**
- * ============================================================================
- * MODAL: REGISTRO DE ABONO / PAGO A CUENTA (FASE 2)
- * ============================================================================
- */
-export function openPaymentModal(client, business, mainContainer = null, onSavedCallback = null) {
-    const contentHtml = `
-        <form id="form-account-payment" class="cyber-form" style="padding:4px;">
-            <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); margin-bottom:14px; border-left:3px solid var(--color-neon-lime);">
-                <div style="font-weight:bold; color:#fff; font-size:1.05rem;">${escapeHTML(client.name)}</div>
-                <small style="color:var(--text-muted);">Registrar liquidación o abono a favor para la cuenta en ${escapeHTML(business.name)}</small>
-            </div>
+export async function openQuickConsumptionModal(client, business, mainContainer = null, onSavedCallback = null) {
+    const playerId = client?.id || client;
+    return openQuickSaleModal(business, playerId, mainContainer, onSavedCallback);
+}
 
-            <div class="form-group" style="margin-bottom:12px;">
-                <label for="pay-amount"><span class="neon-arrow">◆</span> Monto a Abonar ($) *</label>
-                <input type="number" id="pay-amount" class="cyber-input" placeholder="0.00" min="1" step="0.5" required style="font-size:1.4rem; font-weight:bold; color:var(--color-neon-lime); text-align:center;">
-            </div>
-
-            <div class="form-group" style="margin-bottom:12px;">
-                <label for="pay-method"><span class="neon-arrow">◆</span> Método de Recepción *</label>
-                <select id="pay-method" class="cyber-select">
-                    <option value="CASH" selected>💵 Efectivo</option>
-                    <option value="TRANSFER">📱 Transferencia (SPEI)</option>
-                    <option value="CARD">💳 Tarjeta Bancaria</option>
-                    <option value="OTHER">📦 Otro</option>
-                </select>
-            </div>
-
-            <div class="form-group" style="margin-bottom:8px;">
-                <label for="pay-notes"><span class="neon-arrow">◆</span> Notas / Folio de comprobante</label>
-                <input type="text" id="pay-notes" class="cyber-input" placeholder="Ej. Pago en caja recepción / Folio #1234">
-            </div>
-        </form>
-    `;
-
-    const footerHtml = `
-        <button type="button" class="btn btn-secondary" id="btn-cancel-pay">Cancelar</button>
-        <button type="button" class="btn btn-primary glow-red" id="btn-submit-pay" style="background:linear-gradient(135deg, #088C4F, #68F205); color:#000; font-weight:bold; border:none;">
-            <span>💵 Registrar Abono</span>
-        </button>
-    `;
-
-    const modalEl = modal.open({
-        title: `Registrar Abono / Pago — ${escapeHTML(client.name)}`,
-        icon: '💵',
-        contentHtml,
-        footerHtml,
-        maxWidth: '440px'
-    });
-
-    modalEl.querySelector('#btn-cancel-pay').onclick = () => modal.close();
-
-    modalEl.querySelector('#btn-submit-pay').onclick = async () => {
-        const amountInput = modalEl.querySelector('#pay-amount');
-        const amount = parseFloat(amountInput.value);
-
-        if (isNaN(amount) || amount <= 0) {
-            toast.error("Por favor ingresa un monto válido mayor a 0.");
-            amountInput.focus();
-            return;
-        }
-
-        const method = modalEl.querySelector('#pay-method').value;
-        const notes = modalEl.querySelector('#pay-notes').value.trim();
-
-        try {
-            const submitBtn = modalEl.querySelector('#btn-submit-pay');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = `<span>⏳ Registrando...</span>`;
-
-            await accountManager.recordPayment({
-                businessId: business.id,
-                playerId: client.id,
-                playerUsername: client.username || '',
-                playerName: client.name || '',
-                amount,
-                paymentMethod: method,
-                notes
-            });
-
-            toast.success(`¡Abono de $${amount.toFixed(2)} registrado correctamente!`);
-            modal.close();
-
-            if (onSavedCallback) onSavedCallback();
-        } catch (err) {
-            toast.error(err.message);
-            const submitBtn = modalEl.querySelector('#btn-submit-pay');
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = `<span>💵 Registrar Abono</span>`;
-            }
-        }
-    };
+export async function openPaymentModal(client, business, mainContainer = null, onSavedCallback = null) {
+    const playerId = client?.id || client;
+    return openAccountsPaymentModal(business, playerId, mainContainer, onSavedCallback);
 }

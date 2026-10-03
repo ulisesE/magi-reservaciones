@@ -6,6 +6,87 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.9.0] - 2026-09-29
+
+### 🛡️ Optimización de Rendimiento y Arquitectura
+- **Arquitectura Zero-Read (Cero Lecturas Previas)**:
+  - Carga diferida de colecciones: La aplicación opera 100% en memoria y LocalStorage hasta que el usuario inicia sesión.
+  - Eliminación del bug de doble fetch (`getDocs` previo a `onSnapshot`).
+  - Carga única en memoria para catálogos estáticos (máquinas, modelos de gabinetes, versiones de juego).
+
+- **Escudo Inteligente Anti-Cuota de Firestore (Anti-429 Shield)**:
+  - Detección inmediata de errores `429` / `resource-exhausted`.
+  - Desconexión preventiva de la red Firestore (`disableNetwork`) para erradicar las cascadas de reintentos y spam en consola.
+  - Activación fluida del modo local sin interrupción de la experiencia del usuario.
+
+- **Aislamiento Multi-App en Despliegue CI/CD**:
+  - Configuración del flujo de GitHub Actions para desplegar exclusivamente `--only hosting:magi-suite`, protegiendo la coexistencia de múltiples aplicaciones en el proyecto Firebase `test-89a00`.
+  - Enrutamiento directo y ultraligero de sucursales (`/local/:id`) en cliente sin requerir Cloud Functions.
+
+- **Corrección Crítica de Instalación PWA (Descargar App)**:
+  - Eliminada la asignación de URLs `blob:` en `<link rel="manifest">` que provocaba el rechazo del manifest en Chromium y Android (`Unsupported URL scheme`).
+  - Corrección de falso positivo en `isAppInstalled()`: erradicado el bloqueo por `LocalStorage` para que los botones de instalación no queden inhabilitados en navegadores estándar.
+  - Nuevos modales interactivos ilustrados de instalación para Android (con detección de navegador interno de WhatsApp/Instagram) y Computadoras de escritorio (Chrome/Edge).
+
+---
+
+## [1.7.5] - 2026-09-28
+
+### 🚀 Nuevas Características
+- **Reordenamiento Personalizado de Máquinas en la Vista de Día**:
+  - Exclusivo para locatarios y staff: reordena las columnas de máquinas para que se muestren exactamente en la secuencia deseada en la Vista de Día (`js/views/dayView.js`).
+  - Nuevo modal interactivo `openReorderMachinesModal` con vista previa en tiempo real de las columnas del calendario, botones de subir `▲` y bajar `▼`, e insignias numéricas `#1`, `#2`, etc.
+  - Botón de acceso rápido `⇅ Reordenar en Vista Día` integrado tanto en la cabecera de la Vista Día como en el catálogo de máquinas (`js/views/machinesView.js`).
+  - Métodos `store.reorderMachines()` y `store.moveMachine()` con sincronización atómica en Firestore, LocalStorage y registro de auditoría.
+
+- **Página y Módulo de Descarga PWA Exclusiva por Sucursal**:
+  - Nueva vista dedicada `js/views/downloadAppView.js` accesible vía menú, footer y URL directa (`?view=DOWNLOAD&local={id}`).
+  - Botón de instalación nativa en 1 clic que dispara el prompt nativo PWA o modal educativo ilustrado en iOS Safari.
+  - Generador de código QR descargable e imprimible en alta resolución (PNG) con logotipo y nombre de la sala para colocar en mostradores.
+  - Botón para compartir instantáneamente por WhatsApp con mensaje arcade personalizado preconfigurado.
+  - Guías ilustradas paso a paso para Android, iPhone/iPad (Safari) y Computadoras de escritorio.
+
+- **Ocultamiento Inteligente de Botones de Descarga al Estar Instalada**:
+  - Detección exhaustiva de modo Standalone / PWA en todas las plataformas (`display-mode: standalone`, `navigator.standalone`, flags y LocalStorage).
+  - Al detectar que la app ya fue descargada/instalada en el dispositivo, se ocultan automáticamente los botones y banners de descarga en la barra superior (`header.js`), la pantalla de inicio del local (`businessHomeView.js`) y las tarjetas de la pantalla de bienvenida (`landingView.js`).
+  - En la vista de descarga se actualiza el estado a `✅ APP YA INSTALADA EN ESTE DISPOSITIVO`, manteniendo disponibles las herramientas de difusión y descarga del código QR.
+
+- **Seguridad y Ocultamiento de Locales Deshabilitados**:
+  - Los locales deshabilitados (`active === false` o `status === 'disabled'`) se filtran y ocultan automáticamente en la pantalla de bienvenida (`js/views/landingView.js`) para usuarios generales y clientes.
+  - Guardias de seguridad en `tenantManager` y en el enrutador principal (`app.js`) que impiden el acceso forzado mediante parámetros URL `?local={id}` a negocios inactivos a cualquier usuario que no posea rol de Super Admin.
+  - El Super Administrador conserva visibilidad total con distintivo de estado `⏸️ DESHABILITADO`.
+
+---
+
+## [1.7.4] - 2026-09-23
+
+### 🚀 Nuevas Características
+- **Experiencia PWA Móvil Completa e Instalable (Progressive Web App)**:
+  - Archivo `manifest.json` integrado con tema arcade `#080a0f`, orientación portrait y accesos directos rápidos a *Calendario de Día*, *Mi Perfil*, *Retas Versus* y *Cuenta Fácil*.
+  - Colección de iconos arcade de alta fidelidad: `icons/icon-192.png`, `icons/icon-512.png`, `icons/icon-maskable.png`, `icons/apple-touch-icon.png` e `icons/icon.svg` con la icónica cruceta de 5 paneles de Pump It Up.
+  - Soporte nativo para pantallas de inicio de iOS Safari (`apple-mobile-web-app-capable`) y Android Chrome.
+  - Service Worker (`sw.js`) optimizado con estrategia de caché inteligente para navegación offline y precaching de assets esenciales.
+  - Nuevo gestor `js/core/pwaManager.js` que escucha `beforeinstallprompt`, detecta ejecución en modo Standalone y despliega un botón arcade `📲 Instalar App` en la barra superior y menú de usuario.
+  - Modal arcade interactivo con guía paso a paso para añadir a inicio en dispositivos iPhone/iPad.
+
+- **Sistema de Actualización Forzada y Detección Automática de Nuevas Versiones**:
+  - Archivo `version.json` como manifiesto de despliegue con control semántico de versiones, build timestamp y bandera `forceUpdate`.
+  - Configuración de encabezados HTTP en `firebase.json` (`Cache-Control: no-cache, no-store, must-revalidate`) para `/sw.js`, `/version.json`, `/manifest.json` e `/index.html`, evitando bloqueos por cachés de CDN o navegador.
+  - Nuevo gestor `js/core/updateManager.js` que monitorea el ciclo de vida del Service Worker y realiza chequeos automáticos en segundo plano, al volver a la app (`visibilitychange`), al reconectar a internet y periódicamente cada 15 minutos.
+  - Soporte de mensajes `SKIP_WAITING` y `SW_ACTIVATED` en `sw.js` para activar inmediatamente el nuevo worker y purgar cachés obsoletas.
+  - Banner arcade Cyberpunk flotante (`.app-update-banner`) con cuenta regresiva interactiva, opción de pausar temporalmente y botón de acción directa `⚡ Actualizar Ahora`.
+  - Botón interactivo `🔄 Buscar Actualizaciones` integrado en el menú de usuario y en el modal del Changelog para comprobaciones manuales en 1 clic.
+  - Utilidad administrativa y de diagnóstico `window.piuForceUpdate()` para emergencias y limpiezas totales de caché.
+
+### 🛠️ Correcciones y Mejoras
+- **Desacoplamiento y Unificación de Caja en Cuenta Fácil**:
+  - Eliminación del modal legacy y código duplicado de registro de consumo en el Directorio de Clientes (`js/views/clientsView.js`), reduciendo más de 500 líneas redundantes.
+  - El botón `💳 Estado de Cuenta` en las tarjetas de jugador ahora abre el modal unificado y autoritativo de Cuenta Fácil (`js/views/accountsView.js`).
+  - Desde el estado de cuenta ahora es posible registrar consumos mediante el POS multi-producto con catálogo oficial (`openQuickSaleModal`), registrar abonos/pagos con opción de amortizar con saldo a favor (`openPaymentModal`), liquidar tickets fiados individuales (`openSettleTicketModal`) y anular movimientos de forma atómica.
+  - Puentes delegadores retrocompatibles para prevenir errores en cualquier componente que invoque APIs anteriores.
+
+---
+
 ## [1.7.3] - 2026-09-18
 
 ### 🚀 Nuevas Características

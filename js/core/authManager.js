@@ -18,7 +18,10 @@ import {
     where, 
     getDoc, 
     limit, 
-    onSnapshot 
+    onSnapshot,
+    canMakeFirestoreRead,
+    markQuotaExhausted,
+    isQuotaExhausted
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { loyaltyManager } from './loyaltyManager.js';
@@ -92,80 +95,43 @@ class AuthManager {
         if (localClients) {
             try { this.clientUsers = JSON.parse(localClients); } catch (e) { this.clientUsers = []; }
         }
-// Cargar catálogo completo de jugadores desde Firestore
-if (isFirebaseAvailable && db) {
-    await this.loadClientUsers();
-}
 
-        // 2. Control reactivo no destructivo del estado de sesión con Firebase Auth
-        if (isFirebaseAvailable && auth) {
+        // 2. Control reactivo de sesión con Firebase Auth (Solo lee si no hay sesión local válida)
+        if (canMakeFirestoreRead() && auth) {
             onAuthStateChanged(auth, async (fbUser) => {
-                if (fbUser) {
-                    console.log(`🔐 Sesión activa en Firebase Auth: UID = ${fbUser.uid} (${fbUser.email || 'anónimo'})`);
+                if (fbUser && (!this.currentUser || this.currentUser.authUid !== fbUser.uid)) {
+                    console.log(`🔐 Sesión detectada en Firebase Auth: UID = ${fbUser.uid}`);
                     try {
-                        // Sincronizar automáticamente el perfil de Staff desde Firestore
                         let staffDoc = await getDoc(doc(db, COLLECTIONS.STAFF_USERS, fbUser.uid));
                         if (staffDoc.exists()) {
-                            const staffData = staffDoc.data();
-                            this.currentUser = sanitizeUserSession({ id: staffDoc.id, authUid: fbUser.uid, ...staffData });
+                            this.currentUser = sanitizeUserSession({ id: staffDoc.id, authUid: fbUser.uid, ...staffDoc.data() });
                             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
                             this.notify();
                             return;
                         }
 
-                        // Sincronizar automáticamente el perfil de Jugador desde Firestore (por ID o por authUid)
                         let playerDoc = await getDoc(doc(db, COLLECTIONS.PLAYERS, fbUser.uid));
                         if (playerDoc.exists()) {
-                            const playerData = playerDoc.data();
-                            this.currentUser = sanitizeUserSession({ id: playerDoc.id, authUid: fbUser.uid, ...playerData });
-                            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
-                            this.notify();
-                            return;
-                        }
-
-                        // Búsqueda por campo authUid en caso de IDs legacy
-                        const qPlayer = query(collection(db, COLLECTIONS.PLAYERS), where("authUid", "==", fbUser.uid), limit(1));
-                        const qPlayerSnap = await getDocs(qPlayer);
-                        if (!qPlayerSnap.empty) {
-                            const pDoc = qPlayerSnap.docs[0];
-                            this.currentUser = sanitizeUserSession({ id: pDoc.id, authUid: fbUser.uid, ...pDoc.data() });
+                            this.currentUser = sanitizeUserSession({ id: playerDoc.id, authUid: fbUser.uid, ...playerDoc.data() });
                             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
                             this.notify();
                             return;
                         }
                     } catch (err) {
+                        if (err?.code === 'resource-exhausted') markQuotaExhausted();
                         console.warn("Advertencia sincronizando sesión desde Firestore:", err);
                     }
                 }
             });
         }
 
-        // 3. Recuperar sesión guardada localmente (Modo Híbrido tolerante)
+        // 3. Recuperar sesión guardada localmente (Zero-Read: lectura directa de LocalStorage)
         const savedSession = localStorage.getItem(AUTH_STORAGE_KEY);
         if (savedSession) {
             try {
                 const user = JSON.parse(savedSession);
-                let verifiedUser = user;
-
-                if (isFirebaseAvailable && db && user.id) {
-                    try {
-                        const isStaff = user.role === 'SUPERADMIN' || user.role === 'MANAGER';
-                        const coll = isStaff ? COLLECTIONS.STAFF_USERS : COLLECTIONS.PLAYERS;
-                        const targetDocId = user.id;
-                        const docSnap = await getDoc(doc(db, coll, targetDocId));
-                        if (docSnap.exists()) {
-                            const data = docSnap.data();
-                            verifiedUser = { id: docSnap.id, ...data };
-                        }
-                    } catch (e) {
-                        console.warn("Error verificando usuario guardado en Firestore, usando copia local:", e);
-                    }
-                }
-
-                if (verifiedUser) {
-                    this.currentUser = sanitizeUserSession(verifiedUser);
-                    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
-                    this.syncRealtimeUsers();
+                if (user && user.id) {
+                    this.currentUser = sanitizeUserSession(user);
                 }
             } catch (e) {
                 console.warn("Error parseando sesión guardada:", e);
@@ -176,22 +142,10 @@ if (isFirebaseAvailable && db) {
     }
 
     syncRealtimeUsers() {
-        if (!isFirebaseAvailable || !db || !this.isStaff()) return;
-
-        try {
-            this.unsubscribeStaff?.();
-            this.unsubscribeStaff = onSnapshot(collection(db, COLLECTIONS.STAFF_USERS), (snapshot) => {
-                if (!snapshot.empty) {
-                    const rawLoaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                    this.staffUsers = rawLoaded;
-                    localStorage.setItem('piu_staff_users_cache', JSON.stringify(rawLoaded));
-                    this.notify();
-                }
-            }, (err) => console.warn("Sincronización staff:", err.message));
-        } catch (e) {
-            console.warn("Error configurando listener staff:", e);
-        }
+        // En la nueva arquitectura, los usuarios de staff son un mapa en memoria cargado 1 sola vez
+        // Se elimina onSnapshot para evitar quema de lecturas innecesarias.
     }
+
 
     getCurrentUser() {
         return this.currentUser;
@@ -205,55 +159,63 @@ if (isFirebaseAvailable && db) {
         return this.staffUsers;
     }
 
-    async loadStaffUsers() {
-        if (isFirebaseAvailable && db) {
-            try {
-                const snap = await getDocs(collection(db, COLLECTIONS.STAFF_USERS));
-                if (!snap.empty) {
-                    this.staffUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
+    async loadStaffUsers(forceRefresh = false) {
+        if (!forceRefresh && this.staffUsers && this.staffUsers.length > 0) {
+            return this.staffUsers;
+        }
+
+        if (this._inFlightStaffPromise) {
+            return this._inFlightStaffPromise;
+        }
+
+        this._inFlightStaffPromise = (async () => {
+            if (isFirebaseAvailable && db && canMakeFirestoreRead()) {
+                try {
+                    const snap = await getDocs(collection(db, COLLECTIONS.STAFF_USERS));
+                    if (!snap.empty) {
+                        this.staffUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
+                    }
+                } catch (e) {
+                    console.warn("Error cargando staff de Firestore:", e);
                 }
-            } catch (e) {
-                console.warn("Error cargando staff de Firestore:", e);
             }
-        }
-        return this.staffUsers.length > 0 ? this.staffUsers : DEFAULT_STAFF_USERS;
-    }
-async loadClientUsers() {
-    if (isFirebaseAvailable && db) {
-        try {
-            console.log("🔄 Actualizando jugadores desde Firestore...");
+            return this.staffUsers.length > 0 ? this.staffUsers : DEFAULT_STAFF_USERS;
+        })().finally(() => {
+            this._inFlightStaffPromise = null;
+        });
 
-            const snap = await getDocs(
-                collection(db, COLLECTIONS.PLAYERS)
-            );
-
-            // Firestore es la fuente de verdad
-            this.clientUsers = snap.docs.map(d => ({
-                id: d.id,
-                ...d.data()
-            }));
-
-            // Reemplazar el cache viejo
-            localStorage.setItem(
-                'piu_registered_players_cache',
-                JSON.stringify(this.clientUsers)
-            );
-
-            console.log(
-                `✅ Jugadores actualizados: ${this.clientUsers.length}`
-            );
-
-        } catch (e) {
-            console.warn(
-                "⚠️ Error cargando jugadores de Firestore:",
-                e
-            );
-        }
+        return this._inFlightStaffPromise;
     }
 
-    return this.clientUsers;
-}
+    async loadClientUsers(forceRefresh = false) {
+        if (!forceRefresh && this.clientUsers && this.clientUsers.length > 0) {
+            return this.clientUsers;
+        }
+
+        if (this._inFlightClientPromise) {
+            return this._inFlightClientPromise;
+        }
+
+        this._inFlightClientPromise = (async () => {
+            if (isFirebaseAvailable && db && canMakeFirestoreRead()) {
+                try {
+                    console.log("🔄 Actualizando jugadores desde Firestore...");
+                    const snap = await getDocs(collection(db, COLLECTIONS.PLAYERS));
+                    this.clientUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    localStorage.setItem('piu_registered_players_cache', JSON.stringify(this.clientUsers));
+                    console.log(`✅ Jugadores actualizados: ${this.clientUsers.length}`);
+                } catch (e) {
+                    console.warn("⚠️ Error cargando jugadores de Firestore:", e);
+                }
+            }
+            return this.clientUsers;
+        })().finally(() => {
+            this._inFlightClientPromise = null;
+        });
+
+        return this._inFlightClientPromise;
+    }
     getRole() {
         return this.currentUser ? this.currentUser.role : 'CLIENT';
     }
@@ -284,69 +246,12 @@ async loadClientUsers() {
         let user = null;
         let candidateUsers = [];
 
-        // 1. Buscar en Firestore (Staff y Jugadores)
-        if (isFirebaseAvailable && db) {
-            try {
-                // Buscar en Staff por username o email
-                const qStaffUser = query(collection(db, COLLECTIONS.STAFF_USERS), where("username", "==", uTrim));
-                const staffSnap = await getDocs(qStaffUser);
-                staffSnap.forEach(d => candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.STAFF_USERS }));
-
-                if (candidateUsers.length === 0) {
-                    const qStaffEmail = query(collection(db, COLLECTIONS.STAFF_USERS), where("email", "==", uTrim));
-                    const emailSnap = await getDocs(qStaffEmail);
-                    emailSnap.forEach(d => candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.STAFF_USERS }));
-                }
-
-                // Buscar en Jugadores por username o teléfono o ID directo o PIU ID (piugame.com)
-                const qPlayerUser = query(collection(db, COLLECTIONS.PLAYERS), where("username", "==", uTrim));
-                const playerSnap = await getDocs(qPlayerUser);
-                playerSnap.forEach(d => candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.PLAYERS }));
-
-                // Buscar por PIU ID oficial (ej. megajefelink#1234)
-                if (uTrim.includes('#')) {
-                    const qPiuId = query(collection(db, COLLECTIONS.PLAYERS), where("piuGameId", "==", uTrim));
-                    const piuSnap = await getDocs(qPiuId);
-                    piuSnap.forEach(d => {
-                        if (!candidateUsers.some(c => c.id === d.id)) {
-                            candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.PLAYERS });
-                        }
-                    });
-                }
-
-                const termPhone = uTrim.replace(/\D/g, '');
-                if (termPhone) {
-                    const qPhone = query(collection(db, COLLECTIONS.PLAYERS), where("phone", "==", termPhone));
-                    const phoneSnap = await getDocs(qPhone);
-                    phoneSnap.forEach(d => {
-                        if (!candidateUsers.some(c => c.id === d.id)) {
-                            candidateUsers.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.PLAYERS });
-                        }
-                    });
-                }
-
-                // Buscar por ID directo si empieza con usr_ o p_
-                if (candidateUsers.length === 0 && (uTrim.startsWith('usr_') || uTrim.startsWith('p_'))) {
-                    try {
-                        const pDoc = await getDoc(doc(db, COLLECTIONS.PLAYERS, uTrim));
-                        if (pDoc.exists()) {
-                            candidateUsers.push({ id: pDoc.id, ...pDoc.data(), _coll: COLLECTIONS.PLAYERS });
-                        }
-                    } catch (e) {}
-                }
-            } catch (err) {
-                console.warn("Búsqueda online falló, usando candidatos locales:", err);
-            }
-        }
-
-        // Incorporar semillas locales y caché
+        // 1. PRIMERO: Buscar en caché local y memoria (Zero Firestore Reads)
         const localStaff = this.staffUsers.length > 0 ? this.staffUsers : DEFAULT_STAFF_USERS;
         const localPlayers = this.clientUsers || [];
 
         localStaff.forEach(d => {
-            if (!candidateUsers.some(c => c.id === d.id || c.username?.toLowerCase() === d.username?.toLowerCase())) {
-                candidateUsers.push({ ...d, _coll: COLLECTIONS.STAFF_USERS });
-            }
+            candidateUsers.push({ ...d, _coll: COLLECTIONS.STAFF_USERS });
         });
         localPlayers.forEach(d => {
             if (!candidateUsers.some(c => c.id === d.id)) {
@@ -354,7 +259,7 @@ async loadClientUsers() {
             }
         });
 
-        // 2. Validar credenciales contra el hash del PIN o PIN plano legado
+        // Validar credenciales contra candidatos locales
         for (const candidate of candidateUsers) {
             const matchesUsername = candidate.username?.toLowerCase() === uTrim || candidate.email?.toLowerCase() === uTrim;
             const matchesPiuId = candidate.piuGameId?.toLowerCase() === uTrim || (candidate.piuGameId && candidate.piuGameId.toLowerCase().replace(/#/g, '') === uTrim.replace(/#/g, ''));
@@ -371,9 +276,46 @@ async loadClientUsers() {
             }
         }
 
+        // 2. SEGUNDO: Si no se encontró en memoria local, buscar en Firestore (si la cuota lo permite)
+        if (!user && canMakeFirestoreRead()) {
+            try {
+                const firestoreCandidates = [];
+                const qStaffUser = query(collection(db, COLLECTIONS.STAFF_USERS), where("username", "==", uTrim));
+                const staffSnap = await getDocs(qStaffUser);
+                staffSnap.forEach(d => firestoreCandidates.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.STAFF_USERS }));
+
+                if (firestoreCandidates.length === 0) {
+                    const qPlayerUser = query(collection(db, COLLECTIONS.PLAYERS), where("username", "==", uTrim));
+                    const playerSnap = await getDocs(qPlayerUser);
+                    playerSnap.forEach(d => firestoreCandidates.push({ id: d.id, ...d.data(), _coll: COLLECTIONS.PLAYERS }));
+                }
+
+                for (const candidate of firestoreCandidates) {
+                    const matchesUsername = candidate.username?.toLowerCase() === uTrim || candidate.email?.toLowerCase() === uTrim;
+                    if (matchesUsername) {
+                        const storedPinOrHash = candidate.pinHash || candidate.pin;
+                        const isValid = await verifyPin(pTrim, storedPinOrHash);
+                        if (isValid) {
+                            user = candidate;
+                            // Guardar en caché local para futuros inicios de sesión
+                            if (candidate._coll === COLLECTIONS.PLAYERS && !this.clientUsers.some(c => c.id === candidate.id)) {
+                                this.clientUsers.push(candidate);
+                                localStorage.setItem('piu_registered_players_cache', JSON.stringify(this.clientUsers));
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (err) {
+                if (err?.code === 'resource-exhausted') markQuotaExhausted();
+                console.warn("Búsqueda en Firestore falló:", err);
+            }
+        }
+
         if (!user) {
             throw new Error("Usuario/GamerTag o PIN incorrecto. Verifica tus credenciales o solicita registro.");
         }
+
 
         const isStaff = user.role === 'SUPERADMIN' || user.role === 'MANAGER';
 

@@ -9,6 +9,8 @@ import { modal } from './modal.js';
 import { toast } from './toast.js';
 import { navShortcutsManager } from '../core/navShortcutsManager.js';
 import { notificationManager } from '../core/notificationManager.js';
+import { pwaManager } from '../core/pwaManager.js';
+import { updateManager } from '../core/updateManager.js';
 
 export function renderHeader(container) {
     const isLocalSelected = tenantManager.isLocalSelected;
@@ -20,6 +22,7 @@ export function renderHeader(container) {
     const isClientUser = authManager.isClientUser();
     const pendingCount = store.getPendingRequestsCount();
     const currentView = store.currentView;
+    const isAppInstalled = pwaManager.isAppInstalled();
 
     const userId = currentUser ? (currentUser.id || currentUser.username || 'staff') : 'default';
     const availableStaffModules = isStaff ? navShortcutsManager.getAvailableModules(isSuperAdmin, business) : [];
@@ -47,14 +50,16 @@ export function renderHeader(container) {
                             <div class="brand-title">
                                 <span class="piu-highlight">PUMP IT UP</span> HUB
                             </div>
-                            <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
+                            <div class="brand-subtitle">
                                 <span>Plataforma Modular de Reservaciones</span>
-                                <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.3">v1.7.3</button>
                             </div>
                         </div>
                     </div>
 
                     <div class="header-actions">
+                        <button class="btn btn-outline btn-xs btn-pwa-install" style="display:none; border-radius:var(--radius-full); padding:4px 9px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:bold; align-items:center; gap:4px;" title="Instalar Pump It Up Hub en tu celular o PC">
+                            <span>📲 Instalar App</span>
+                        </button>
                         ${currentUser ? `
                             <div class="user-session-pill" style="display:flex; align-items:center; gap:8px; background:var(--bg-dark-700); padding:4px 12px; border-radius:var(--radius-full); border:1px solid var(--border-color);">
                                 <span style="font-size:1.1rem;">${currentUser.avatar || '👤'}</span>
@@ -105,25 +110,26 @@ export function renderHeader(container) {
                         <div class="brand-title" style="font-size:1.15rem;">
                             <span class="piu-highlight">${business?.name || 'Pump It Up'}</span>
                         </div>
-                        <div class="brand-subtitle" style="display:flex; align-items:center; gap:6px;">
+                        <div class="brand-subtitle">
                             <span>${business?.city || 'Arcade'}</span>
-                            <button type="button" class="btn-open-changelog-header" style="background:rgba(104,242,5,0.12); color:var(--color-neon-lime); border:1px solid rgba(104,242,5,0.3); border-radius:var(--radius-full); font-size:0.65rem; padding:1px 6px; font-weight:700; cursor:pointer; font-family:var(--font-mono);" title="Ver novedades de la versión v1.7.3">v1.7.3</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Control de Acceso, Red y Acciones -->
+                <!-- Control de Acceso, Notificaciones y Acciones -->
                 <div class="header-actions">
-                    <!-- Indicador de Conexión de Red -->
-                    <div id="header-network-status" class="network-status-badge ${navigator.onLine ? 'online' : 'offline'}" style="display:flex; align-items:center; gap:5px; font-size:0.72rem; padding:3px 8px; border-radius:12px; background:${navigator.onLine ? 'rgba(104,242,5,0.1)' : 'rgba(255,184,0,0.15)'}; border:1px solid ${navigator.onLine ? 'rgba(104,242,5,0.3)' : 'rgba(255,184,0,0.4)'}; color:${navigator.onLine ? 'var(--color-neon-lime)' : 'var(--color-neon-gold)'}; font-weight:700;" title="${navigator.onLine ? 'Conectado a Firestore' : 'Modo Sin Conexión'}">
-                        <span style="font-size:0.6rem;">${navigator.onLine ? '🟢' : '🟡'}</span>
-                        <span class="network-status-text">${navigator.onLine ? 'En Línea' : 'Offline'}</span>
-                    </div>
 
                     <!-- Botón de Notificaciones del Navegador -->
                     <button id="btn-toggle-notifs" class="btn btn-outline btn-xs" style="border-radius:var(--radius-full); padding:4px 8px; font-size:0.85rem;" title="${notificationManager.getPermissionStatus() === 'granted' ? 'Notificaciones activadas (clic para probar)' : 'Activar notificaciones del navegador'}">
                         ${notificationManager.getPermissionStatus() === 'granted' ? '🔔' : '🔕'}
                     </button>
+
+                    ${!isAppInstalled ? `
+                        <!-- Botón de Descarga / Instalación PWA (Móvil y Escritorio) -->
+                        <button id="btn-header-download-app" class="btn btn-outline btn-xs" style="border-radius:var(--radius-full); padding:4px 9px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:bold; display:inline-flex; align-items:center; gap:4px;" title="Descargar e instalar la App exclusiva de esta sucursal">
+                            <span>📲 Descargar App</span>
+                        </button>
+                    ` : ''}
 
                     <button id="btn-quick-book" class="btn btn-primary btn-sm glow-red" title="Ir al calendario de día para reservar" style="padding:7px 16px; font-weight:800; border-radius:var(--radius-full); box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);">
                         <span class="quick-book-label">➕ ${isStaff ? 'Asignar Reserva' : 'Reservar Máquina'}</span>
@@ -182,11 +188,27 @@ export function renderHeader(container) {
                                     </button>
                                 ` : ''}
 
-                                <button class="dropdown-item btn-open-changelog-header" type="button">
+                                <button class="dropdown-item ${currentView === 'DOWNLOAD' ? 'active' : ''}" data-view="DOWNLOAD" type="button">
+                                    <span class="item-icon">📲</span>
+                                    <div class="item-info">
+                                        <strong style="color:var(--color-neon-cyan);">${isAppInstalled ? 'Compartir App / Código QR' : 'Descargar App (PWA)'}</strong>
+                                        <small>${isAppInstalled ? 'Código QR y enlace exclusivo del local' : 'Instalar y enlace exclusivo del local'}</small>
+                                    </div>
+                                </button>
+
+                                <button class="dropdown-item btn-open-changelog-menu" type="button">
                                     <span class="item-icon">📜</span>
                                     <div class="item-info">
-                                        <strong>Novedades (v1.7.3)</strong>
+                                        <strong>Novedades (v1.9.0)</strong>
                                         <small>Ver registro de cambios</small>
+                                    </div>
+                                </button>
+
+                                <button class="dropdown-item btn-check-updates-header" type="button">
+                                    <span class="item-icon">🔄</span>
+                                    <div class="item-info">
+                                        <strong>Buscar Actualizaciones</strong>
+                                        <small>Verificar versión y limpiar caché</small>
                                     </div>
                                 </button>
 
@@ -275,6 +297,13 @@ export function renderHeader(container) {
                                 <span class="tab-text">${isClientUser ? 'Mi Perfil' : 'Mi Cuenta'}</span>
                             </button>
                         ` : ''}
+
+                        ${(!isAppInstalled || currentView === 'DOWNLOAD') ? `
+                            <button class="nav-tab ${currentView === 'DOWNLOAD' ? 'active' : ''}" data-view="DOWNLOAD" title="Descargar e Instalar la App exclusiva de este local">
+                                <span class="tab-icon">📲</span>
+                                <span class="tab-text">Descargar App</span>
+                            </button>
+                        ` : ''}
                     </div>
 
                     <!-- Cluster de Operación & Staff (Personalizable por el usuario) -->
@@ -328,12 +357,37 @@ export function renderHeader(container) {
         </header>
     `;
 
-    // Evento para abrir el Changelog modal
-    container.querySelectorAll('.btn-open-changelog-header').forEach(btn => {
+    // Evento para abrir el Changelog modal desde el menú desplegable
+    container.querySelectorAll('.btn-open-changelog-menu, .btn-open-changelog-header').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             openChangelogModal();
         });
+    });
+
+    // Evento para buscar actualizaciones manualmente
+    container.querySelectorAll('.btn-check-updates-header').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            container.querySelectorAll('.nav-dropdown-wrapper.open').forEach(w => w.classList.remove('open'));
+            updateManager.checkForUpdates(true);
+        });
+    });
+
+    // Gestión de Botones de Instalación PWA
+    pwaManager.subscribe((canInstall, isInstalled) => {
+        container.querySelectorAll('.btn-pwa-install').forEach(el => {
+            el.style.display = (canInstall && !isInstalled) ? (el.classList.contains('dropdown-item') ? 'flex' : 'inline-flex') : 'none';
+        });
+        if (isInstalled) {
+            container.querySelector('#btn-header-download-app')?.remove();
+        }
+    });
+
+    // Evento botón Descargar App en la cabecera
+    container.querySelector('#btn-header-download-app')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        store.setCurrentView('DOWNLOAD');
     });
 
     // Evento Regresar al Index para cambiar de local

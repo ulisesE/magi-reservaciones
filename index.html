@@ -3,19 +3,30 @@
 
 <head>
     <meta charset="UTF-8">
+    <base href="/">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description"
         content="Sistema de gestión y reservación de maquinitas de baile Pump It Up (PIU) con vistas de Mes, Semana y Día (Grid Horas x Máquinas), perfiles de cliente y encargado, y soporte Multi-Negocio.">
     <meta name="theme-color" content="#080a0f">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="PIU Hub">
     <title>Pump It Up Hub • Sistema de Reservaciones de Maquinitas</title>
     <meta property="og:title" content="Pump It Up Hub" />
     <meta property="og:description" content="Sistema de Reservaciones de Maquinitas" />
     <meta property="og:image" content="https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=600" />
 
+    <!-- Web App Manifest (PWA) -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+
     <!-- Hojas de Estilo Cyberpunk / Arcade -->
-    <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/components.css">
-    <link rel="stylesheet" href="css/views.css">
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/views.css">
     <!-- QR Code Scanner Library -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <!-- Chart.js Library for Dashboard Analytics -->
@@ -124,19 +135,27 @@
             </div>
         </main>
 
-        <!-- Pie de página con estado de conexión -->
+        <!-- Pie de página con estado de conexión y novedades -->
         <footer class="app-footer"
             style="padding: 16px 24px; text-align: center; font-size: 0.78rem; color: var(--text-dimmed); border-top: 1px solid var(--border-color); background: var(--bg-dark-900);">
             <div
-                style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
                     <strong>PUMP IT UP HUB</strong> • © 2026 Todos los derechos reservados • Desarrollado por <a
                         href="https://www.facebook.com/link149/" target="_blank" rel="noopener noreferrer"
                         style="color: #68F205; text-decoration: none; font-weight: bold; border-bottom: 1px dashed rgba(104, 242, 5, 0.4); padding-bottom: 1px;">megajefelink</a>
                 </div>
-                <div id="cloud-sync-status" style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Clic para ver el registro de cambios (Changelog)">
-                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 8px #00ff88;"></span>
-                    <span style="border-bottom: 1px dotted rgba(255,255,255,0.4); transition: color 0.2s;">Conexión Segura (v1.7.3 • Novedades 📜)</span>
+                <div class="footer-status-bar" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <!-- Estado de Conexión a Firestore (Reubicado desde el Header) -->
+                    <div id="footer-network-status" class="network-status-badge online" style="display: flex; align-items: center; gap: 6px; font-size: 0.72rem; padding: 4px 10px; border-radius: 12px; background: rgba(104,242,5,0.1); border: 1px solid rgba(104,242,5,0.3); color: var(--color-neon-lime); font-weight: 700;" title="Conectado en tiempo real a Firebase / Firestore">
+                        <span class="status-indicator-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #68F205; box-shadow: 0 0 8px #68F205;"></span>
+                        <span class="network-status-text">Conectado a Firestore</span>
+                    </div>
+
+                    <!-- Botón Novedades y Versión (Reubicado desde el Header) -->
+                    <button type="button" id="btn-open-changelog-footer" class="btn-open-changelog-footer" style="background: rgba(104,242,5,0.12); color: var(--color-neon-lime); border: 1px solid rgba(104,242,5,0.3); border-radius: var(--radius-full); font-size: 0.72rem; padding: 4px 10px; font-weight: 700; cursor: pointer; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s;" title="Ver novedades de la versión v1.9.0">
+                        <span>📜 v1.9.0 Novedades</span>
+                    </button>
                 </div>
             </div>
         </footer>
@@ -147,7 +166,7 @@
     <div id="toast-container"></div>
 
     <!-- Entrada Principal JavaScript (ES Modules) -->
-    <script type="module" src="js/app.js"></script>
+    <script type="module" src="/js/app.js?v=1.9.0"></script>
 </body>
 
 </html>

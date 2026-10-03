@@ -14,7 +14,9 @@ import {
     onSnapshot,
     runTransaction,
     query,
-    where 
+    where,
+    canMakeFirestoreRead,
+    markQuotaExhausted
 } from '../firebaseConfig.js';
 import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
 
@@ -37,100 +39,331 @@ export const DEFAULT_BUSINESS_MODULES = {
     versus: true        // Retas PVP & Arena Matchmaking
 };
 
-// Negocios iniciales predeterminados (Seed data)
+// Negocios iniciales predeterminados (Seed data en memoria)
 export const DEFAULT_BUSINESSES = [
     {
-        id: 'biz_piu_centro',
-        name: 'Pump Zone Centro',
-        tagline: 'El Templo del Step - Arcade & Rhythm Game Lounge',
-        city: 'Ciudad de México, Centro',
-        address: 'Av. Juárez #142, Piso 2 (Zona Rosa)',
-        phone: '+52 55 1234 5678',
-        whatsapp: '5512345678',
-        mapsUrl: 'https://maps.google.com/?q=Av.+Juarez+142+CDMX',
-        facebookUrl: 'https://facebook.com/pumpzonecentro',
-        instagramUrl: 'https://instagram.com/pumpzonecentro',
+        id: 'biz_1786567885850',
+        name: 'X-Games',
+        tagline: 'BARcade CLUB  local al publico',
+        city: 'NEZAHUALCOYOTL',
+        address: 'Jorge Jiménez Cantú 32, Ejidos de San Agustin, 56344 Cdad. Nezahualcóyotl, Méx',
+        phone: '5585481784',
+        whatsapp: '5585481784',
+        mapsUrl: 'https://maps.app.goo.gl/RBHt62CE89EmdhCT8',
+        facebookUrl: 'https://www.facebook.com/share/1KT9TURdQD/',
+        instagramUrl: '',
         currency: 'MXN',
         currencySymbol: '$',
         themeId: 'phoenix',
-        logoIcon: '🎮',
-        imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
-        openingTime: '12:00',
-        closingTime: '04:00',
-        slotDuration: 60,
-        maxAdvanceDays: 14,
-        minCancelNoticeHours: 2,
+        themeColor: '#ff7b00',
+        logoIcon: '🕹️',
+        imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTv7tSyFGQUwEKjIK9i4PvQL0O_jZ8DcBLTwmlY0EHKEA&s=10',
+        openingTime: '10:00',
+        closingTime: '00:00',
+        slotDuration: 30,
+        maxAdvanceDays: 7,
+        minCancelNoticeHours: 4,
         maxActiveBookingsPerUser: 3,
         requiresDeposit: true,
         depositPercentage: 50,
-        paymentInstructions: 'Transferencia BBVA - CLABE: 012180001234567890\nBeneficiario: Pump Zone Centro S.A.\nEnviar comprobante por WhatsApp con tu ID de reserva.',
-        rules: '1. Uso obligatorio de tenis deportivos limpios.\n2. No pisar las barras de soporte con las suelas descalzas.\n3. Tolerancia de espera de 10 minutos antes de liberar la máquina.',
-        wifiNetwork: 'PumpZone_Clientes',
-        wifiPassword: 'StepManiaPhoenix',
+        paymentInstructions: '',
+        rules: '',
+        wifiNetwork: '',
+        wifiPassword: '',
         isActive: true,
         status: 'ACTIVE',
-        allowClientCancellation: true,
+        allowClientCancellation: false,
+        disableChangeLocal: false,
+        loyaltyEnabled: true,
+        loyaltyMode: 'VISITS',
+        loyaltyDiscountType: 'PERMANENT',
+        pointsRatio: 10,
+        hasSeededOvernightSchedule: true,
         blockedUsers: [],
         enabledModules: { ...DEFAULT_BUSINESS_MODULES },
         operatingHours: {
-            0: { open: '15:00', close: '04:00', closed: false }, // Domingo: 3 PM - 4 AM Lunes
-            1: { open: '11:00', close: '22:00', closed: false }, // Lunes
-            2: { open: '11:00', close: '22:00', closed: false }, // Martes
-            3: { open: '11:00', close: '22:00', closed: false }, // Miércoles
-            4: { open: '11:00', close: '22:00', closed: false }, // Jueves
-            5: { open: '12:00', close: '04:00', closed: false }, // Viernes: 12 PM - 4 AM Sábado
-            6: { open: '12:00', close: '04:00', closed: false }  // Sábado: 12 PM - 4 AM Domingo
+            0: { open: '10:00', close: '00:00', closed: false },
+            1: { open: '10:00', close: '00:00', closed: false },
+            2: { open: '10:00', close: '00:00', closed: false },
+            3: { open: '10:00', close: '00:00', closed: false },
+            4: { open: '10:00', close: '00:00', closed: false },
+            5: { open: '10:00', close: '03:00', closed: false },
+            6: { open: '10:00', close: '03:00', closed: false }
         },
-        customRates: [
-            { players: 1, duration: 5, price: 7 },
-            { players: 1, duration: 10, price: 14 },
-            { players: 1, duration: 15, price: 20 },
-            { players: 1, duration: 30, price: 40 },
-            { players: 1, duration: 60, price: 80 },
-            { players: 1, duration: 90, price: 120 },
-            { players: 1, duration: 105, price: 140 },
-            { players: 1, duration: 120, price: 160 },
-            { players: 2, duration: 15, price: 32.5 },
-            { players: 2, duration: 30, price: 65 },
-            { players: 2, duration: 60, price: 130 },
-            { players: 2, duration: 90, price: 195 },
-            { players: 2, duration: 105, price: 230 },
-            { players: 2, duration: 120, price: 260 }
-        ],
-        createdAt: new Date().toISOString()
+        customRates: [],
+        createdAt: '2026-08-12T20:51:25.850Z'
     },
     {
-        id: 'biz_arcade_galaxy',
-        name: 'Arcade Galaxy Norte',
-        tagline: 'Rhythm Arena & Pump It Up Pro Hub',
-        city: 'Monterrey, N.L.',
-        address: 'Plaza Galerías Norte, Local B-12',
-        phone: '+52 81 9876 5432',
-        whatsapp: '8198765432',
-        mapsUrl: 'https://maps.google.com/?q=Plaza+Galerias+Monterrey',
-        facebookUrl: 'https://facebook.com/arcadegalaxynorte',
-        instagramUrl: 'https://instagram.com/arcadegalaxy',
+        id: 'biz_1786547370675',
+        name: 'SKY GAMES',
+        tagline: 'Arcade & Rhythm Gaming Center',
+        city: 'CDMX, Tlahuac.',
+        address: 'Diego cayetano, San sebastian, Tláhuac',
+        phone: '5573989585',
+        whatsapp: '5573989585',
+        mapsUrl: 'https://maps.app.goo.gl/fDq8HPCc6y4jo2KF8?g_st=ac',
+        facebookUrl: 'https://www.facebook.com/share/1EpEWLvDfr/',
+        instagramUrl: '',
+        currency: 'MXN',
+        currencySymbol: '$',
+        themeId: 'xx',
+        themeColor: '#bd00ff',
+        logoIcon: '🐺',
+        imageUrl: 'https://res.cloudinary.com/w3k9lgf8/image/upload/f_auto,q_auto/207697',
+        openingTime: '16:00',
+        closingTime: '23:00',
+        slotDuration: 30,
+        maxAdvanceDays: 60,
+        minCancelNoticeHours: 24,
+        maxActiveBookingsPerUser: 10,
+        requiresDeposit: false,
+        depositPercentage: 50,
+        paymentInstructions: 'Mercado Pago\nGuadalupe Vargas Aguilar\n5428785985692432',
+        rules: '⚠️ AVISOS IMPORTANTES ⚠️\n1. Pregunten primero si se les puede fiar antes de pedir. De caso contrario se les cobrará $15 pesos diarios hasta que liquiden su cuenta. \n2. Recuerden tirar sus latas y botellas en las bolsas de atrás APLASTENLAS (a lado de los cartones de cerveza) \n3. Se les cobrará el tiempo que reserven, sin importar si no llegan, si llegan tarde, si se cansaron y se bajaron antes, sea cual sea la razón, SE LES COBRARÁ EL TIEMPO QUE RESERVEN.\n4. Recuerden avisar cuando suban a jugar y cuando bajen (aún más si quieres jugar sin haber reservado)\n5. Precio PHOENIX 2\n$80 la hora x persona\n$130 la hora x 2 personas  \nMOD\n$60 la hora x persona \n$50 la hora x persona desde 2 hora en adelante',
+        wifiNetwork: '',
+        wifiPassword: '',
+        isActive: true,
+        status: 'ACTIVE',
+        allowClientCancellation: false,
+        disableChangeLocal: false,
+        loyaltyEnabled: true,
+        loyaltyMode: 'VISITS',
+        loyaltyDiscountType: 'ONCE',
+        pointsRatio: 10,
+        hasSeededOvernightSchedule: true,
+        loyaltyTiers: {
+            BRONCE: { minVisits: 0, minPoints: 0, discount: 0 },
+            PLATA: { minVisits: 10, minPoints: 100, discount: 0.05 },
+            ORO: { minVisits: 20, minPoints: 200, discount: 0.1 },
+            PLATINO: { minVisits: 30, minPoints: 300, discount: 0.15 }
+        },
+        blockedUsers: [],
+        enabledModules: { ...DEFAULT_BUSINESS_MODULES },
+        operatingHours: {
+            0: { open: '12:00', close: '21:00', closed: false },
+            1: { open: '16:00', close: '23:00', closed: false },
+            2: { open: '16:00', close: '23:00', closed: false },
+            3: { open: '16:00', close: '23:00', closed: false },
+            4: { open: '16:00', close: '23:00', closed: false },
+            5: { open: '16:00', close: '23:00', closed: false },
+            6: { open: '12:00', close: '02:00', closed: false }
+        },
+        customRates: [],
+        createdAt: '2026-08-12T15:09:30.675Z'
+    },
+    {
+        id: 'biz_1787248656226',
+        name: 'Eugenia Games',
+        tagline: 'Arcade & Rhythm Gaming Center',
+        city: 'CDMX, Benito Juárez',
+        address: 'Anaxágoras 744, Mexico City, Mexico, 03020',
+        phone: '5536556657',
+        whatsapp: '5536556657',
+        mapsUrl: 'https://maps.app.goo.gl/ThZKFhknFhApH95y6',
+        facebookUrl: 'https://www.facebook.com/profile.php?id=61573162676214&mibextid=ZbWKwL',
+        instagramUrl: 'https://www.instagram.com/eugenia_games_?igsi=MWxqZ28zNGd1bXV4aQ==',
         currency: 'MXN',
         currencySymbol: '$',
         themeId: 'prime',
-        logoIcon: '⚡',
-        imageUrl: 'https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?auto=format&fit=crop&w=800&q=80',
-        openingTime: '12:00',
+        themeColor: '#ff2a5f',
+        logoIcon: '🦆',
+        imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTh3Curm-Q1DtqEjHNvpciOG78ZZOjX_4Whs_7P4oVVkQ&s=10',
+        openingTime: '09:00',
         closingTime: '23:00',
+        slotDuration: 30,
+        maxAdvanceDays: 14,
+        minCancelNoticeHours: 24,
+        maxActiveBookingsPerUser: 3,
+        requiresDeposit: false,
+        depositPercentage: 50,
+        paymentInstructions: 'Rosendo Alberto Zárate Escorza \nBanco BBVA \nCuenta Clave: 012 180 015233774909\nCuenta: 152 337 7490',
+        rules: '',
+        wifiNetwork: '',
+        wifiPassword: '',
+        isActive: true,
+        status: 'ACTIVE',
+        allowClientCancellation: false,
+        disableChangeLocal: false,
+        loyaltyEnabled: false,
+        loyaltyMode: 'POINTS',
+        loyaltyDiscountType: 'PERMANENT',
+        pointsRatio: 10,
+        hasSeededOvernightSchedule: true,
+        blockedUsers: [],
+        enabledModules: {
+            ...DEFAULT_BUSINESS_MODULES,
+            accounts: false,
+            catalogs: false,
+            analytics: false,
+            loyalty: false
+        },
+        operatingHours: {
+            0: { open: '09:00', close: '23:00', closed: false },
+            1: { open: '09:00', close: '23:00', closed: false },
+            2: { open: '09:00', close: '23:00', closed: false },
+            3: { open: '09:00', close: '23:00', closed: false },
+            4: { open: '09:00', close: '23:00', closed: false },
+            5: { open: '09:00', close: '23:00', closed: false },
+            6: { open: '09:00', close: '23:00', closed: false }
+        },
+        customRates: [],
+        createdAt: '2026-08-20T17:57:36.226Z'
+    },
+    {
+        id: 'biz_1786986908881',
+        name: 'DemoApp',
+        tagline: 'Arcade & Rhythm Gaming Center',
+        city: 'CDMX',
+        address: '',
+        phone: '',
+        whatsapp: '1122334455',
+        mapsUrl: '',
+        facebookUrl: '',
+        instagramUrl: '',
+        currency: 'MXN',
+        currencySymbol: '$',
+        themeId: 'phoenix',
+        themeColor: '#ff2a5f',
+        logoIcon: '⚡',
+        imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
+        openingTime: '11:00',
+        closingTime: '22:00',
         slotDuration: 60,
         maxAdvanceDays: 14,
         minCancelNoticeHours: 2,
         maxActiveBookingsPerUser: 3,
         requiresDeposit: false,
-        depositPercentage: 0,
-        paymentInstructions: 'Pago en caja / recepción al llegar a tu sesión de juego (Efectivo o Tarjeta).',
-        rules: '1. Respetar el tiempo asignado de máquina.\n2. Cuidar los paneles acrílicos y sensores.\n3. Bebidas y alimentos sólo en el área de descanso.',
-        wifiNetwork: 'Galaxy_Gaming_Free',
-        wifiPassword: 'GalaxyPump2024',
-        isActive: true,
-        status: 'ACTIVE',
+        depositPercentage: 50,
+        paymentInstructions: '',
+        rules: '',
+        wifiNetwork: '',
+        wifiPassword: '',
+        isActive: false,
+        status: 'INACTIVE',
+        allowClientCancellation: false,
+        disableChangeLocal: false,
+        loyaltyEnabled: true,
+        loyaltyMode: 'POINTS',
+        loyaltyDiscountType: 'NONE',
+        pointsRatio: 10,
+        hasSeededOvernightSchedule: true,
+        blockedUsers: [],
         enabledModules: { ...DEFAULT_BUSINESS_MODULES },
-        createdAt: new Date().toISOString()
+        operatingHours: {
+            0: { open: '11:00', close: '22:00', closed: false },
+            1: { open: '11:00', close: '22:00', closed: false },
+            2: { open: '11:00', close: '22:00', closed: false },
+            3: { open: '11:00', close: '22:00', closed: false },
+            4: { open: '11:00', close: '22:00', closed: false },
+            5: { open: '11:00', close: '22:00', closed: false },
+            6: { open: '11:00', close: '22:00', closed: false }
+        },
+        customRates: [],
+        createdAt: '2026-08-17T17:15:08.881Z'
+    },
+    {
+        id: 'biz_1787593488970',
+        name: 'Nieves Games',
+        tagline: 'Arcade & Rhythm Gaming Center',
+        city: 'Tultepec',
+        address: '',
+        phone: '',
+        whatsapp: '5581440139',
+        mapsUrl: '',
+        facebookUrl: '',
+        instagramUrl: '',
+        currency: 'MXN',
+        currencySymbol: '$',
+        themeId: 'phoenix',
+        themeColor: '#ff7b00',
+        logoIcon: '🍦',
+        imageUrl: 'https://scontent.fmex32-1.fna.fbcdn.net/v/t39.30808-6/760620613_122127303741353714_1984263366024861538_n.jpg?stp=dst-jpg_tt6&cstp=mx1164x1170&ctp=s1164x1170&_nc_cat=104&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=kcWpCGMSjo0Q7kNvwErv4hF&_nc_oc=Adpqj0mE5vU9QZ2OkWH0SjQVktUFGaVTKs2IvkFDnTRbSwvn9k9I10hhfPttYVFaswI&_nc_zt=23&_nc_ht=scontent.fmex32-1.fna&_nc_gid=_CZPC5OO25cxBgBuPk4ZgQ&_nc_ss=7a2a8&oh=00_AQF00fg2rtg6H8oG-T_URENH1kH63nOoNOKMB6bcLtrqMg&oe=6A9270D3',
+        openingTime: '11:00',
+        closingTime: '22:00',
+        slotDuration: 60,
+        maxAdvanceDays: 14,
+        minCancelNoticeHours: 2,
+        maxActiveBookingsPerUser: 3,
+        requiresDeposit: false,
+        depositPercentage: 50,
+        paymentInstructions: '',
+        rules: '',
+        wifiNetwork: '',
+        wifiPassword: '',
+        isActive: false,
+        status: 'INACTIVE',
+        allowClientCancellation: false,
+        disableChangeLocal: false,
+        loyaltyEnabled: false,
+        loyaltyMode: 'POINTS',
+        loyaltyDiscountType: 'NONE',
+        pointsRatio: 10,
+        hasSeededOvernightSchedule: false,
+        blockedUsers: [],
+        enabledModules: { ...DEFAULT_BUSINESS_MODULES },
+        operatingHours: {
+            0: { open: '11:00', close: '22:00', closed: false },
+            1: { open: '11:00', close: '22:00', closed: false },
+            2: { open: '11:00', close: '22:00', closed: false },
+            3: { open: '11:00', close: '22:00', closed: false },
+            4: { open: '11:00', close: '22:00', closed: false },
+            5: { open: '11:00', close: '22:00', closed: false },
+            6: { open: '11:00', close: '22:00', closed: false }
+        },
+        customRates: [],
+        createdAt: '2026-08-24T17:44:48.970Z'
+    },
+    {
+        id: 'biz_1787717273923',
+        name: 'Berrys Games',
+        tagline: 'Arcade & Rhythm Gaming Center',
+        city: 'Nezahualcóyotl',
+        address: '',
+        phone: '',
+        whatsapp: '',
+        mapsUrl: '',
+        facebookUrl: '',
+        instagramUrl: '',
+        currency: 'MXN',
+        currencySymbol: '$',
+        themeId: 'classic',
+        themeColor: '#ff2a5f',
+        logoIcon: '🍒',
+        imageUrl: 'https://i.ibb.co/kghYy4WV/FB-IMG-1787717201083.jpg',
+        openingTime: '00:00',
+        closingTime: '00:00',
+        slotDuration: 30,
+        maxAdvanceDays: 14,
+        minCancelNoticeHours: 2,
+        maxActiveBookingsPerUser: 3,
+        requiresDeposit: false,
+        depositPercentage: 50,
+        paymentInstructions: '',
+        rules: '',
+        wifiNetwork: '',
+        wifiPassword: '',
+        isActive: false,
+        status: 'INACTIVE',
+        allowClientCancellation: false,
+        disableChangeLocal: false,
+        loyaltyEnabled: false,
+        loyaltyMode: 'POINTS',
+        loyaltyDiscountType: 'PERMANENT',
+        pointsRatio: 10,
+        hasSeededOvernightSchedule: true,
+        blockedUsers: [],
+        enabledModules: { ...DEFAULT_BUSINESS_MODULES },
+        operatingHours: {
+            0: { open: '00:00', close: '00:00', closed: false },
+            1: { open: '00:00', close: '00:00', closed: false },
+            2: { open: '00:00', close: '00:00', closed: false },
+            3: { open: '00:00', close: '00:00', closed: false },
+            4: { open: '00:00', close: '00:00', closed: false },
+            5: { open: '00:00', close: '00:00', closed: false },
+            6: { open: '00:00', close: '00:00', closed: false }
+        },
+        customRates: [],
+        createdAt: '2026-08-26T04:07:53.924Z'
     }
 ];
 
@@ -142,158 +375,48 @@ class TenantManager {
         this.listeners = [];
         this.unsubscribeBusinesses = null;
         this.unsubscribeGlobalConfig = null;
-        this.disableChangeLocalGlobally = false;
+        this.disableChangeLocalGlobally = true; // Por defecto desactivada la opción de cambiar de local (bloqueada globalmente)
     }
 
     async init() {
         let loaded = [];
-        let loadedFromFirestore = false;
 
-        // 1. Cargar Configuración Global (Firestore es el Mandante)
+        // 1. Cargar Configuración Global desde LocalStorage (Zero-Read fallback)
         const localConfig = localStorage.getItem('piu_global_config_v1');
         if (localConfig) {
             try {
                 const parsed = JSON.parse(localConfig);
-                this.disableChangeLocalGlobally = !!parsed.disableChangeLocalGlobally;
+                if (typeof parsed.disableChangeLocalGlobally === 'boolean') {
+                    this.disableChangeLocalGlobally = parsed.disableChangeLocalGlobally;
+                }
             } catch (e) {}
+        } else {
+            // Predeterminado en el sistema: opción de cambiar de local desactivada (bloqueada)
+            this.disableChangeLocalGlobally = true;
         }
 
-        if (isFirebaseAvailable && db) {
-            try {
-                const docSnap = await getDoc(doc(db, 'piu_system_settings', 'global_config'));
-                if (docSnap.exists()) {
-                    this.disableChangeLocalGlobally = !!docSnap.data().disableChangeLocalGlobally;
-                    localStorage.setItem('piu_global_config_v1', JSON.stringify({
-                        disableChangeLocalGlobally: this.disableChangeLocalGlobally
-                    }));
+        // 2. Cargar Negocios desde LocalStorage o Semillas en Memoria (Zero-Read)
+        const localData = localStorage.getItem(TENANTS_STORAGE_KEY);
+        if (localData) {
+            try { loaded = JSON.parse(localData); } catch (e) { loaded = []; }
+        }
+
+        // Migración automática: si está vacío, si tiene el seed demo antiguo o si no incluye X-Games
+        if (!Array.isArray(loaded) || loaded.length === 0 || loaded.some(b => b.id === 'biz_piu_centro') || !loaded.some(b => b.id === 'biz_1786567885850')) {
+            const merged = Array.isArray(loaded) ? [...loaded.filter(b => b.id !== 'biz_piu_centro' && b.id !== 'biz_arcade_galaxy')] : [];
+            for (const defBiz of DEFAULT_BUSINESSES) {
+                const idx = merged.findIndex(b => b.id === defBiz.id);
+                if (idx === -1) {
+                    merged.push(defBiz);
+                } else {
+                    merged[idx] = { ...defBiz, ...merged[idx] };
                 }
-            } catch (err) {
-                console.warn("Error cargando config global de Firebase:", err);
             }
-
-            // Suscripción reactiva en tiempo real a la configuración global
-            this.unsubscribeGlobalConfig?.();
-            this.unsubscribeGlobalConfig = onSnapshot(doc(db, 'piu_system_settings', 'global_config'), (snapshot) => {
-                if (snapshot.exists()) {
-                    this.disableChangeLocalGlobally = !!snapshot.data().disableChangeLocalGlobally;
-                    localStorage.setItem('piu_global_config_v1', JSON.stringify({
-                        disableChangeLocalGlobally: this.disableChangeLocalGlobally
-                    }));
-                    this.notify();
-                }
-            }, (error) => console.warn('Error sincronizando config global:', error));
-        }
-
-        if (isFirebaseAvailable && db) {
-            try {
-                const querySnapshot = await getDocs(collection(db, COLLECTIONS.BUSINESSES));
-                loadedFromFirestore = true;
-                if (!querySnapshot.empty) {
-                    querySnapshot.forEach(docSnap => {
-                        loaded.push({ id: docSnap.id, ...docSnap.data() });
-                    });
-                }
-            } catch (err) {
-                console.warn("Error cargando negocios desde Firebase, usando LocalStorage:", err);
-            }
-        }
-
-        if (!loadedFromFirestore && loaded.length === 0) {
-            const localData = localStorage.getItem(TENANTS_STORAGE_KEY);
-            if (localData) {
-                try { loaded = JSON.parse(localData); } catch (e) { loaded = []; }
-            }
-        }
-
-        if (!loadedFromFirestore && loaded.length === 0) {
-            loaded = [...DEFAULT_BUSINESSES];
+            loaded = merged;
             this.saveLocally(loaded);
-            if (isFirebaseAvailable && db) {
-                for (const b of loaded) {
-                    try { await setDoc(doc(db, COLLECTIONS.BUSINESSES, b.id), b); } catch (e) {}
-                }
-            }
-        }
-
-        // Asegurar que los locales tengan operatingHours y aplicar el horario solicitado en 'biz_piu_centro'
-        let modified = false;
-        loaded = loaded.map(b => {
-            if (b.id === 'biz_piu_centro' && !b.hasSeededOvernightSchedule) {
-                b.operatingHours = {
-                    0: { open: '15:00', close: '04:00', closed: false },
-                    1: { open: '11:00', close: '22:00', closed: false },
-                    2: { open: '11:00', close: '22:00', closed: false },
-                    3: { open: '11:00', close: '22:00', closed: false },
-                    4: { open: '11:00', close: '22:00', closed: false },
-                    5: { open: '12:00', close: '04:00', closed: false },
-                    6: { open: '12:00', close: '04:00', closed: false }
-                };
-                b.openingTime = '12:00';
-                b.closingTime = '04:00';
-                b.hasSeededOvernightSchedule = true;
-                modified = true;
-            } else if (!b.operatingHours) {
-                b.operatingHours = {};
-                for (let i = 0; i < 7; i++) {
-                    b.operatingHours[i] = {
-                        open: b.openingTime || '11:00',
-                        close: b.closingTime || '22:00',
-                        closed: false
-                    };
-                }
-                modified = true;
-            }
-
-            if (b.id === 'biz_piu_centro' && !b.customRates) {
-                b.customRates = [
-                    { players: 1, duration: 5, price: 7 },
-                    { players: 1, duration: 10, price: 14 },
-                    { players: 1, duration: 15, price: 20 },
-                    { players: 1, duration: 30, price: 40 },
-                    { players: 1, duration: 60, price: 80 },
-                    { players: 1, duration: 90, price: 120 },
-                    { players: 1, duration: 105, price: 140 },
-                    { players: 1, duration: 120, price: 160 },
-                    { players: 2, duration: 15, price: 32.5 },
-                    { players: 2, duration: 30, price: 65 },
-                    { players: 2, duration: 60, price: 130 },
-                    { players: 2, duration: 90, price: 195 },
-                    { players: 2, duration: 105, price: 230 },
-                    { players: 2, duration: 120, price: 260 }
-                ];
-                modified = true;
-            } else if (!b.customRates) {
-                b.customRates = [];
-                modified = true;
-            }
-            return b;
-        });
-
-        if (modified) {
-            this.saveLocally(loaded);
-            if (isFirebaseAvailable && db) {
-                for (const b of loaded) {
-                    try {
-                        const businessRef = doc(db, COLLECTIONS.BUSINESSES, b.id);
-                        setDoc(businessRef, b).catch(() => {});
-                    } catch (e) {
-                        console.warn("Error guardando negocio migrado en Firebase:", e);
-                    }
-                }
-            }
         }
 
         this.businesses = loaded;
-
-        if (isFirebaseAvailable && db) {
-            this.unsubscribeBusinesses?.();
-            this.unsubscribeBusinesses = onSnapshot(collection(db, COLLECTIONS.BUSINESSES), (snapshot) => {
-                this.businesses = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                this.saveLocally(this.businesses);
-                syncMetadataToServer(this.businesses);
-                this.notify();
-            }, (error) => console.warn('Error de sincronización de locales:', error));
-        }
 
         // Comprobar si hay una sesión activa de Encargado bloqueada a una sucursal específica
         const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
@@ -307,12 +430,22 @@ class TenantManager {
             } catch (e) {}
         }
 
+        const isSuperAdmin = this.isCurrentUserSuperAdmin();
+
         if (managerBizId && this.businesses.some(b => b.id === managerBizId)) {
-            this.activeBusinessId = managerBizId;
-            this.isLocalSelected = true;
-            localStorage.setItem(SESSION_LOCKED_KEY, managerBizId);
+            const mgrBiz = this.businesses.find(b => b.id === managerBizId);
+            if (this.isBusinessActive(mgrBiz) || isSuperAdmin) {
+                this.activeBusinessId = managerBizId;
+                this.isLocalSelected = true;
+                localStorage.setItem(SESSION_LOCKED_KEY, managerBizId);
+            } else {
+                this.isLocalSelected = false;
+                localStorage.removeItem(SESSION_LOCKED_KEY);
+                const firstActive = this.businesses.find(b => this.isBusinessActive(b));
+                this.activeBusinessId = firstActive ? firstActive.id : (this.businesses[0]?.id || null);
+            }
         } else {
-            // Comprobar si la URL trae un parámetro de local explícito o si la ruta es /local/biz_ID
+            // Comprobar si la URL trae un parámetro de local explícito o si la ruta es /local/biz_ID o /local/slug
             const urlParams = new URLSearchParams(window.location.search);
             let urlBizId = urlParams.get('local') || urlParams.get('business') || urlParams.get('sucursal');
             
@@ -324,26 +457,140 @@ class TenantManager {
                 }
             }
 
-            if (urlBizId && this.businesses.some(b => b.id === urlBizId)) {
+            // Normalización para búsqueda flexible: por ID exacto, slug o coincidencia de nombre
+            let targetBiz = null;
+            if (urlBizId) {
+                const cleanQuery = decodeURIComponent(urlBizId).trim().toLowerCase();
+                const cleanQuerySlug = cleanQuery.replace(/[^a-z0-9]/g, '');
+                targetBiz = this.businesses.find(b => {
+                    if (b.id === urlBizId) return true;
+                    const bSlug = (b.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return bSlug && (bSlug === cleanQuerySlug || bSlug.includes(cleanQuerySlug) || cleanQuerySlug.includes(bSlug));
+                });
+                if (targetBiz) {
+                    urlBizId = targetBiz.id;
+                }
+            }
+
+            if (targetBiz && (this.isBusinessActive(targetBiz) || isSuperAdmin)) {
                 this.activeBusinessId = urlBizId;
                 this.isLocalSelected = true;
                 localStorage.setItem(SESSION_LOCKED_KEY, urlBizId);
+                localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, urlBizId);
             } else {
+                // Si el local de la URL está inactivo y no es superadmin, limpiar el parámetro de la URL
+                if (urlBizId && targetBiz && !this.isBusinessActive(targetBiz) && !isSuperAdmin) {
+                    if (window.history.replaceState) {
+                        const cleanUrl = window.location.pathname;
+                        window.history.replaceState({}, '', cleanUrl);
+                    }
+                }
+
                 // Verificar si había un local seleccionado y bloqueado en sesión
-                const savedLocked = localStorage.getItem(SESSION_LOCKED_KEY);
-                if (savedLocked && this.businesses.some(b => b.id === savedLocked)) {
+                const savedLocked = localStorage.getItem(SESSION_LOCKED_KEY) || localStorage.getItem(ACTIVE_TENANT_STORAGE_KEY);
+                const savedBiz = savedLocked ? this.businesses.find(b => b.id === savedLocked) : null;
+                if (savedBiz && (this.isBusinessActive(savedBiz) || isSuperAdmin)) {
                     this.activeBusinessId = savedLocked;
                     this.isLocalSelected = true;
                 } else {
-                    // No hay local seleccionado todavía -> Debe mostrar el index de bienvenida con selector
+                    // No hay local seleccionado todavía o el guardado está inactivo -> Debe mostrar el index de bienvenida
                     this.isLocalSelected = false;
-                    this.activeBusinessId = this.businesses[0]?.id || null;
+                    localStorage.removeItem(SESSION_LOCKED_KEY);
+                    const firstActive = this.businesses.find(b => this.isBusinessActive(b));
+                    this.activeBusinessId = firstActive ? firstActive.id : (this.businesses[0]?.id || null);
                 }
             }
         }
 
+        // Si hay conexión y cuota disponible, sincronizar cambios frescos en segundo plano sin bloquear el arranque
+        if (canMakeFirestoreRead()) {
+            this.syncFromFirestore().catch(e => console.warn("[TenantManager] Sync Firestore diferido:", e));
+            this.syncGlobalConfigFromFirestore().catch(e => console.warn("[TenantManager] Sync config global diferido:", e));
+            this.setupGlobalConfigListener();
+        }
+
         syncMetadataToServer(this.businesses);
         return this.getActiveBusiness();
+    }
+
+    async syncFromFirestore() {
+        if (!canMakeFirestoreRead()) return;
+        try {
+            const querySnapshot = await getDocs(collection(db, COLLECTIONS.BUSINESSES));
+            if (!querySnapshot.empty) {
+                const remote = [];
+                querySnapshot.forEach(docSnap => {
+                    remote.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                this.businesses = remote;
+                this.saveLocally(this.businesses);
+                syncMetadataToServer(this.businesses);
+            }
+            await this.syncGlobalConfigFromFirestore();
+            this.notify();
+        } catch (err) {
+            if (err?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("Error sincronizando negocios de Firestore:", err);
+        }
+    }
+
+    async syncGlobalConfigFromFirestore() {
+        if (!canMakeFirestoreRead()) return;
+        try {
+            const configRef = doc(db, 'piu_system_settings', 'global_config');
+            const snap = await getDoc(configRef);
+            if (snap.exists()) {
+                const data = snap.data();
+                if (typeof data.disableChangeLocalGlobally === 'boolean') {
+                    this.disableChangeLocalGlobally = data.disableChangeLocalGlobally;
+                    localStorage.setItem('piu_global_config_v1', JSON.stringify({
+                        disableChangeLocalGlobally: this.disableChangeLocalGlobally
+                    }));
+                }
+            }
+        } catch (err) {
+            if (err?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("[TenantManager] Error cargando config global de Firestore:", err);
+        }
+    }
+
+    setupGlobalConfigListener() {
+        if (!isFirebaseAvailable || !db || this.unsubscribeGlobalConfig || !canMakeFirestoreRead()) return;
+        try {
+            const configRef = doc(db, 'piu_system_settings', 'global_config');
+            this.unsubscribeGlobalConfig = onSnapshot(configRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (typeof data.disableChangeLocalGlobally === 'boolean' && this.disableChangeLocalGlobally !== data.disableChangeLocalGlobally) {
+                        this.disableChangeLocalGlobally = data.disableChangeLocalGlobally;
+                        localStorage.setItem('piu_global_config_v1', JSON.stringify({
+                            disableChangeLocalGlobally: this.disableChangeLocalGlobally
+                        }));
+                        this.notify();
+                    }
+                }
+            }, (err) => {
+                if (err?.code === 'resource-exhausted') markQuotaExhausted();
+            });
+        } catch (e) {}
+    }
+
+    detachListeners() {
+        this.unsubscribeBusinesses?.();
+        this.unsubscribeGlobalConfig?.();
+        this.unsubscribeBusinesses = null;
+        this.unsubscribeGlobalConfig = null;
+    }
+
+    isCurrentUserSuperAdmin() {
+        const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
+        if (sessionRaw) {
+            try {
+                const sess = JSON.parse(sessionRaw);
+                return sess && (sess.role === 'SUPERADMIN' || sess.isSuperAdmin === true);
+            } catch (e) {}
+        }
+        return false;
     }
 
     saveLocally(businesses) {
@@ -354,18 +601,44 @@ class TenantManager {
         return this.businesses;
     }
 
+    getActiveBusinesses() {
+        return this.businesses.filter(b => this.isBusinessActive(b));
+    }
+
     getBusinessById(id) {
-        return this.businesses.find(b => b.id === id);
+        if (!id) return null;
+        const clean = String(id).trim().toLowerCase();
+        const cleanSlug = clean.replace(/[^a-z0-9]/g, '');
+        return this.businesses.find(b => 
+            b.id === id || 
+            (b.name && b.name.toLowerCase() === clean) ||
+            (b.name && b.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanSlug)
+        ) || null;
     }
 
     getActiveBusiness() {
-        return this.businesses.find(b => b.id === this.activeBusinessId) || this.businesses[0];
+        const activeBiz = this.businesses.find(b => b.id === this.activeBusinessId);
+        if (activeBiz && (this.isBusinessActive(activeBiz) || this.isCurrentUserSuperAdmin())) {
+            return activeBiz;
+        }
+        const firstActive = this.businesses.find(b => this.isBusinessActive(b));
+        return firstActive || this.businesses[0];
     }
 
     /**
      * El usuario selecciona un local desde la pantalla de bienvenida (Index)
      */
     async selectLocal(businessId) {
+        const isSuperAdmin = this.isCurrentUserSuperAdmin();
+        const targetBiz = this.businesses.find(b => b.id === businessId);
+        if (!targetBiz) return null;
+
+        // Candado estricto: Si el local está deshabilitado y no es Superadmin, denegar acceso
+        if (!this.isBusinessActive(targetBiz) && !isSuperAdmin) {
+            console.warn(`[TenantManager] Acceso denegado a sucursal inactiva: ${businessId}`);
+            return null;
+        }
+
         const sessionRaw = localStorage.getItem('piu_auth_current_user_v1');
         if (sessionRaw) {
             try {
@@ -376,15 +649,12 @@ class TenantManager {
             } catch (e) {}
         }
 
-        if (this.businesses.some(b => b.id === businessId)) {
-            this.activeBusinessId = businessId;
-            this.isLocalSelected = true;
-            localStorage.setItem(SESSION_LOCKED_KEY, businessId);
-            localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
-            this.notify();
-            return this.getActiveBusiness();
-        }
-        return null;
+        this.activeBusinessId = businessId;
+        this.isLocalSelected = true;
+        localStorage.setItem(SESSION_LOCKED_KEY, businessId);
+        localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
+        this.notify();
+        return this.getActiveBusiness();
     }
 
     /**
@@ -400,7 +670,7 @@ class TenantManager {
                     // El encargado no puede salir de su sucursal asignada
                     return;
                 }
-                if (sess && sess.role === 'SUPERADMIN') {
+                if (sess && (sess.role === 'SUPERADMIN' || sess.isSuperAdmin === true)) {
                     isSuperAdmin = true;
                 }
             } catch (e) {}
@@ -408,6 +678,11 @@ class TenantManager {
 
         // Si el cambio de local está bloqueado globalmente, el superadmin sí puede salir, pero otros no
         if (this.disableChangeLocalGlobally && !isSuperAdmin) {
+            return;
+        }
+
+        const activeBiz = this.getActiveBusiness();
+        if (activeBiz?.disableChangeLocal && !isSuperAdmin) {
             return;
         }
 
@@ -422,15 +697,20 @@ class TenantManager {
     }
 
     async setActiveBusiness(businessId) {
-        if (this.businesses.some(b => b.id === businessId)) {
-            this.activeBusinessId = businessId;
-            this.isLocalSelected = true;
-            localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
-            localStorage.setItem(SESSION_LOCKED_KEY, businessId);
-            this.notify();
-            return this.getActiveBusiness();
+        const isSuperAdmin = this.isCurrentUserSuperAdmin();
+        const targetBiz = this.businesses.find(b => b.id === businessId);
+        if (!targetBiz) return null;
+
+        if (!this.isBusinessActive(targetBiz) && !isSuperAdmin) {
+            return null;
         }
-        return null;
+
+        this.activeBusinessId = businessId;
+        this.isLocalSelected = true;
+        localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, businessId);
+        localStorage.setItem(SESSION_LOCKED_KEY, businessId);
+        this.notify();
+        return this.getActiveBusiness();
     }
 
     async createBusiness(businessData, autoSelect = true) {

@@ -17,7 +17,9 @@ import {
     doc, 
     getDoc, 
     query, 
-    where 
+    where,
+    canMakeFirestoreRead,
+    markQuotaExhausted 
 } from '../firebaseConfig.js';
 import { loyaltyManager, TIERS } from '../core/loyaltyManager.js';
 import { accountManager } from '../core/accountManager.js';
@@ -63,47 +65,11 @@ export async function renderClientProfileView(container) {
         return renderStaffProfileView(container, currentUser);
     }
 
-    // Carga exhaustiva y unificada de reservaciones de este cliente (por ID, Username, Teléfono o Nombre)
+    // Carga unificada de reservaciones de este cliente (Memoria en Store + Caché Local)
     const myReservationsMap = new Map();
 
-    if (isFirebaseAvailable && db) {
-        try {
-            // 1. Consulta por ID único de cliente
-            if (currentUser.id) {
-                const q1 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientId", "==", currentUser.id));
-                const snap1 = await getDocs(q1);
-                snap1.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-            }
-            // 2. Consulta por nombre de usuario (@username)
-            if (currentUser.username) {
-                const q2 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientUsername", "==", currentUser.username));
-                const snap2 = await getDocs(q2);
-                snap2.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-
-                // Si el encargado escribió el username como clientName
-                const q2b = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientName", "==", currentUser.username));
-                const snap2b = await getDocs(q2b);
-                snap2b.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-            }
-            // 3. Consulta por teléfono registrado
-            if (currentUser.phone) {
-                const q3 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientPhone", "==", currentUser.phone));
-                const snap3 = await getDocs(q3);
-                snap3.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-            }
-            // 4. Consulta por nombre completo
-            if (currentUser.name) {
-                const q4 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientName", "==", currentUser.name));
-                const snap4 = await getDocs(q4);
-                snap4.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
-            }
-        } catch (e) {
-            console.warn("Error cargando reservas desde Firestore:", e);
-        }
-    }
-
-    // Merge con datos locales / store
-    const allLocalReservations = store.getReservations ? store.getReservations() : [...store.reservations, ...store.pendingReservations];
+    // 1. PRIMERO: Obtener desde la memoria activa del store (Zero-Read)
+    const allLocalReservations = store.getReservations ? store.getReservations() : [...(store.reservations || []), ...(store.pendingReservations || [])];
     allLocalReservations.forEach(r => {
         const matchesId = r.clientId && r.clientId === currentUser.id;
         const matchesUser = r.clientUsername && currentUser.username && r.clientUsername.toLowerCase() === currentUser.username.toLowerCase();
@@ -116,6 +82,19 @@ export async function renderClientProfileView(container) {
             myReservationsMap.set(r.id, r);
         }
     });
+
+    // 2. SEGUNDO: Si no hay ninguna en memoria y la cuota lo permite, hacer UNA SOLA consulta a Firestore
+    if (myReservationsMap.size === 0 && canMakeFirestoreRead() && currentUser.id) {
+        try {
+            const q1 = query(collection(db, COLLECTIONS.RESERVATIONS), where("clientId", "==", currentUser.id));
+            const snap1 = await getDocs(q1);
+            snap1.forEach(d => myReservationsMap.set(d.id, { id: d.id, ...d.data() }));
+        } catch (e) {
+            if (e?.code === 'resource-exhausted') markQuotaExhausted();
+            console.warn("Error cargando reservas desde Firestore:", e);
+        }
+    }
+
 
     let myReservations = Array.from(myReservationsMap.values());
     myReservations.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
@@ -171,9 +150,10 @@ export async function renderClientProfileView(container) {
     const currencySymbol = business?.currencySymbol || '$';
 
     const valueForTier = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
-    const currentTier = loyaltyManager.calculateTier(valueForTier, activeMode);
-    const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(valueForTier, activeMode);
+    const currentTier = loyaltyManager.calculateTier(valueForTier, activeMode, business);
+    const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(valueForTier, activeMode, business);
     const catalogRewards = business.loyaltyEnabled ? await loyaltyManager.getRewardsCatalog(business.id) : [];
+    const businessTiers = loyaltyManager.getBusinessTiers(business);
     let discountPct = loyaltyManager.getDiscountForTier(currentTier.name, business);
     const discountType = business.loyaltyDiscountType || 'PERMANENT';
     if (discountType === 'NONE') {
@@ -190,7 +170,7 @@ export async function renderClientProfileView(container) {
     let loyaltyNoticeHtml = '';
     if (business.loyaltyEnabled) {
         if (discountType === 'NONE') {
-            loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">🎖️ Los niveles son distintivos (sin descuentos).</div>`;
+            loyaltyNoticeHtml = ''; // En modo distintivo no se muestran letreros ni menciones de descuento
         } else if (discountType === 'ONCE') {
             const currentTierUpper = (currentTier.name || '').toUpperCase();
             const claimed = bizLoyalty.claimedTiers || [];
@@ -204,6 +184,58 @@ export async function renderClientProfileView(container) {
         } else if (discountPct > 0) {
             loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--piu-cyan); font-weight:bold; margin-top:6px;">⚡ ¡Tienes ${discountText} de descuento directo permanente en tus reservas!</div>`;
         }
+    }
+
+    const isVisitsMode = activeMode === 'VISITS';
+    const formatReq = (t) => {
+        if (isVisitsMode) {
+            if (t.maxVisits === Infinity || t.maxVisits === undefined) return `${t.minVisits}+ visitas`;
+            if (t.minVisits >= t.maxVisits) return `${t.minVisits} ${t.minVisits === 1 ? 'visita' : 'visitas'}`;
+            return `${t.minVisits}-${t.maxVisits} visitas`;
+        } else {
+            if (t.maxPoints === Infinity || t.maxPoints === undefined) return `${t.minPoints}+ pts`;
+            if (t.minPoints >= t.maxPoints) return `${t.minPoints} pts`;
+            return `${t.minPoints}-${t.maxPoints} pts`;
+        }
+    };
+
+    let tiersStructureHtml = '';
+    if (discountType === 'NONE') {
+        tiersStructureHtml = `
+            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
+                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles:</h4>
+                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
+                    <li>🟫 <strong>Bronce</strong> (${formatReq(businessTiers.BRONCE)}): Nivel inicial.</li>
+                    <li>⬜ <strong>Plata</strong> (${formatReq(businessTiers.PLATA)}): Nivel distintivo.</li>
+                    <li>🟨 <strong>Oro</strong> (${formatReq(businessTiers.ORO)}): Nivel destacado.</li>
+                    <li>🟦 <strong>Platino</strong> (${formatReq(businessTiers.PLATINO)}): Nivel de élite.</li>
+                </ul>
+            </div>
+        `;
+    } else if (discountType === 'ONCE') {
+        tiersStructureHtml = `
+            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
+                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles y Beneficios:</h4>
+                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
+                    <li>🟫 <strong>Bronce</strong> (${formatReq(businessTiers.BRONCE)}): Sin descuento.</li>
+                    <li>⬜ <strong>Plata</strong> (${formatReq(businessTiers.PLATA)}): <strong>${Math.round(businessTiers.PLATA.discount * 100)}% de descuento</strong> de un solo uso en reserva.</li>
+                    <li>🟨 <strong>Oro</strong> (${formatReq(businessTiers.ORO)}): <strong>${Math.round(businessTiers.ORO.discount * 100)}% de descuento</strong> de un solo uso en reserva.</li>
+                    <li>🟦 <strong>Platino</strong> (${formatReq(businessTiers.PLATINO)}): <strong>${Math.round(businessTiers.PLATINO.discount * 100)}% de descuento</strong> de un solo uso en reserva.</li>
+                </ul>
+            </div>
+        `;
+    } else {
+        tiersStructureHtml = `
+            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
+                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles y Beneficios:</h4>
+                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
+                    <li>🟫 <strong>Bronce</strong> (${formatReq(businessTiers.BRONCE)}): Sin descuento.</li>
+                    <li>⬜ <strong>Plata</strong> (${formatReq(businessTiers.PLATA)}): <strong>${Math.round(businessTiers.PLATA.discount * 100)}% de descuento</strong> automático en reservas.</li>
+                    <li>🟨 <strong>Oro</strong> (${formatReq(businessTiers.ORO)}): <strong>${Math.round(businessTiers.ORO.discount * 100)}% de descuento</strong> automático en reservas.</li>
+                    <li>🟦 <strong>Platino</strong> (${formatReq(businessTiers.PLATINO)}): <strong>${Math.round(businessTiers.PLATINO.discount * 100)}% de descuento</strong> automático en reservas.</li>
+                </ul>
+            </div>
+        `;
     }
 
     container.innerHTML = `
@@ -592,22 +624,7 @@ export async function renderClientProfileView(container) {
                                 </div>
                             `}
 
-                            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
-                                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles y Beneficios:</h4>
-                                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
-                                    ${activeMode === 'VISITS' ? `
-                                        <li>🟫 <strong>Bronce</strong> (0-9 visitas): Sin descuento.</li>
-                                        <li>⬜ <strong>Plata</strong> (10-29 visitas): <strong>5% de descuento</strong> automático en reservas.</li>
-                                        <li>🟨 <strong>Oro</strong> (30-59 visitas): <strong>10% de descuento</strong> automático en reservas.</li>
-                                        <li>🟦 <strong>Platino</strong> (60+ visitas): <strong>15% de descuento</strong> automático en reservas.</li>
-                                    ` : `
-                                        <li>🟫 <strong>Bronce</strong> (0-99 pts): Sin descuento.</li>
-                                        <li>⬜ <strong>Plata</strong> (100-299 pts): <strong>5% de descuento</strong> automático en reservas.</li>
-                                        <li>🟨 <strong>Oro</strong> (300-599 pts): <strong>10% de descuento</strong> automático en reservas.</li>
-                                        <li>🟦 <strong>Platino</strong> (600+ pts): <strong>15% de descuento</strong> automático en reservas.</li>
-                                    `}
-                                </ul>
-                            </div>
+                            ${tiersStructureHtml}
                         </div>
 
                         <!-- Columna Derecha: Canjes -->

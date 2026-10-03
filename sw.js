@@ -1,17 +1,152 @@
 // sw.js
-// Service Worker Intermediario para Notificaciones del Navegador — Pump It Up Hub (v1.9.0)
-const CACHE_NAME = 'piu-notifications-sw-v1';
+// Service Worker PWA & Notificaciones — Pump It Up Hub (v1.9.1)
+const CACHE_NAME = 'piu-hub-pwa-v1.9.1';
 
-// Instalación inmediata del Service Worker
+const PRECACHE_ASSETS = [
+    '/',
+    '/index.html',
+    '/manifest.json',
+    '/css/styles.css',
+    '/css/components.css',
+    '/css/views.css',
+    '/icons/icon.svg',
+    '/icons/icon-192.png',
+    '/icons/icon-512.png',
+    '/icons/apple-touch-icon.png'
+];
+
+// Instalación inmediata y precaching de recursos esenciales
 self.addEventListener('install', (event) => {
-    console.log('[SW] Service Worker de Notificaciones instalado.');
-    self.skipWaiting();
+    console.log('[SW] Service Worker PWA instalándose...');
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => {
+            return cache.addAll(PRECACHE_ASSETS).catch(err => {
+                console.warn('[SW] Aviso precaching assets (alguno puede no estar disponible aún):', err);
+            });
+        }).then(() => self.skipWaiting())
+    );
 });
 
-// Activación y control inmediato de clientes
+// Activación y limpieza de cachés antiguas
 self.addEventListener('activate', (event) => {
-    console.log('[SW] Service Worker de Notificaciones activado.');
-    event.waitUntil(self.clients.claim());
+    console.log('[SW] Service Worker PWA activado:', CACHE_NAME);
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.map((name) => {
+                    if (name !== CACHE_NAME) {
+                        console.log('[SW] Limpiando caché obsoleta:', name);
+                        return caches.delete(name);
+                    }
+                })
+            );
+        }).then(() => self.clients.claim()).then(() => {
+            // Notificar a las pestañas y PWA que el nuevo Service Worker está activo
+            return self.clients.matchAll({ type: 'window' }).then(clients => {
+                clients.forEach(client => {
+                    client.postMessage({ type: 'SW_ACTIVATED', cacheName: CACHE_NAME });
+                });
+            });
+        })
+    );
+});
+
+/**
+ * Estrategia de Fetch para PWA y Offline
+ * 1. Para peticiones de navegación (HTML): Network-First con fallback a index.html en caché
+ * 2. Para assets estáticos locales: Stale-While-Revalidate
+ * 3. Para Firebase y APIs externas: Network-Only
+ */
+self.addEventListener('fetch', (event) => {
+    const request = event.request;
+
+    // Solo interceptar peticiones GET HTTP/HTTPS
+    if (request.method !== 'GET') return;
+
+    const url = new URL(request.url);
+
+    // No interceptar peticiones a Firebase Firestore, Auth o APIs externas
+    if (
+        url.hostname.includes('firebaseio.com') ||
+        url.hostname.includes('googleapis.com') ||
+        url.hostname.includes('identitytoolkit') ||
+        url.pathname.startsWith('/api/')
+    ) {
+        return;
+    }
+
+    // version.json SIEMPRE debe obtenerse de la red (sin caché) para detectar nuevas versiones
+    if (url.pathname.endsWith('/version.json') || url.pathname === '/version.json') {
+        event.respondWith(
+            fetch(request, { cache: 'no-store' }).catch(() => {
+                return new Response(JSON.stringify({ version: 'unknown', offline: true }), {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            })
+        );
+        return;
+    }
+
+    // Navegación principal (HTML) -> Network First con fallback offline
+    if (request.mode === 'navigate') {
+        event.respondWith(
+            fetch(request).catch(() => {
+                return caches.match('/index.html') || caches.match('/');
+            })
+        );
+        return;
+    }
+
+    // Scripts JS y estilos CSS -> Network-First (con actualización de caché y fallback offline)
+    // Esto garantiza que el navegador obtenga el código JavaScript nuevo de inmediato y evita loops de actualización
+    if (url.origin === self.location.origin && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.includes('/js/') || url.pathname.includes('/css/'))) {
+        event.respondWith(
+            fetch(request).then((networkResponse) => {
+                if (networkResponse) {
+                    const contentType = networkResponse.headers.get('content-type') || '';
+                    // NUNCA guardar en caché ni devolver text/html para archivos JS/CSS (ej. si el servidor SPA devuelve index.html ante 404)
+                    if (networkResponse.status === 200 && !contentType.includes('text/html')) {
+                        const responseToCache = networkResponse.clone();
+                        caches.open(CACHE_NAME).then((cache) => {
+                            cache.put(request, responseToCache);
+                        });
+                        return networkResponse;
+                    }
+                    if (contentType.includes('text/html')) {
+                        console.warn('[SW] Respuesta text/html recibida para recurso script/estilo:', request.url);
+                        return new Response('/* Error: Recurso no encontrado (el servidor respondió con HTML) */', {
+                            status: 404,
+                            statusText: 'Not Found',
+                            headers: { 'Content-Type': 'application/javascript; charset=utf-8' }
+                        });
+                    }
+                }
+                return networkResponse;
+            }).catch(() => {
+                return caches.match(request);
+            })
+        );
+        return;
+    }
+
+    // Resto de recursos estáticos (iconos, imágenes, fuentes) -> Stale While Revalidate
+    if (url.origin === self.location.origin) {
+        event.respondWith(
+            caches.match(request).then((cachedResponse) => {
+                const fetchPromise = fetch(request).then((networkResponse) => {
+                    if (networkResponse && networkResponse.status === 200) {
+                        const responseToCache = networkResponse.clone();
+                        caches.open(CACHE_NAME).then((cache) => {
+                            cache.put(request, responseToCache);
+                        });
+                    }
+                    return networkResponse;
+                }).catch(() => cachedResponse);
+
+                return cachedResponse || fetchPromise;
+            })
+        );
+    }
 });
 
 /**
@@ -22,6 +157,13 @@ self.addEventListener('message', (event) => {
     if (!event.data) return;
 
     const { type, title, body, icon, badge, tag, data, url, vibrate, actions, silent, requireInteraction } = event.data;
+
+    // Manejo de actualización forzada / bypass de espera
+    if (type === 'SKIP_WAITING') {
+        console.log('[SW] Mensaje SKIP_WAITING recibido. Forzando activación inmediata...');
+        self.skipWaiting();
+        return;
+    }
 
     if (type === 'SHOW_NOTIFICATION') {
         const notifTitle = title || 'Pump It Up Hub';

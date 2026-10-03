@@ -23,9 +23,16 @@ export function renderMachinesView(container) {
                     <p class="subtitle-text">Máquinas registradas en <strong>${business.name}</strong> • ${machines.length} máquinas en total</p>
                 </div>
                 ${isStaff ? `
-                    <button class="btn btn-primary glow-red" id="btn-add-machine">
-                        <span>➕ Registrar Nueva Máquina</span>
-                    </button>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        ${machines.length > 1 ? `
+                            <button class="btn btn-secondary glow-cyan" id="btn-reorder-machines" title="Reordenar las columnas de máquinas en la Vista de Día">
+                                <span>⇅ Reordenar en Vista Día</span>
+                            </button>
+                        ` : ''}
+                        <button class="btn btn-primary glow-red" id="btn-add-machine">
+                            <span>➕ Registrar Nueva Máquina</span>
+                        </button>
+                    </div>
                 ` : ''}
             </div>
 
@@ -37,7 +44,7 @@ export function renderMachinesView(container) {
                         <h3>No hay máquinas registradas en este local</h3>
                         <p>Haz clic en "Registrar Nueva Máquina" para agregar una o transferir una de otra sucursal.</p>
                     </div>
-                ` : machines.map(m => {
+                ` : machines.map((m, index) => {
                     const isAvail = m.status === 'AVAILABLE';
                     const isMaint = m.status === 'MAINTENANCE';
                     const statusBadge = isAvail 
@@ -59,9 +66,16 @@ export function renderMachinesView(container) {
                             </div>
 
                             <div class="mach-card-body">
-                                <div class="mach-card-header">
-                                    <h3 class="mach-title">${m.name}</h3>
-                                    <span class="mach-version-pill">💿 ${m.version}</span>
+                                <div class="mach-card-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                                    <div>
+                                        <h3 class="mach-title">${m.name}</h3>
+                                        <span class="mach-version-pill">💿 ${m.version}</span>
+                                    </div>
+                                    ${isStaff ? `
+                                        <span class="badge badge-dark" style="border:1px solid var(--color-neon-cyan); color:var(--color-neon-cyan); font-family:var(--font-mono); font-size:0.75rem; padding:3px 8px; border-radius:4px;" title="Columna #${index + 1} en la Vista de Día">
+                                            #${index + 1} Día
+                                        </span>
+                                    ` : ''}
                                 </div>
 
                                 <div class="mach-spec-row">
@@ -98,14 +112,18 @@ export function renderMachinesView(container) {
                             </div>
 
                             ${isStaff ? `
-                                <div class="mach-card-actions" style="display:flex; flex-wrap:wrap; gap:6px;">
+                                <div class="mach-card-actions" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                                    <div class="btn-group-reorder" style="display:inline-flex; gap:2px; background:var(--bg-dark-900); padding:2px; border-radius:4px; border:1px solid var(--border-color);">
+                                        <button class="btn btn-outline btn-xs btn-move-mach-up" data-id="${m.id}" ${index === 0 ? 'disabled' : ''} style="padding:2px 7px; font-size:0.72rem;" title="Mover hacia la izquierda / antes en Vista Día">▲</button>
+                                        <button class="btn btn-outline btn-xs btn-move-mach-down" data-id="${m.id}" ${index === machines.length - 1 ? 'disabled' : ''} style="padding:2px 7px; font-size:0.72rem;" title="Mover hacia la derecha / después en Vista Día">▼</button>
+                                    </div>
                                     <button class="btn btn-outline btn-xs btn-edit-mach" data-id="${m.id}">✏️ Editar</button>
                                     <button class="btn ${isAvail ? 'btn-warning' : 'btn-success'} btn-xs btn-toggle-status" data-id="${m.id}" data-current="${m.status}">
                                         ${isAvail ? '🔧 Mant.' : '✅ Activar'}
                                     </button>
                                     ${allBusinesses.length > 1 ? `
                                         <button class="btn btn-secondary btn-xs btn-reassign-mach" data-id="${m.id}" title="Reasignar o transferir máquina a otra sucursal">
-                                            🔀 Reasignar Local
+                                            🔀 Reasignar
                                         </button>
                                     ` : ''}
                                     <button class="btn btn-danger btn-xs btn-del-mach" data-id="${m.id}" title="Eliminar máquina">🗑️</button>
@@ -128,6 +146,40 @@ export function renderMachinesView(container) {
     if (isStaff) {
         container.querySelector('#btn-add-machine')?.addEventListener('click', async () => {
             await openMachineFormModal();
+        });
+
+        // Botón de reordenar máquinas completo
+        container.querySelector('#btn-reorder-machines')?.addEventListener('click', () => {
+            openReorderMachinesModal(container);
+        });
+
+        // Botones rápidos de subir / bajar una posición
+        container.querySelectorAll('.btn-move-mach-up').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.id;
+                try {
+                    await store.moveMachine(id, 'up');
+                    toast.success("Posición de máquina actualizada en Vista Día.");
+                    renderMachinesView(container);
+                } catch (err) {
+                    toast.error(err.message);
+                }
+            });
+        });
+
+        container.querySelectorAll('.btn-move-mach-down').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.id;
+                try {
+                    await store.moveMachine(id, 'down');
+                    toast.success("Posición de máquina actualizada en Vista Día.");
+                    renderMachinesView(container);
+                } catch (err) {
+                    toast.error(err.message);
+                }
+            });
         });
 
         container.querySelectorAll('.btn-edit-mach').forEach(btn => {
@@ -419,7 +471,9 @@ async function openMachineFormModal(machine = null) {
  */
 function openReassignMachineModal(machine, mainContainer) {
     const currentBiz = store.currentBusiness;
-    const allBusinesses = tenantManager.getAllBusinesses().filter(b => b.id !== currentBiz.id);
+    const isSuperAdmin = authManager.isSuperAdmin();
+    const allBusinesses = (isSuperAdmin ? tenantManager.getAllBusinesses() : tenantManager.getActiveBusinesses())
+        .filter(b => b.id !== currentBiz.id);
 
     const bizOptions = allBusinesses.map(b => `
         <option value="${b.id}">${b.name} (${b.city})</option>
@@ -476,3 +530,141 @@ function openReassignMachineModal(machine, mainContainer) {
         }
     };
 }
+
+/**
+ * Modal Interactivo para Reordenar Columnas de Máquinas en la Vista de Día
+ */
+export function openReorderMachinesModal(mainContainer = null) {
+    let workingMachines = [...store.getMachines()];
+
+    if (workingMachines.length <= 1) {
+        toast.info("Se requieren al menos 2 máquinas registradas para reordenar.");
+        return;
+    }
+
+    function generateModalBodyHtml(list) {
+        return `
+            <div class="reorder-machines-modal-content" style="display:flex; flex-direction:column; gap:16px;">
+                <p style="font-size:0.88rem; color:var(--text-secondary); margin:0;">
+                    Usa las flechas <strong>▲ Subir</strong> y <strong>▼ Bajar</strong> para definir el orden de las columnas en la <strong>Vista de Día</strong> (de izquierda a derecha):
+                </p>
+
+                <!-- Vista Previa de Columnas -->
+                <div style="background:var(--bg-dark-900); padding:10px 12px; border-radius:var(--radius-sm); border:1px dashed var(--color-neon-cyan);">
+                    <small style="color:var(--color-neon-cyan); font-weight:700; display:block; margin-bottom:6px; text-transform:uppercase; font-size:0.7rem; letter-spacing:1px;">
+                        👀 Vista Previa de Columnas (Vista Día):
+                    </small>
+                    <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:4px;" class="preview-columns-bar">
+                        <div style="background:var(--bg-dark-700); padding:4px 8px; border-radius:4px; font-size:0.72rem; color:var(--text-muted); white-space:nowrap; border:1px solid rgba(255,255,255,0.06);">
+                            ⏰ HORARIO
+                        </div>
+                        ${list.map((m, idx) => `
+                            <div style="background:rgba(0, 229, 255, 0.1); border:1px solid var(--color-neon-cyan); padding:4px 10px; border-radius:4px; font-size:0.75rem; color:#ffffff; white-space:nowrap; display:flex; align-items:center; gap:4px;">
+                                <span style="color:var(--color-neon-lime); font-weight:bold;">#${idx + 1}</span>
+                                <span>${m.name}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Lista de Máquinas Reordenables -->
+                <div class="reorder-list" id="reorder-machines-list" style="display:flex; flex-direction:column; gap:8px; max-height:340px; overflow-y:auto; padding-right:4px;">
+                    ${list.map((m, idx) => `
+                        <div class="reorder-item-card" data-id="${m.id}" data-index="${idx}" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; background:var(--bg-dark-800); border:1px solid var(--border-color); border-radius:var(--radius-sm); transition:all 0.2s ease;">
+                            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                                <span style="background:var(--bg-dark-900); color:var(--color-neon-cyan); border:1px solid rgba(0,229,255,0.3); width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:0.8rem; flex-shrink:0;">
+                                    ${idx + 1}
+                                </span>
+                                <img src="${m.imageUrl || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80'}" 
+                                     alt="${m.name}" 
+                                     style="width:38px; height:38px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.1); flex-shrink:0;">
+                                <div style="min-width:0;">
+                                    <strong style="color:#ffffff; font-size:0.88rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${m.name}</strong>
+                                    <small style="color:var(--text-muted); font-size:0.75rem;">${m.model} • ${m.version}</small>
+                                </div>
+                            </div>
+
+                            <div style="display:flex; gap:4px; flex-shrink:0;">
+                                <button type="button" class="btn btn-outline btn-xs btn-modal-move-up" data-id="${m.id}" ${idx === 0 ? 'disabled' : ''} title="Mover hacia arriba / izquierda">
+                                    ▲ Subir
+                                </button>
+                                <button type="button" class="btn btn-outline btn-xs btn-modal-move-down" data-id="${m.id}" ${idx === list.length - 1 ? 'disabled' : ''} title="Mover hacia abajo / derecha">
+                                    ▼ Bajar
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    const footerHtml = `
+        <button type="button" class="btn btn-secondary" id="btn-cancel-reorder">Cancelar</button>
+        <button type="button" class="btn btn-primary glow-red" id="btn-save-reorder">💾 Guardar Nuevo Orden</button>
+    `;
+
+    const modalEl = modal.open({
+        title: 'Reordenar Máquinas en Vista de Día',
+        icon: '⇅',
+        contentHtml: `<div id="reorder-modal-body-container">${generateModalBodyHtml(workingMachines)}</div>`,
+        footerHtml,
+        maxWidth: '540px'
+    });
+
+    function attachModalEvents() {
+        const bodyContainer = modalEl.querySelector('#reorder-modal-body-container');
+        if (!bodyContainer) return;
+
+        bodyContainer.querySelectorAll('.btn-modal-move-up').forEach(btn => {
+            btn.onclick = () => {
+                const id = btn.dataset.id;
+                const idx = workingMachines.findIndex(m => m.id === id);
+                if (idx > 0) {
+                    const [item] = workingMachines.splice(idx, 1);
+                    workingMachines.splice(idx - 1, 0, item);
+                    bodyContainer.innerHTML = generateModalBodyHtml(workingMachines);
+                    attachModalEvents();
+                }
+            };
+        });
+
+        bodyContainer.querySelectorAll('.btn-modal-move-down').forEach(btn => {
+            btn.onclick = () => {
+                const id = btn.dataset.id;
+                const idx = workingMachines.findIndex(m => m.id === id);
+                if (idx < workingMachines.length - 1) {
+                    const [item] = workingMachines.splice(idx, 1);
+                    workingMachines.splice(idx + 1, 0, item);
+                    bodyContainer.innerHTML = generateModalBodyHtml(workingMachines);
+                    attachModalEvents();
+                }
+            };
+        });
+    }
+
+    attachModalEvents();
+
+    modalEl.querySelector('#btn-cancel-reorder').onclick = () => modal.close();
+
+    modalEl.querySelector('#btn-save-reorder').onclick = async () => {
+        const saveBtn = modalEl.querySelector('#btn-save-reorder');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Guardando...';
+
+        try {
+            const orderedIds = workingMachines.map(m => m.id);
+            await store.reorderMachines(orderedIds);
+            modal.close();
+            toast.success("¡Orden de máquinas actualizado exitosamente para la Vista de Día!");
+            if (mainContainer) {
+                renderMachinesView(mainContainer);
+            }
+        } catch (e) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Guardar Nuevo Orden';
+            toast.error(e.message);
+        }
+    };
+}
+

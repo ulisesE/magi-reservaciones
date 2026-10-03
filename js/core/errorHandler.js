@@ -1,7 +1,7 @@
 // js/core/errorHandler.js
 // Manejador centralizado y transparente de errores de Firebase, Firestore y Conectividad
 import { toast } from '../components/toast.js';
-import { isOnline, isFirebaseAvailable, db } from '../firebaseConfig.js';
+import { isOnline, isFirebaseAvailable, db, markQuotaExhausted } from '../firebaseConfig.js';
 
 /**
  * POLÍTICA DE CONFIABILIDAD FINANCIERA MAGI:
@@ -80,6 +80,11 @@ export function formatErrorMessage(error, contextMessage = '') {
  * @returns {string} El mensaje formateado
  */
 export function handleAppError(error, { context = '', showToast = true, rethrow = false } = {}) {
+    const errStr = (error?.code || '') + ' ' + (error?.message || String(error || ''));
+    if (errStr.includes('resource-exhausted') || errStr.includes('429')) {
+        markQuotaExhausted();
+    }
+
     const formatted = formatErrorMessage(error, context);
 
     // Registro técnico obligatorio para diagnóstico y depuración

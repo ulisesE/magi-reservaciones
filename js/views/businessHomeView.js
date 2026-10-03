@@ -1,5 +1,7 @@
 // Página pública principal de la sucursal seleccionada.
 import { store } from '../core/store.js';
+import { tenantManager } from '../core/tenantManager.js';
+import { pwaManager } from '../core/pwaManager.js';
 import { format12Hour, getBusinessHoursForDate, DAYS_OF_WEEK } from '../core/timeUtils.js';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80';
@@ -10,9 +12,10 @@ function mapsLink(business) {
 }
 
 export function renderBusinessHomeView(container) {
-    const business = store.currentBusiness;
+    const business = store.currentBusiness || tenantManager.getActiveBusiness();
     if (!business) return;
 
+    const isAppInstalled = pwaManager.isAppInstalled();
     const slotDuration = business.slotDuration || 60;
     const slotLabel = slotDuration === 60 ? 'cada hora' : `cada ${slotDuration} minutos`;
     const whatsapp = (business.whatsapp || '').replace(/\D/g, '');
@@ -36,10 +39,33 @@ export function renderBusinessHomeView(container) {
                     <p>${business.tagline || 'Tu espacio para jugar, reservar y disfrutar.'}</p>
                     <div class="business-home-actions">
                         <button id="btn-home-book" class="btn btn-primary glow-red">Ver horarios y reservar</button>
+                        ${!isAppInstalled ? `
+                            <button id="btn-home-download" class="btn btn-outline" style="border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:700;">📲 Descargar App</button>
+                        ` : ''}
                         <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline">Ver ubicación</a>
                     </div>
                 </div>
             </div>
+
+            ${!isAppInstalled ? `
+                <!-- Banner Promocional de Descarga de App PWA -->
+                <div class="business-home-pwa-cta" style="margin: 24px auto 0 auto; max-width: 1200px; padding: 18px 24px; background: linear-gradient(135deg, rgba(0, 229, 255, 0.1) 0%, rgba(8, 140, 79, 0.15) 100%); border: 1px solid var(--color-neon-cyan); border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: 0 0 20px rgba(0, 229, 255, 0.12);">
+                    <div style="display: flex; align-items: center; gap: 14px;">
+                        <span style="font-size: 2.2rem; filter: drop-shadow(0 0 10px var(--color-neon-cyan));">📲</span>
+                        <div>
+                            <strong style="color: #ffffff; font-size: 1.05rem; display: block; font-family: var(--font-heading); letter-spacing: 0.5px;">
+                                DESCARGA LA APP EXCLUSIVA DE ${business.name.toUpperCase()}
+                            </strong>
+                            <p style="margin: 2px 0 0 0; font-size: 0.82rem; color: var(--text-secondary);">
+                                Instala la PWA en tu celular para apartar turnos en 1 clic, recibir retos de Arena Versus y mostrar tu pase digital.
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-primary glow-cyan" id="btn-banner-download-pwa" style="border-radius: var(--radius-full); padding: 9px 20px; font-weight: 800; font-size: 0.88rem; white-space: nowrap;">
+                        <span>📲 Obtener Enlace & Descargar</span>
+                    </button>
+                </div>
+            ` : ''}
 
             <div class="business-home-info-grid">
                 <article class="business-info-card">
@@ -115,5 +141,7 @@ export function renderBusinessHomeView(container) {
     `;
 
     container.querySelector('#btn-home-book')?.addEventListener('click', () => store.setCurrentView('DAY'));
+    container.querySelector('#btn-home-download')?.addEventListener('click', () => store.setCurrentView('DOWNLOAD'));
+    container.querySelector('#btn-banner-download-pwa')?.addEventListener('click', () => store.setCurrentView('DOWNLOAD'));
     container.querySelector('#btn-home-availability')?.addEventListener('click', () => store.setCurrentView('DAY'));
 }

@@ -1,7 +1,6 @@
-// js/core/notificationManager.js
-// Gestor Centralizado de Notificaciones del Navegador y Comunicación con Service Worker (v1.9.0)
-import { isFirebaseAvailable, db, COLLECTIONS, collection, query, where, onSnapshot } from '../firebaseConfig.js';
+import { isFirebaseAvailable, db, COLLECTIONS, collection, query, where, onSnapshot, canMakeFirestoreRead, markQuotaExhausted } from '../firebaseConfig.js';
 import { toast } from '../components/toast.js';
+import { updateManager } from './updateManager.js';
 
 class NotificationManager {
     constructor() {
@@ -24,8 +23,11 @@ class NotificationManager {
 
         try {
             this.swRegistration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-            console.log("🔔 Service Worker de Notificaciones registrado con éxito. Scope:", this.swRegistration.scope);
+            console.log("🔔 Service Worker PWA & Notificaciones registrado con éxito. Scope:", this.swRegistration.scope);
             this.isInitialized = true;
+
+            // Vincular con el gestor de actualizaciones
+            updateManager.bindServiceWorker(this.swRegistration);
 
             // Escuchar cambios de controlador
             navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -238,7 +240,7 @@ class NotificationManager {
         this.realtimeUnsubscribers.forEach(unsub => unsub());
         this.realtimeUnsubscribers = [];
 
-        if (!currentUser || !isFirebaseAvailable || !db) return;
+        if (!currentUser || !canMakeFirestoreRead()) return;
 
         const role = currentUser.role || 'CLIENT';
         const isClient = role === 'CLIENT';
@@ -365,10 +367,11 @@ class NotificationManager {
             // B. NOTIFICACIONES PARA ENCARGADOS / LOCATARIOS (MANAGER / STAFF)
             // =========================================================================
             if (isStaff && userBizId) {
-                // Escuchar nuevas solicitudes de reservación en SU sucursal
+                // Escuchar únicamente nuevas solicitudes PENDING en SU sucursal (evita descargar miles de reservas históricas)
                 const qStaffReservations = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", userBizId)
+                    where("businessId", "==", userBizId),
+                    where("status", "==", "PENDING")
                 );
 
                 const unsubStaffRes = onSnapshot(qStaffReservations, (snapshot) => {
