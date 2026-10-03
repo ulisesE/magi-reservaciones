@@ -362,10 +362,13 @@ export async function renderClientsView(container, queryVal = '') {
                     const cleanPhone = (c.phone || '').replace(/\D/g, '');
                     const waLink = cleanPhone ? `https://wa.me/52${cleanPhone}` : '#';
                     const activeMode = business ? business.loyaltyMode : 'POINTS';
+                    const isVisitsMode = activeMode === 'VISITS';
                     const activeBusinessId = business ? business.id : '';
                     const bizLoyalty = (c.loyalty && activeBusinessId && c.loyalty[activeBusinessId]) ? c.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
-                    const valueForTier = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
-                    const tier = loyaltyManager.calculateTier(valueForTier, activeMode);
+                    const totalVisits = Number(bizLoyalty.visits) || 0;
+                    const availablePoints = (bizLoyalty.points !== undefined && bizLoyalty.points !== null) ? Number(bizLoyalty.points) : (isVisitsMode ? totalVisits : 0);
+                    const valueForTier = isVisitsMode ? totalVisits : availablePoints;
+                    const tier = loyaltyManager.calculateTier(valueForTier, activeMode, business);
 
                     const acct = (c.accounts && activeBusinessId && c.accounts[activeBusinessId]) ? c.accounts[activeBusinessId] : null;
                     const netDebt = acct ? (acct.netDebt || 0) : 0;
@@ -413,7 +416,7 @@ export async function renderClientsView(container, queryVal = '') {
                                 <div class="gamer-hud-cell">
                                     <span class="gamer-hud-label">🎁 Lealtad</span>
                                     <span class="gamer-hud-value" style="color:var(--color-neon-lime);">
-                                        ${activeMode === 'VISITS' ? `${bizLoyalty.visits || 0} Visitas` : `${bizLoyalty.points || 0} Pts`}
+                                        ${isVisitsMode ? `${availablePoints} Pts (${totalVisits} Vts)` : `${availablePoints} Pts`}
                                     </span>
                                 </div>
                                 <div class="gamer-hud-cell">
@@ -988,8 +991,11 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
 
 function openAdjustPointsModal(client, mainContainer) {
     const activeBusiness = store.currentBusiness || tenantManager.getActiveBusiness();
+    const isVisitsMode = activeBusiness?.loyaltyMode === 'VISITS';
     const activeBusinessId = activeBusiness?.id || '';
     const bizLoyalty = (client.loyalty && activeBusinessId && client.loyalty[activeBusinessId]) ? client.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
+    const curVts = Number(bizLoyalty.visits) || 0;
+    const curPts = (bizLoyalty.points !== undefined && bizLoyalty.points !== null) ? Number(bizLoyalty.points) : (isVisitsMode ? curVts : 0);
 
     const contentHtml = `
         <form id="form-adjust-loyalty" class="cyber-form">
@@ -997,12 +1003,12 @@ function openAdjustPointsModal(client, mainContainer) {
             
             <div style="background:var(--bg-dark-700); padding:12px; border-radius:6px; margin-bottom:14px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Puntos Actuales</span>
-                    <strong style="color:var(--color-neon-lime); font-size:1.2rem;">${bizLoyalty.points || 0} Pts</strong>
+                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Puntos Actuales (Canjeables)</span>
+                    <strong style="color:var(--color-neon-lime); font-size:1.2rem;">${curPts} Pts</strong>
                 </div>
                 <div style="text-align:right;">
-                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas Actuales</span>
-                    <strong style="color:var(--piu-cyan); font-size:1.2rem;">${bizLoyalty.visits || 0}</strong>
+                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas Actuales (Históricas)</span>
+                    <strong style="color:var(--piu-cyan); font-size:1.2rem;">${curVts}</strong>
                 </div>
             </div>
 
@@ -1010,11 +1016,11 @@ function openAdjustPointsModal(client, mainContainer) {
             <div id="adj-preview-card" style="background:rgba(0, 229, 255, 0.06); border:1px dashed var(--piu-cyan); padding:10px 14px; border-radius:6px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
                 <div>
                     <span style="font-size:0.72rem; color:var(--piu-cyan); display:block; text-transform:uppercase; font-weight:700;">Nuevo Total Puntos</span>
-                    <strong id="preview-new-points" style="color:#ffffff; font-size:1.15rem;">${bizLoyalty.points || 0} Pts</strong>
+                    <strong id="preview-new-points" style="color:#ffffff; font-size:1.15rem;">${curPts} Pts</strong>
                 </div>
                 <div style="text-align:right;">
                     <span style="font-size:0.72rem; color:var(--piu-cyan); display:block; text-transform:uppercase; font-weight:700;">Nuevo Total Visitas</span>
-                    <strong id="preview-new-visits" style="color:#ffffff; font-size:1.15rem;">${bizLoyalty.visits || 0}</strong>
+                    <strong id="preview-new-visits" style="color:#ffffff; font-size:1.15rem;">${curVts}</strong>
                 </div>
             </div>
             
@@ -1059,8 +1065,8 @@ function openAdjustPointsModal(client, mainContainer) {
     const updatePreview = () => {
         const pDelta = parseInt(inputPts.value, 10) || 0;
         const vDelta = parseInt(inputVts.value, 10) || 0;
-        const finalP = Math.max(0, (bizLoyalty.points || 0) + pDelta);
-        const finalV = Math.max(0, (bizLoyalty.visits || 0) + vDelta);
+        const finalP = Math.max(0, curPts + pDelta);
+        const finalV = Math.max(0, curVts + vDelta);
         prevPts.textContent = `${finalP} Pts`;
         prevVts.textContent = `${finalV}`;
         prevPts.style.color = pDelta !== 0 ? 'var(--color-neon-lime)' : '#ffffff';

@@ -1,8 +1,7 @@
 {
-  "version": "1.9.0",
-  "buildTime": 1790678150000,
-  "releaseDate": "2026-09-29",
-  "releaseNotes": "Arquitectura Zero-Read, Escudo Anti-Cuota, Despliegue Aislado Multi-App y Sincronización v1.9.0",
+  "version": "1.9.3",
+  "buildTime": 1790935000000,
+  "releaseDate": "2026-10-03",
+  "releaseNotes": "Corrección en módulo de Rendimiento y Reportes: importación de funciones canMakeFirestoreRead y limit, y descarga atómica de reportes CSV v1.9.3",
   "forceUpdate": false
 }
-

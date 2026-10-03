@@ -355,6 +355,8 @@ class LoyaltyManager {
             createdAt: new Date().toISOString()
         };
 
+        let resultingLoyaltyMap = null;
+
         if (isFirebaseAvailable && db) {
             try {
                 const playerRef = doc(db, COLLECTIONS.PLAYERS, userId);
@@ -373,17 +375,24 @@ class LoyaltyManager {
                     const bizMode = (bizSnap.exists() && bizSnap.data().loyaltyMode) || 'POINTS';
 
                     const isVisits = bizMode === 'VISITS';
-                    const balance = isVisits ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
+                    const curVisits = Number(bizLoyalty.visits) || 0;
+                    // En modo VISITAS, si points no está definido se inicializa con sus visitas acumuladas
+                    const curPoints = (bizLoyalty.points !== undefined && bizLoyalty.points !== null)
+                        ? Number(bizLoyalty.points)
+                        : (isVisits ? curVisits : 0);
 
-                    if (balance < pointsCost) {
-                        throw new Error(`${isVisits ? 'Visitas' : 'Puntos'} insuficientes. Tienes ${balance} de ${pointsCost} requeridos.`);
+                    if (curPoints < pointsCost) {
+                        throw new Error(isVisits
+                            ? `Puntos de visita insuficientes. Tienes ${curPoints} pts disponibles de ${pointsCost} requeridos.`
+                            : `Puntos insuficientes. Tienes ${curPoints} de ${pointsCost} requeridos.`);
                     }
 
-                    const nextPoints = Math.max(0, (bizLoyalty.points || 0) - pointsCost);
-                    const nextVisits = isVisits ? Math.max(0, (bizLoyalty.visits || 0) - pointsCost) : (bizLoyalty.visits || 0);
+                    const nextPoints = Math.max(0, curPoints - pointsCost);
+                    // ¡En modo VISITAS, las visitas acumuladas son PERMANENTES (no se restan por canjes)!
+                    const nextVisits = curVisits;
                     
                     const valueForTier = isVisits ? nextVisits : nextPoints;
-                    const nextTier = this.calculateTier(valueForTier, bizMode).name;
+                    const nextTier = this.calculateTier(valueForTier, bizMode, bizSnap.exists() ? bizSnap.data() : null).name;
 
                     loyaltyMap[businessId] = {
                         ...bizLoyalty,
@@ -391,6 +400,7 @@ class LoyaltyManager {
                         visits: nextVisits,
                         tier: nextTier
                     };
+                    resultingLoyaltyMap = loyaltyMap;
 
                     transaction.update(playerRef, {
                         loyalty: loyaltyMap
@@ -426,17 +436,23 @@ class LoyaltyManager {
             const bizMode = (biz && biz.loyaltyMode) || 'POINTS';
 
             const isVisits = bizMode === 'VISITS';
-            const balance = isVisits ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
+            const curVisits = Number(bizLoyalty.visits) || 0;
+            const curPoints = (bizLoyalty.points !== undefined && bizLoyalty.points !== null)
+                ? Number(bizLoyalty.points)
+                : (isVisits ? curVisits : 0);
 
-            if (balance < pointsCost) {
-                throw new Error(`${isVisits ? 'Visitas' : 'Puntos'} insuficientes. Tienes ${balance} de ${pointsCost} requeridos.`);
+            if (curPoints < pointsCost) {
+                throw new Error(isVisits
+                    ? `Puntos de visita insuficientes. Tienes ${curPoints} pts disponibles de ${pointsCost} requeridos.`
+                    : `Puntos insuficientes. Tienes ${curPoints} de ${pointsCost} requeridos.`);
             }
 
-            const nextPoints = Math.max(0, (bizLoyalty.points || 0) - pointsCost);
-            const nextVisits = isVisits ? Math.max(0, (bizLoyalty.visits || 0) - pointsCost) : (bizLoyalty.visits || 0);
+            const nextPoints = Math.max(0, curPoints - pointsCost);
+            // ¡Las visitas son permanentes!
+            const nextVisits = curVisits;
 
             const valueForTier = isVisits ? nextVisits : nextPoints;
-            const nextTier = this.calculateTier(valueForTier, bizMode).name;
+            const nextTier = this.calculateTier(valueForTier, bizMode, biz).name;
 
             loyaltyMap[businessId] = {
                 ...bizLoyalty,
@@ -444,6 +460,7 @@ class LoyaltyManager {
                 visits: nextVisits,
                 tier: nextTier
             };
+            resultingLoyaltyMap = loyaltyMap;
 
             players[pIdx].loyalty = loyaltyMap;
             localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
@@ -452,6 +469,32 @@ class LoyaltyManager {
             const userRedemptions = JSON.parse(localStorage.getItem(localKey) || '[]');
             userRedemptions.push(newRedemption);
             localStorage.setItem(localKey, JSON.stringify(userRedemptions));
+        }
+
+        // Sincronizar SIEMPRE la sesión activa y caché local (Zero-Read friendly)
+        if (resultingLoyaltyMap) {
+            try {
+                const players = JSON.parse(localStorage.getItem('piu_registered_players_cache') || '[]');
+                const pIdx = players.findIndex(p => p.id === userId);
+                if (pIdx !== -1) {
+                    players[pIdx].loyalty = resultingLoyaltyMap;
+                    localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
+                }
+
+                if (authManager?.clientUsers) {
+                    const cIdx = authManager.clientUsers.findIndex(c => c.id === userId);
+                    if (cIdx !== -1) {
+                        authManager.clientUsers[cIdx].loyalty = resultingLoyaltyMap;
+                    }
+                }
+
+                if (authManager?.currentUser && authManager.currentUser.id === userId) {
+                    authManager.currentUser.loyalty = resultingLoyaltyMap;
+                    authManager.saveSessionLocally(authManager.currentUser);
+                }
+            } catch (e) {
+                console.warn("Error sincronizando cache local de lealtad tras canje:", e);
+            }
         }
 
         return newRedemption;
@@ -491,15 +534,19 @@ class LoyaltyManager {
     }
 
     async cancelRedemption(redemptionId, businessId, refundPoints = false) {
+        let resultingLoyaltyMap = null;
+        let affectedClientId = null;
+
         if (isFirebaseAvailable && db) {
             try {
                 const ref = doc(db, COLLECTIONS.REDEMPTIONS, redemptionId);
                 const redSnap = await getDoc(ref);
                 if (!redSnap.exists()) throw new Error("Canje no encontrado.");
                 const redData = redSnap.data();
+                affectedClientId = redData.clientId;
 
                 if (refundPoints && redData.clientId) {
-                    // Devolver los puntos/visitas en una transacción
+                    // Devolver los puntos en una transacción
                     const playerRef = doc(db, COLLECTIONS.PLAYERS, redData.clientId);
                     await runTransaction(db, async (transaction) => {
                         const playerDoc = await transaction.get(playerRef);
@@ -515,11 +562,17 @@ class LoyaltyManager {
                             const pointsRefund = Number(redData.pointsCost) || 0;
                             const isVisits = bizMode === 'VISITS';
 
-                            const nextPoints = (bizLoyalty.points || 0) + pointsRefund;
-                            const nextVisits = isVisits ? (bizLoyalty.visits || 0) + pointsRefund : (bizLoyalty.visits || 0);
+                            const curVisits = Number(bizLoyalty.visits) || 0;
+                            const curPoints = (bizLoyalty.points !== undefined && bizLoyalty.points !== null)
+                                ? Number(bizLoyalty.points)
+                                : (isVisits ? curVisits : 0);
+
+                            const nextPoints = curPoints + pointsRefund;
+                            // ¡Las visitas permanecen intactas (históricas)!
+                            const nextVisits = curVisits;
 
                             const valueForTier = isVisits ? nextVisits : nextPoints;
-                            const nextTier = this.calculateTier(valueForTier, bizMode).name;
+                            const nextTier = this.calculateTier(valueForTier, bizMode, bizSnap.exists() ? bizSnap.data() : null).name;
 
                             loyaltyMap[businessId] = {
                                 ...bizLoyalty,
@@ -527,6 +580,7 @@ class LoyaltyManager {
                                 visits: nextVisits,
                                 tier: nextTier
                             };
+                            resultingLoyaltyMap = loyaltyMap;
 
                             transaction.update(playerRef, { loyalty: loyaltyMap });
                         }
@@ -554,6 +608,7 @@ class LoyaltyManager {
                 if (idx !== -1) {
                     foundRedData = list[idx];
                     foundClient = p;
+                    affectedClientId = p.id;
                     list[idx].status = 'CANCELLED';
                     list[idx].cancelledAt = new Date().toISOString();
                     localStorage.setItem(localKey, JSON.stringify(list));
@@ -574,11 +629,16 @@ class LoyaltyManager {
                 const pointsRefund = Number(foundRedData.pointsCost) || 0;
                 const isVisits = bizMode === 'VISITS';
 
-                const nextPoints = (bizLoyalty.points || 0) + pointsRefund;
-                const nextVisits = isVisits ? (bizLoyalty.visits || 0) + pointsRefund : (bizLoyalty.visits || 0);
+                const curVisits = Number(bizLoyalty.visits) || 0;
+                const curPoints = (bizLoyalty.points !== undefined && bizLoyalty.points !== null)
+                    ? Number(bizLoyalty.points)
+                    : (isVisits ? curVisits : 0);
+
+                const nextPoints = curPoints + pointsRefund;
+                const nextVisits = curVisits; // Permanentes
 
                 const valueForTier = isVisits ? nextVisits : nextPoints;
-                const nextTier = this.calculateTier(valueForTier, bizMode).name;
+                const nextTier = this.calculateTier(valueForTier, bizMode, biz).name;
 
                 loyaltyMap[businessId] = {
                     ...bizLoyalty,
@@ -586,9 +646,36 @@ class LoyaltyManager {
                     visits: nextVisits,
                     tier: nextTier
                 };
+                resultingLoyaltyMap = loyaltyMap;
 
                 foundClient.loyalty = loyaltyMap;
                 localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
+            }
+        }
+
+        // Sincronizar SIEMPRE la sesión activa y caché local (Zero-Read friendly)
+        if (resultingLoyaltyMap && affectedClientId) {
+            try {
+                const players = JSON.parse(localStorage.getItem('piu_registered_players_cache') || '[]');
+                const pIdx = players.findIndex(p => p.id === affectedClientId);
+                if (pIdx !== -1) {
+                    players[pIdx].loyalty = resultingLoyaltyMap;
+                    localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
+                }
+
+                if (authManager?.clientUsers) {
+                    const cIdx = authManager.clientUsers.findIndex(c => c.id === affectedClientId);
+                    if (cIdx !== -1) {
+                        authManager.clientUsers[cIdx].loyalty = resultingLoyaltyMap;
+                    }
+                }
+
+                if (authManager?.currentUser && authManager.currentUser.id === affectedClientId) {
+                    authManager.currentUser.loyalty = resultingLoyaltyMap;
+                    authManager.saveSessionLocally(authManager.currentUser);
+                }
+            } catch (e) {
+                console.warn("Error sincronizando cache local de lealtad tras cancelar canje:", e);
             }
         }
         return true;

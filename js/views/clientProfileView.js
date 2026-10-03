@@ -141,15 +141,22 @@ export async function renderClientProfileView(container) {
 
     // Calcular estatus de lealtad según el modo activo y el local
     const activeMode = business.loyaltyMode || 'POINTS';
+    const isVisitsMode = activeMode === 'VISITS';
     const activeBusinessId = business ? business.id : '';
     const bizLoyalty = (currentUser.loyalty && activeBusinessId && currentUser.loyalty[activeBusinessId]) ? currentUser.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
+
+    // En modo VISITAS, las visitas son permanentes (determinan nivel) y los puntos son los créditos canjeables restantes
+    const totalVisits = Number(bizLoyalty.visits) || 0;
+    const availablePoints = (bizLoyalty.points !== undefined && bizLoyalty.points !== null)
+        ? Number(bizLoyalty.points)
+        : (isVisitsMode ? totalVisits : 0);
 
     // Cargar estado de cuenta y consumos del jugador (Fase 2)
     const myAccount = await accountManager.getPlayerAccount(activeBusinessId, currentUser.id);
     const myTransactions = myAccount.transactions || [];
     const currencySymbol = business?.currencySymbol || '$';
 
-    const valueForTier = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
+    const valueForTier = isVisitsMode ? totalVisits : availablePoints;
     const currentTier = loyaltyManager.calculateTier(valueForTier, activeMode, business);
     const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(valueForTier, activeMode, business);
     const catalogRewards = business.loyaltyEnabled ? await loyaltyManager.getRewardsCatalog(business.id) : [];
@@ -267,8 +274,8 @@ export async function renderClientProfileView(container) {
                     </div>
 
                     <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
-                        <!-- Código QR de Jugador -->
-                        <div id="player-qr-container" style="display:flex; align-items:center; gap:12px; background:var(--bg-dark-700); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border-color); box-shadow:0 0 10px rgba(0,0,0,0.3); cursor:pointer;" title="Haz clic para ampliar QR">
+                        <!-- Código QR de Jugador (Pass Interactivo) -->
+                        <div id="player-qr-container" class="profile-kpi-btn" style="display:flex; align-items:center; gap:12px; background:var(--bg-dark-700); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border-color); box-shadow:0 0 10px rgba(0,0,0,0.3); cursor:pointer;" title="Haz clic para ampliar tu QR de Jugador" role="button" tabindex="0">
                             <div style="text-align:left;">
                                 <span style="font-size:0.75rem; color:var(--text-muted); display:block; font-weight:700;">PASS JUGADOR</span>
                                 <small style="font-size:0.65rem; color:var(--piu-cyan); display:block; margin-top:2px;">Escanea en recepción</small>
@@ -279,31 +286,36 @@ export async function renderClientProfileView(container) {
                             </div>
                         </div>
 
-                        <!-- Estadísticas Rápidas -->
-                        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                        <!-- Estadísticas Rápidas / Botones KPI Interactivos -->
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
                             ${business.loyaltyEnabled ? `
-                                <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                                <div class="profile-kpi-btn" id="btn-kpi-points" role="button" tabindex="0" title="Ver recompensas de lealtad y puntos canjeables" style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center; min-width:105px;">
                                     <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Puntos Lealtad</span>
-                                    <strong style="font-size:1.3rem; color:var(--color-neon-lime);">${bizLoyalty.points || 0} Pts</strong>
+                                    <strong style="font-size:1.3rem; color:var(--color-neon-lime); display:block;">${availablePoints} Pts</strong>
+                                    ${isVisitsMode ? `<small style="font-size:0.65rem; color:var(--text-secondary); display:block; margin-top:1px;">Restantes</small>` : ''}
                                 </div>
                             ` : ''}
-                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                            <div class="profile-kpi-btn" id="btn-kpi-account" role="button" tabindex="0" title="Ver mi estado de cuenta y consumos" style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center; min-width:115px;">
                                 <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Mi Saldo / Cuenta</span>
-                                <strong style="font-size:1.3rem; color:${myAccount.netDebt > 0 ? '#FF5252' : (myAccount.creditBalance > 0 ? 'var(--color-neon-lime)' : '#ffffff')};">
+                                <strong style="font-size:1.3rem; color:${myAccount.netDebt > 0 ? '#FF5252' : (myAccount.creditBalance > 0 ? 'var(--color-neon-lime)' : '#ffffff')}; display:block;">
                                     ${myAccount.netDebt > 0 ? `-${currencySymbol}${myAccount.netDebt.toFixed(2)}` : (myAccount.creditBalance > 0 ? `+${currencySymbol}${myAccount.creditBalance.toFixed(2)}` : `${currencySymbol}0.00`)}
                                 </strong>
+                                <small style="font-size:0.65rem; color:var(--text-secondary); display:block; margin-top:1px;">Mi cuenta</small>
                             </div>
-                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                            <div class="profile-kpi-btn" id="btn-kpi-visits" role="button" tabindex="0" title="Ver visitas acumuladas y nivel" style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center; min-width:90px;">
                                 <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas</span>
-                                <strong style="font-size:1.3rem; color:var(--piu-cyan);">${bizLoyalty.visits || 0}</strong>
+                                <strong style="font-size:1.3rem; color:var(--piu-cyan); display:block;">${totalVisits}</strong>
+                                ${isVisitsMode ? `<small style="font-size:0.65rem; color:var(--text-secondary); display:block; margin-top:1px;">Permanentes</small>` : ''}
                             </div>
-                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center;">
+                            <div class="profile-kpi-btn" id="btn-kpi-hours" role="button" tabindex="0" title="Ver historial de reservaciones" style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-color); text-align:center; min-width:95px;">
                                 <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Horas Jugadas</span>
-                                <strong style="font-size:1.3rem; color:#ffffff;">${totalHours}h</strong>
+                                <strong style="font-size:1.3rem; color:#ffffff; display:block;">${totalHours}h</strong>
+                                <small style="font-size:0.65rem; color:var(--text-secondary); display:block; margin-top:1px;">Reservas</small>
                             </div>
-                            <div style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid rgba(255,0,85,0.3); text-align:center; cursor:pointer;" id="btn-profile-pvp-stat" title="Ver Arena Versus">
+                            <div class="profile-kpi-btn" id="btn-profile-pvp-stat" role="button" tabindex="0" title="Ver Arena Versus" style="background:var(--bg-dark-700); padding:10px 16px; border-radius:var(--radius-sm); border:1px solid rgba(255,0,85,0.3); text-align:center; min-width:105px;">
                                 <span style="font-size:0.75rem; color:var(--color-neon-pink); display:block; font-weight:bold;">⚔️ Récord PVP</span>
-                                <strong style="font-size:1.3rem; color:#ffffff;">${currentUser.versusStats?.wins || 0}V - ${currentUser.versusStats?.losses || 0}D</strong>
+                                <strong style="font-size:1.3rem; color:#ffffff; display:block;">${currentUser.versusStats?.wins || 0}V - ${currentUser.versusStats?.losses || 0}D</strong>
+                                <small style="font-size:0.65rem; color:var(--text-secondary); display:block; margin-top:1px;">Retas</small>
                             </div>
                         </div>
                     </div>
@@ -595,13 +607,23 @@ export async function renderClientProfileView(container) {
                                             ${currentTier.badge} ${currentTier.name}
                                         </span>
                                     </span>
-                                    <span style="font-size:0.82rem; color:var(--text-muted);">${bizLoyalty.visits || 0} Visitas</span>
+                                    <span style="font-size:0.82rem; color:var(--text-muted);">${totalVisits} Visitas Totales</span>
                                 </div>
-                                <div style="font-size:1.7rem; font-weight:bold; color:var(--color-neon-lime);">
-                                    ${activeMode === 'VISITS' 
-                                        ? `${bizLoyalty.visits || 0} <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:normal;">Visitas acumuladas</span>`
-                                        : `${bizLoyalty.points || 0} <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:normal;">Puntos acumulados</span>`
-                                    }
+                                <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-top:8px;">
+                                    <div>
+                                        <small style="color:var(--text-muted); font-size:0.72rem; display:block; text-transform:uppercase; font-weight:700;">Balance Canjeable</small>
+                                        <div style="font-size:1.7rem; font-weight:bold; color:var(--color-neon-lime);">
+                                            ${availablePoints} <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:normal;">${isVisitsMode ? 'Puntos restantes' : 'Puntos acumulados'}</span>
+                                        </div>
+                                    </div>
+                                    ${isVisitsMode ? `
+                                        <div style="text-align:right;">
+                                            <small style="color:var(--text-muted); font-size:0.72rem; display:block; text-transform:uppercase; font-weight:700;">Historial de Asistencia</small>
+                                            <div style="font-size:1.4rem; font-weight:bold; color:var(--piu-cyan);">
+                                                ${totalVisits} <span style="font-size:0.8rem; color:var(--text-secondary); font-weight:normal;">Visitas acumuladas</span>
+                                            </div>
+                                        </div>
+                                    ` : ''}
                                 </div>
                                 ${loyaltyNoticeHtml}
                             </div>
@@ -635,16 +657,14 @@ export async function renderClientProfileView(container) {
                                 ${catalogRewards.length === 0 ? `
                                     <p style="color:var(--text-muted); font-size:0.9rem; text-align:center; padding:20px;">No hay premios disponibles en el catálogo en este momento.</p>
                                 ` : catalogRewards.map(r => {
-                                    const canRedeem = activeMode === 'VISITS' 
-                                        ? (bizLoyalty.visits || 0) >= r.costPoints 
-                                        : (bizLoyalty.points || 0) >= r.costPoints;
+                                    const canRedeem = availablePoints >= r.costPoints;
                                     return `
                                         <div style="background:var(--bg-dark-700); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; gap:10px;">
                                             <div style="text-align:left;">
                                                 <span style="font-size:1.3rem; margin-right:6px;">${r.icon || '🎁'}</span>
                                                 <strong style="color:#fff; font-size:0.95rem;">${r.name}</strong>
                                                 <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${r.description || ''}</div>
-                                                <div style="margin-top:4px;"><span class="badge badge-success" style="font-weight:bold;">${r.costPoints} ${activeMode === 'VISITS' ? 'Visitas' : 'Puntos'}</span></div>
+                                                <div style="margin-top:4px;"><span class="badge badge-success" style="font-weight:bold;">${r.costPoints} ${isVisitsMode ? 'Puntos (Visitas)' : 'Puntos'}</span></div>
                                             </div>
                                             <div>
                                                 <button class="btn btn-primary btn-xs btn-redeem-reward glow-red" data-rew-id="${r.id}" ${canRedeem ? '' : 'disabled'} style="font-size:0.75rem;">
@@ -828,22 +848,42 @@ export async function renderClientProfileView(container) {
         document.getElementById('btn-close-qr-modal').onclick = () => modal.close();
     });
 
-    // Eventos de Pestañas
+    // Eventos de Pestañas y Navegación
     const tabs = container.querySelectorAll('.btn-profile-tab');
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
+    const switchTab = (targetTab) => {
+        const targetBtn = container.querySelector(`.btn-profile-tab[data-tab="${targetTab}"]`);
+        if (targetBtn) {
             tabs.forEach(t => {
                 t.classList.remove('active', 'btn-primary');
                 t.classList.add('btn-outline');
             });
-            tab.classList.add('active', 'btn-primary');
-            tab.classList.remove('btn-outline');
+            targetBtn.classList.add('active', 'btn-primary');
+            targetBtn.classList.remove('btn-outline');
 
-            const targetTab = tab.dataset.tab;
             container.querySelectorAll('.profile-tab-section').forEach(sec => sec.classList.add('hidden'));
             const activeSection = container.querySelector(`#${targetTab}`);
             if (activeSection) activeSection.classList.remove('hidden');
+        }
+    };
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            switchTab(tab.dataset.tab);
         });
+    });
+
+    // Eventos de Botones KPI interactivos del Hero
+    container.querySelector('#btn-kpi-points')?.addEventListener('click', () => {
+        if (business.loyaltyEnabled) switchTab('tab-loyalty-rewards');
+    });
+    container.querySelector('#btn-kpi-visits')?.addEventListener('click', () => {
+        if (business.loyaltyEnabled) switchTab('tab-loyalty-rewards');
+    });
+    container.querySelector('#btn-kpi-account')?.addEventListener('click', () => {
+        switchTab('tab-my-account');
+    });
+    container.querySelector('#btn-kpi-hours')?.addEventListener('click', () => {
+        switchTab('tab-my-bookings');
     });
 
     // Evento para ir a Arena Versus
@@ -1011,7 +1051,8 @@ export async function renderClientProfileView(container) {
             const reward = catalogRewards.find(r => r.id === rewId);
             if (!reward) return;
 
-            if (confirm(`¿Estás seguro de canjear "${reward.name}" por ${reward.costPoints} puntos?\nSe descontará de tu balance de inmediato.`)) {
+            const costLabel = isVisitsMode ? `${reward.costPoints} puntos/visitas` : `${reward.costPoints} puntos`;
+            if (confirm(`¿Estás seguro de canjear "${reward.name}" por ${costLabel}?\nSe descontará de tus puntos canjeables de inmediato (tus visitas acumuladas se conservan permanentes).`)) {
                 try {
                     await loyaltyManager.redeemReward(
                         currentUser.id,

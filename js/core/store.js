@@ -1286,7 +1286,7 @@ class Store {
                         const isVisitsMode = this.currentBusiness.loyaltyMode === 'VISITS';
                         const pts = isVisitsMode ? 1 : Math.floor((resData.totalCost || 0) / (Number(this.currentBusiness.pointsRatio) || 10));
 
-                        const nextPoints = Math.max(0, (bizLoyalty.points || 0) - (isVisitsMode ? 0 : pts));
+                        const nextPoints = Math.max(0, (bizLoyalty.points || 0) - pts);
                         const nextVisits = Math.max(0, (bizLoyalty.visits || 0) - (isVisitsMode ? pts : 1));
                         const valForTier = isVisitsMode ? nextVisits : nextPoints;
                         const nextTier = loyaltyManager.calculateTier(valForTier, this.currentBusiness.loyaltyMode || 'POINTS').name;

@@ -2,11 +2,12 @@
 // Gestor Centralizado de Actualizaciones Forzadas y Control de Versión PWA — Pump It Up Hub (v1.9.0)
 import { toast } from '../components/toast.js';
 
-export const CURRENT_APP_VERSION = '1.9.0';
+export const CURRENT_APP_VERSION = '1.9.1';
 
 class UpdateManager {
     constructor() {
-        this.currentVersion = CURRENT_APP_VERSION;
+        const storedVer = typeof localStorage !== 'undefined' ? localStorage.getItem('piu_current_version') : null;
+        this.currentVersion = (storedVer && this.compareVersions(storedVer, CURRENT_APP_VERSION) > 0) ? storedVer : CURRENT_APP_VERSION;
         this.swRegistration = null;
         this.pendingUpdate = null;
         this.isReloading = false;
@@ -22,23 +23,15 @@ class UpdateManager {
     init() {
         if (typeof window === 'undefined') return;
 
-        // 0. Protección estricta anti-bucle de recargas (Anti-Loop Shield)
-        const now = Date.now();
-        const lastReloadStr = sessionStorage.getItem('piu_last_update_reload');
-        const reloadCount = parseInt(sessionStorage.getItem('piu_update_reload_count') || '0', 10);
-
-        if (lastReloadStr && (now - parseInt(lastReloadStr, 10)) < 15000 && reloadCount >= 1) {
-            console.warn('🛡️ [UpdateManager] Recarga reciente detectada (hace menos de 15s). Desactivando auto-recargas automáticas para cortar bucle.');
-            sessionStorage.removeItem('piu_pending_reload');
-            sessionStorage.setItem('piu_update_reload_count', '0');
-            return;
-        }
-
-        sessionStorage.removeItem('piu_pending_reload');
-
-        // Guardar versión actual en almacenamiento local
+        // Sincronizar versión actual en almacenamiento local si CURRENT_APP_VERSION es mayor
         try {
-            localStorage.setItem('piu_current_version', this.currentVersion);
+            const stored = localStorage.getItem('piu_current_version');
+            if (!stored || this.compareVersions(CURRENT_APP_VERSION, stored) > 0) {
+                localStorage.setItem('piu_current_version', CURRENT_APP_VERSION);
+                this.currentVersion = CURRENT_APP_VERSION;
+            } else {
+                this.currentVersion = stored;
+            }
         } catch (e) {
             console.warn('[UpdateManager] LocalStorage no disponible:', e);
         }
@@ -154,6 +147,11 @@ class UpdateManager {
         }
 
         try {
+            // Protección Anti-Bucle estricta:
+            const lastAppliedVer = sessionStorage.getItem('piu_last_applied_version');
+            const lastReloadTime = parseInt(sessionStorage.getItem('piu_last_update_reload') || '0', 10);
+            const isRecentReload = (Date.now() - lastReloadTime) < 30000;
+
             // 1. Forzar chequeo en el Service Worker si está registrado
             if (this.swRegistration) {
                 try {
@@ -178,6 +176,24 @@ class UpdateManager {
 
             const data = await response.json();
             const serverVersion = data.version;
+
+            // Si el usuario acaba de aplicar esta misma versión hace menos de 30s en esta sesión, CORTAR BUCLE
+            if (!isManual && isRecentReload && lastAppliedVer === serverVersion) {
+                console.log(`🛡️ [UpdateManager] Versión v${serverVersion} recién aplicada. Omitiendo banner anti-bucle.`);
+                return;
+            }
+
+            // Si el usuario descartó voluntariamente esta versión en esta pestaña y no es forzada ni manual
+            if (!isManual && !data.forceUpdate && sessionStorage.getItem('piu_dismissed_version_' + serverVersion)) {
+                return;
+            }
+
+            // Sincronizar si la versión local en localStorage ya es igual o mayor
+            const localStoredVer = localStorage.getItem('piu_current_version');
+            if (localStoredVer && this.compareVersions(localStoredVer, this.currentVersion) > 0) {
+                this.currentVersion = localStoredVer;
+            }
+
             const isNewer = this.compareVersions(serverVersion, this.currentVersion) > 0;
 
             console.log(`[UpdateManager] Versión local: v${this.currentVersion} | Servidor: v${serverVersion}`);
@@ -185,8 +201,8 @@ class UpdateManager {
             if (isNewer) {
                 this.pendingUpdate = data;
                 this.showUpdateBanner(data);
-            } else if (this.swRegistration && this.swRegistration.waiting) {
-                // Hay un SW listo aunque el version.json reporte igual (ej. hotfix de assets)
+            } else if (this.swRegistration && this.swRegistration.waiting && !isRecentReload) {
+                // Solo si hay un SW esperando y NO venimos de una recarga reciente
                 this.showUpdateBanner({
                     version: this.currentVersion + ' (Parche)',
                     releaseNotes: 'Optimizaciones de recursos y mejoras de rendimiento.',
@@ -330,6 +346,9 @@ class UpdateManager {
             clearInterval(this.countdownInterval);
             this.countdownInterval = null;
         }
+        if (this.pendingUpdate?.version) {
+            sessionStorage.setItem('piu_dismissed_version_' + this.pendingUpdate.version, 'true');
+        }
         if (this.bannerEl) {
             this.bannerEl.classList.remove('visible');
             setTimeout(() => {
@@ -357,41 +376,60 @@ class UpdateManager {
         toast.info("🚀 Aplicando actualización y limpiando caché...", 2500);
 
         try {
-            // Registrar recarga en sessionStorage para evitar loops sucesivos
-            const currentCount = parseInt(sessionStorage.getItem('piu_update_reload_count') || '0', 10);
+            const targetVersion = this.pendingUpdate?.version || this.currentVersion;
+            sessionStorage.setItem('piu_last_applied_version', targetVersion);
             sessionStorage.setItem('piu_last_update_reload', Date.now().toString());
-            sessionStorage.setItem('piu_update_reload_count', (currentCount + 1).toString());
+            localStorage.setItem('piu_current_version', targetVersion);
+            this.currentVersion = targetVersion;
 
-            // 1. Enviar mensaje de activación inmediata (SKIP_WAITING) al SW en espera
-            if (this.swRegistration && this.swRegistration.waiting) {
-                this.swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-            }
-
-            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
-            }
-
-            // 2. Limpiar todos los cachés almacenados en CacheStorage
+            // 1. Limpiar todos los cachés almacenados en CacheStorage
             if ('caches' in window) {
                 const keys = await caches.keys();
                 await Promise.all(keys.map(k => caches.delete(k)));
                 console.log('🧹 [UpdateManager] Todas las cachés locales han sido purgadas.');
             }
 
-            if (this.pendingUpdate?.version) {
-                localStorage.setItem('piu_current_version', this.pendingUpdate.version);
+            // 2. Enviar mensaje de activación inmediata (SKIP_WAITING) al SW en espera
+            let waitingWorker = this.swRegistration?.waiting;
+            if (waitingWorker) {
+                waitingWorker.postMessage({ type: 'SKIP_WAITING' });
             }
 
-            // 3. Recarga limpia con bypass de caché agregando parámetro único
-            setTimeout(() => {
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+            }
+
+            // 3. Forzar actualización en registration
+            if (this.swRegistration) {
+                try {
+                    await this.swRegistration.update();
+                    if (this.swRegistration.waiting) {
+                        this.swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                } catch(e) {}
+            }
+
+            // 4. Recargar limpiamente con bypass de caché
+            let reloaded = false;
+            const doReload = () => {
+                if (reloaded) return;
+                reloaded = true;
                 const url = new URL(window.location.href);
                 url.searchParams.set('_v', Date.now().toString());
                 window.location.replace(url.toString());
-            }, 600);
+            };
+
+            if (navigator.serviceWorker) {
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    console.log('⚡ [UpdateManager] controllerchange detectado post-skipWaiting.');
+                    doReload();
+                }, { once: true });
+            }
+
+            setTimeout(doReload, 900);
 
         } catch (err) {
             console.error('[UpdateManager] Error aplicando actualización:', err);
-            // Fallback directo a recarga
             window.location.reload();
         }
     }

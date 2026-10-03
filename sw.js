@@ -1,6 +1,6 @@
 // sw.js
-// Service Worker PWA & Notificaciones — Pump It Up Hub (v1.9.1)
-const CACHE_NAME = 'piu-hub-pwa-v1.9.1';
+// Service Worker PWA & Notificaciones — Pump It Up Hub (v1.9.3)
+const CACHE_NAME = 'piu-hub-pwa-v1.9.3';
 
 const PRECACHE_ASSETS = [
     '/',
@@ -49,6 +49,15 @@ self.addEventListener('activate', (event) => {
             });
         })
     );
+});
+
+// Manejador de mensajes desde los clientes y updateManager (Crucial para activación inmediata)
+self.addEventListener('message', (event) => {
+    if (!event.data) return;
+    if (event.data.type === 'SKIP_WAITING') {
+        console.log('[SW] Mensaje SKIP_WAITING recibido. Forzando skipWaiting()...');
+        self.skipWaiting();
+    }
 });
 
 /**

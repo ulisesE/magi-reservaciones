@@ -2756,3 +2756,21 @@
     }
 }
 
+/* Botones KPI interactivos en el Hero del Perfil del Jugador */
+.profile-kpi-btn {
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+    user-select: none;
+    cursor: pointer;
+}
+
+.profile-kpi-btn:hover {
+    transform: translateY(-2px);
+    border-color: var(--piu-cyan) !important;
+    box-shadow: 0 4px 16px rgba(0, 229, 255, 0.22) !important;
+    background-color: var(--bg-dark-600) !important;
+}
+
+.profile-kpi-btn:active {
+    transform: scale(0.97);
+}
+

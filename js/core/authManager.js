@@ -778,6 +778,17 @@ class AuthManager {
         return true;
     }
 
+    saveSessionLocally(user) {
+        if (!user) return;
+        this.currentUser = sanitizeUserSession(user);
+        try {
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.currentUser));
+        } catch (e) {
+            console.warn("Error guardando sesión local:", e);
+        }
+        this.notify();
+    }
+
     subscribe(listener) {
         this.listeners.push(listener);
         return () => {

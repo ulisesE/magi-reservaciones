@@ -10,7 +10,10 @@ import {
     collection, 
     getDocs, 
     query, 
-    where 
+    where,
+    limit,
+    canMakeFirestoreRead,
+    markQuotaExhausted
 } from '../firebaseConfig.js';
 import { formatDateKey } from '../core/timeUtils.js';
 import { toast } from '../components/toast.js';
@@ -160,6 +163,9 @@ async function loadAndRenderAnalyticsData(container, business) {
                 });
                 cachedReservations = [...allReservations];
             } catch (err) {
+                if (err?.code === 'resource-exhausted') {
+                    markQuotaExhausted();
+                }
                 console.warn("Fallo lectura directa Firestore en Analytics, usando store local:", err);
             }
         }
@@ -1169,7 +1175,10 @@ function setupEventListeners(container, business) {
 
     // Botón de exportación a CSV
     container.querySelector('#btn-export-analytics-csv')?.addEventListener('click', () => {
-        exportAnalyticsToCSV(cachedReservations, business);
+        const reservationsToExport = (cachedReservations && cachedReservations.length > 0)
+            ? cachedReservations
+            : [...(store.reservations || []), ...(store.pendingReservations || [])];
+        exportAnalyticsToCSV(reservationsToExport, business);
     });
 }
 
@@ -1225,14 +1234,16 @@ function exportAnalyticsToCSV(reservations, business) {
         ];
     });
 
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", `Reporte_Rendimiento_y_Comisiones_${business?.id || 'Local'}_${filterStartDate}_al_${filterEndDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
     toast.success("Archivo CSV generado con desglose de comisiones.");
 }

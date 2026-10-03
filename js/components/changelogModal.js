@@ -5,10 +5,79 @@ import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.9.3',
+        date: '3 de Octubre de 2026',
+        badge: '🚀 Versión Actual (Rendimiento & Generación de Reportes)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '📊 Generación y Exportación de Reportes Financieros',
+                icon: '📥',
+                items: [
+                    'Corrección de funciones canMakeFirestoreRead y limit en la vista de analítica de negocio (tenantAnalyticsView).',
+                    'Generación de reportes CSV optimizada mediante Blob y codificación UTF-8 BOM para apertura nativa y sin errores en Excel.',
+                    'Respaldo automático con datos locales en caso de desconexión para garantizar la exportación ininterrumpida.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.9.2',
+        date: '2 de Octubre de 2026',
+        badge: 'Visitas Permanentes & Saldo Canjeable',
+        isCurrent: false,
+        highlights: [
+            {
+                title: '🎟️ Visitas Permanentes vs Saldo Canjeable',
+                icon: '📅',
+                items: [
+                    'En programa de lealtad por visita, las visitas acumuladas permanecen fijas e históricas (mantienen el nivel/tier del jugador).',
+                    'Al canjear recompensas, únicamente se descuentan los puntos/créditos canjeables restantes sin reducir las visitas históricas.',
+                    'Separación clara en perfil entre puntos disponibles para canjear y total de visitas acumuladas.'
+                ]
+            },
+            {
+                title: '🕹️ Botones KPI Interactivos en Perfil de Jugador',
+                icon: '⚡',
+                items: [
+                    'Tarjetas de estadísticas rápidas convertidas en botones táctiles con navegación directa a pestañas correspondientes.',
+                    'PASS JUGADOR con acceso directo al código QR ampliado.',
+                    'Estatus de Lealtad con desglose transparente de saldo canjeable y nivel actual.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.9.1',
+        date: '2 de Octubre de 2026',
+        badge: 'Escudo Anti-Bucle PWA & Lealtad Reactiva',
+        isCurrent: false,
+        highlights: [
+            {
+                title: '🛡️ Escudo Anti-Bucle y Activación Inmediata de Service Worker',
+                icon: '⚡',
+                items: [
+                    'Eliminación del bucle infinito de actualización: sincronización estricta de versiones aplicadas en sesión para evitar repetición de recargas.',
+                    'Integración de listener SKIP_WAITING en el Service Worker: activación instantánea y purga atómica de caché al pulsar Actualizar.',
+                    'Detección inteligente de versiones: compatibilidad total entre caché local y servidor sin bloqueos cíclicos.'
+                ]
+            },
+            {
+                title: '🎁 Lealtad Reactiva y Ajustes Manuales Instantáneos',
+                icon: '⭐',
+                items: [
+                    'Sincronización en tiempo real de puntos y visitas modificados por encargados en el directorio de clientes.',
+                    'Previsualización en vivo del saldo resultante (+/-) al registrar ajustes manuales o visitas rápidas.',
+                    'Supresión de letreros de descuento cuando la sucursal opera bajo la modalidad de niveles distintivos.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.9.0',
         date: '29 de Septiembre de 2026',
-        badge: '🛡️ Versión Actual (Zero-Read, Escudo Anti-Cuota & Despliegue Aislado)',
-        isCurrent: true,
+        badge: 'Zero-Read, Escudo Anti-Cuota & Despliegue Aislado',
+        isCurrent: false,
         highlights: [
             {
                 title: '🛡️ Arquitectura Zero-Read y Escudo Anti-Cuota',
