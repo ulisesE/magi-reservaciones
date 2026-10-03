@@ -18,6 +18,7 @@ import {
 import { tenantManager } from './tenantManager.js';
 import { store } from './store.js';
 import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
+import { authManager } from './authManager.js';
 
 export const TIERS = {
     BRONCE: { name: 'Bronce', minPoints: 0, maxPoints: 99, minVisits: 0, maxVisits: 9, discount: 0.00, color: '#cd7f32', class: 'tier-bronce', badge: '🟫' },
@@ -613,11 +614,17 @@ class LoyaltyManager {
             actualReason = visitsChange || '';
         }
 
+        if (!actualBusinessId) {
+            actualBusinessId = tenantManager.getActiveBusiness()?.id || store.currentBusiness?.id || '';
+        }
+
         if (!actualBusinessId) throw new Error("ID de local no provisto para el ajuste.");
         if (!actualPlayerId) throw new Error("ID de jugador no provisto para el ajuste.");
 
         const ptsChange = Number(actualPointsChange) || 0;
         const vtsChange = Number(actualVisitsChange) || 0;
+
+        let resultingLoyaltyMap = null;
 
         if (isFirebaseAvailable && db) {
             try {
@@ -641,7 +648,7 @@ class LoyaltyManager {
                     const newPts = Math.max(0, curPts + ptsChange);
                     const newVts = Math.max(0, curVts + vtsChange);
                     const valueForTier = bizMode === 'VISITS' ? newVts : newPts;
-                    const newTier = this.calculateTier(valueForTier, bizMode).name;
+                    const newTier = this.calculateTier(valueForTier, bizMode, bizSnap.exists() ? bizSnap.data() : null).name;
 
                     loyaltyMap[actualBusinessId] = {
                         ...bizLoyalty,
@@ -649,6 +656,7 @@ class LoyaltyManager {
                         visits: newVts,
                         tier: newTier
                     };
+                    resultingLoyaltyMap = loyaltyMap;
 
                     transaction.update(playerRef, {
                         loyalty: loyaltyMap
@@ -686,7 +694,7 @@ class LoyaltyManager {
             const bizMode = (biz && biz.loyaltyMode) || 'POINTS';
 
             const valueForTier = bizMode === 'VISITS' ? newVts : newPts;
-            const newTier = this.calculateTier(valueForTier, bizMode).name;
+            const newTier = this.calculateTier(valueForTier, bizMode, biz).name;
 
             loyaltyMap[actualBusinessId] = {
                 ...bizLoyalty,
@@ -694,12 +702,43 @@ class LoyaltyManager {
                 visits: newVts,
                 tier: newTier
             };
+            resultingLoyaltyMap = loyaltyMap;
 
             players[idx].loyalty = loyaltyMap;
             localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
         }
 
-        return true;
+        // Sincronizar SIEMPRE caché local y sesión activa para consistencia inmediata (Zero-Read friendly)
+        if (resultingLoyaltyMap) {
+            try {
+                const players = JSON.parse(localStorage.getItem('piu_registered_players_cache') || '[]');
+                const pIdx = players.findIndex(p => p.id === actualPlayerId);
+                if (pIdx !== -1) {
+                    players[pIdx].loyalty = resultingLoyaltyMap;
+                    localStorage.setItem('piu_registered_players_cache', JSON.stringify(players));
+                }
+
+                if (authManager?.clientUsers) {
+                    const cIdx = authManager.clientUsers.findIndex(c => c.id === actualPlayerId);
+                    if (cIdx !== -1) {
+                        authManager.clientUsers[cIdx].loyalty = resultingLoyaltyMap;
+                    }
+                }
+
+                if (authManager?.currentUser && authManager.currentUser.id === actualPlayerId) {
+                    authManager.currentUser.loyalty = resultingLoyaltyMap;
+                    authManager.saveSessionLocally(authManager.currentUser);
+                }
+            } catch (e) {
+                console.warn("Error sincronizando cache local de lealtad:", e);
+            }
+        }
+
+        return { 
+            success: true, 
+            loyalty: resultingLoyaltyMap, 
+            bizLoyalty: resultingLoyaltyMap ? resultingLoyaltyMap[actualBusinessId] : null 
+        };
     }
 
     async claimOneTimeTierDiscount(businessId, playerId, tierName) {

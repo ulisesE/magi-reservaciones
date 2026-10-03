@@ -226,6 +226,25 @@ class ClientDirectoryManager {
         return index !== -1 ? this.clients[index] : (allIdx !== -1 ? this.allClients[allIdx] : null);
     }
 
+    updateClientLocally(clientId, updatedFields) {
+        const index = this.clients.findIndex(c => c.id === clientId);
+        if (index !== -1) {
+            this.clients[index] = { ...this.clients[index], ...updatedFields };
+        }
+        const allIdx = this.allClients ? this.allClients.findIndex(c => c.id === clientId) : -1;
+        if (allIdx !== -1) {
+            this.allClients[allIdx] = { ...this.allClients[allIdx], ...updatedFields };
+        }
+        this.saveLocally(this.allClients || this.clients);
+
+        if (authManager?.clientUsers) {
+            const authIdx = authManager.clientUsers.findIndex(c => c.id === clientId);
+            if (authIdx !== -1) {
+                authManager.clientUsers[authIdx] = { ...authManager.clientUsers[authIdx], ...updatedFields };
+            }
+        }
+    }
+
     async deleteClient(clientId) {
         this.clients = this.clients.filter(c => c.id !== clientId);
         this.allClients = this.allClients.filter(c => c.id !== clientId);
@@ -288,7 +307,7 @@ export async function renderClientsView(container, queryVal = '') {
         currentClientsPage = 1;
     }
     
-    const business = store.currentBusiness;
+    const business = store.currentBusiness || tenantManager.getActiveBusiness();
     const allClients = await clientDirManager.loadClients(currentClientsSearchQuery);
     const reservations = store.getReservations();
     const isSuperAdmin = authManager.isSuperAdmin();
@@ -726,7 +745,13 @@ export async function renderClientsView(container, queryVal = '') {
 
             if (confirm(`¿Registrar visita para ${client.name}? Esto le sumará 1 visita y 1 punto/crédito de lealtad.`)) {
                 try {
-                    await loyaltyManager.adjustPlayerPoints(business.id, client.id, 1, 1, 'Registro rápido de visita en recepción');
+                    const res = await loyaltyManager.adjustPlayerPoints(business.id, client.id, 1, 1, 'Registro rápido de visita en recepción');
+                    if (res && res.loyalty) {
+                        client.loyalty = res.loyalty;
+                        clientDirManager.updateClientLocally(client.id, { loyalty: res.loyalty });
+                    } else {
+                        await clientDirManager.loadClients(currentClientsSearchQuery, true);
+                    }
                     toast.success(`¡Visita registrada para ${client.name}!`);
                     renderClientsView(container, currentClientsSearchQuery);
                 } catch (e) {
@@ -962,31 +987,53 @@ export function openClientFormModal(client = null, mainContainer = null, onSaved
 }
 
 function openAdjustPointsModal(client, mainContainer) {
-    const activeBusinessId = store.currentBusiness?.id || '';
+    const activeBusiness = store.currentBusiness || tenantManager.getActiveBusiness();
+    const activeBusinessId = activeBusiness?.id || '';
     const bizLoyalty = (client.loyalty && activeBusinessId && client.loyalty[activeBusinessId]) ? client.loyalty[activeBusinessId] : { points: 0, visits: 0, tier: 'Bronce' };
 
     const contentHtml = `
         <form id="form-adjust-loyalty" class="cyber-form">
-            <p style="font-size:0.9rem; color:var(--text-secondary);">Ajustando puntos para <strong>${escapeHTML(client.name)}</strong> (@${escapeHTML(client.username || 'gamertag')})</p>
-            <div style="background:var(--bg-dark-700); padding:10px; border-radius:4px; margin-bottom:12px; font-size:0.85rem;">
-                Puntos actuales: <strong style="color:var(--color-neon-lime);">${bizLoyalty.points || 0} Pts</strong><br>
-                Visitas actuales: <strong style="color:var(--piu-cyan);">${bizLoyalty.visits || 0}</strong>
+            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:12px;">Ajustando puntos para <strong>${escapeHTML(client.name)}</strong> (@${escapeHTML(client.username || 'gamertag')})</p>
+            
+            <div style="background:var(--bg-dark-700); padding:12px; border-radius:6px; margin-bottom:14px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Puntos Actuales</span>
+                    <strong style="color:var(--color-neon-lime); font-size:1.2rem;">${bizLoyalty.points || 0} Pts</strong>
+                </div>
+                <div style="text-align:right;">
+                    <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Visitas Actuales</span>
+                    <strong style="color:var(--piu-cyan); font-size:1.2rem;">${bizLoyalty.visits || 0}</strong>
+                </div>
+            </div>
+
+            <!-- Previsualización en tiempo real del saldo resultante -->
+            <div id="adj-preview-card" style="background:rgba(0, 229, 255, 0.06); border:1px dashed var(--piu-cyan); padding:10px 14px; border-radius:6px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="font-size:0.72rem; color:var(--piu-cyan); display:block; text-transform:uppercase; font-weight:700;">Nuevo Total Puntos</span>
+                    <strong id="preview-new-points" style="color:#ffffff; font-size:1.15rem;">${bizLoyalty.points || 0} Pts</strong>
+                </div>
+                <div style="text-align:right;">
+                    <span style="font-size:0.72rem; color:var(--piu-cyan); display:block; text-transform:uppercase; font-weight:700;">Nuevo Total Visitas</span>
+                    <strong id="preview-new-visits" style="color:#ffffff; font-size:1.15rem;">${bizLoyalty.visits || 0}</strong>
+                </div>
             </div>
             
             <div class="form-row grid-2">
                 <div class="form-group">
                     <label for="adj-points"><span class="neon-arrow">◆</span> Modificar Puntos (+/-)</label>
                     <input type="number" id="adj-points" class="cyber-input" value="0" placeholder="Ej. 20 o -10">
+                    <small style="color:var(--text-muted); font-size:0.72rem; display:block; margin-top:2px;">Usa números positivos o negativos.</small>
                 </div>
                 <div class="form-group">
                     <label for="adj-visits"><span class="neon-arrow">◆</span> Modificar Visitas (+/-)</label>
                     <input type="number" id="adj-visits" class="cyber-input" value="0" placeholder="Ej. 1 o -1">
+                    <small style="color:var(--text-muted); font-size:0.72rem; display:block; margin-top:2px;">Usa números positivos o negativos.</small>
                 </div>
             </div>
             
-            <div class="form-group">
-                <label for="adj-reason"><span class="neon-arrow">◆</span> Motivo del Ajuste</label>
-                <input type="text" id="adj-reason" class="cyber-input" placeholder="Ej. Participación en Torneo, Corrección, etc.">
+            <div class="form-group" style="margin-top:8px;">
+                <label for="adj-reason"><span class="neon-arrow">◆</span> Motivo del Ajuste (Auditoría)</label>
+                <input type="text" id="adj-reason" class="cyber-input" placeholder="Ej. Bonificación torneo, corrección, etc.">
             </div>
         </form>
     `;
@@ -997,32 +1044,68 @@ function openAdjustPointsModal(client, mainContainer) {
     `;
 
     const modalEl = modal.open({
-        title: 'Ajuste Manual de Puntos / Visitas',
+        title: 'Ajuste Manual de Puntos y Visitas',
         icon: '⭐',
         contentHtml,
         footerHtml,
         maxWidth: '460px'
     });
 
+    const inputPts = modalEl.querySelector('#adj-points');
+    const inputVts = modalEl.querySelector('#adj-visits');
+    const prevPts = modalEl.querySelector('#preview-new-points');
+    const prevVts = modalEl.querySelector('#preview-new-visits');
+
+    const updatePreview = () => {
+        const pDelta = parseInt(inputPts.value, 10) || 0;
+        const vDelta = parseInt(inputVts.value, 10) || 0;
+        const finalP = Math.max(0, (bizLoyalty.points || 0) + pDelta);
+        const finalV = Math.max(0, (bizLoyalty.visits || 0) + vDelta);
+        prevPts.textContent = `${finalP} Pts`;
+        prevVts.textContent = `${finalV}`;
+        prevPts.style.color = pDelta !== 0 ? 'var(--color-neon-lime)' : '#ffffff';
+        prevVts.style.color = vDelta !== 0 ? 'var(--color-neon-lime)' : '#ffffff';
+    };
+
+    inputPts.addEventListener('input', updatePreview);
+    inputVts.addEventListener('input', updatePreview);
+
     modalEl.querySelector('#btn-cancel-adj').onclick = () => modal.close();
 
     modalEl.querySelector('#btn-save-adj').onclick = async () => {
-        const ptsChange = parseInt(modalEl.querySelector('#adj-points').value, 10) || 0;
-        const vtsChange = parseInt(modalEl.querySelector('#adj-visits').value, 10) || 0;
-        const reason = modalEl.querySelector('#adj-reason').value.trim();
+        const ptsChange = parseInt(inputPts.value, 10) || 0;
+        const visitsChange = parseInt(inputVts.value, 10) || 0;
+        const reason = modalEl.querySelector('#adj-reason').value.trim() || 'Ajuste manual de encargado';
 
-        if (ptsChange === 0 && vtsChange === 0) {
+        if (ptsChange === 0 && visitsChange === 0) {
             toast.warning("No ingresaste ningún cambio en los puntos ni visitas.");
             return;
         }
 
+        if (!activeBusinessId) {
+            toast.error("No se pudo identificar la sucursal activa para el ajuste.");
+            return;
+        }
+
+        const btnSave = modalEl.querySelector('#btn-save-adj');
+        btnSave.disabled = true;
+        btnSave.textContent = 'Guardando...';
+
         try {
-            await loyaltyManager.adjustPlayerPoints(store.currentBusiness?.id, client.id, ptsChange, vtsChange, reason);
-            toast.success("Puntos/Visitas ajustados correctamente.");
+            const res = await loyaltyManager.adjustPlayerPoints(activeBusinessId, client.id, ptsChange, visitsChange, reason);
+            if (res && res.loyalty) {
+                client.loyalty = res.loyalty;
+                clientDirManager.updateClientLocally(client.id, { loyalty: res.loyalty });
+            } else {
+                await clientDirManager.loadClients(currentClientsSearchQuery, true);
+            }
+            toast.success("Puntos y visitas actualizados correctamente.");
             modal.close();
             renderClientsView(mainContainer, currentClientsSearchQuery);
         } catch (e) {
-            toast.error(e.message);
+            toast.error(e.message || "Error al actualizar puntos.");
+            btnSave.disabled = false;
+            btnSave.textContent = '💾 Guardar Ajuste';
         }
     };
 }

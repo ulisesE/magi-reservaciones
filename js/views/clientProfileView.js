@@ -150,9 +150,10 @@ export async function renderClientProfileView(container) {
     const currencySymbol = business?.currencySymbol || '$';
 
     const valueForTier = activeMode === 'VISITS' ? (bizLoyalty.visits || 0) : (bizLoyalty.points || 0);
-    const currentTier = loyaltyManager.calculateTier(valueForTier, activeMode);
-    const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(valueForTier, activeMode);
+    const currentTier = loyaltyManager.calculateTier(valueForTier, activeMode, business);
+    const { pointsNeeded, nextTierName, progressPercent } = loyaltyManager.getPointsNeededForNextTier(valueForTier, activeMode, business);
     const catalogRewards = business.loyaltyEnabled ? await loyaltyManager.getRewardsCatalog(business.id) : [];
+    const businessTiers = loyaltyManager.getBusinessTiers(business);
     let discountPct = loyaltyManager.getDiscountForTier(currentTier.name, business);
     const discountType = business.loyaltyDiscountType || 'PERMANENT';
     if (discountType === 'NONE') {
@@ -169,7 +170,7 @@ export async function renderClientProfileView(container) {
     let loyaltyNoticeHtml = '';
     if (business.loyaltyEnabled) {
         if (discountType === 'NONE') {
-            loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--text-secondary); margin-top:6px;">🎖️ Los niveles son distintivos (sin descuentos).</div>`;
+            loyaltyNoticeHtml = ''; // En modo distintivo no se muestran letreros ni menciones de descuento
         } else if (discountType === 'ONCE') {
             const currentTierUpper = (currentTier.name || '').toUpperCase();
             const claimed = bizLoyalty.claimedTiers || [];
@@ -183,6 +184,58 @@ export async function renderClientProfileView(container) {
         } else if (discountPct > 0) {
             loyaltyNoticeHtml = `<div style="font-size:0.82rem; color:var(--piu-cyan); font-weight:bold; margin-top:6px;">⚡ ¡Tienes ${discountText} de descuento directo permanente en tus reservas!</div>`;
         }
+    }
+
+    const isVisitsMode = activeMode === 'VISITS';
+    const formatReq = (t) => {
+        if (isVisitsMode) {
+            if (t.maxVisits === Infinity || t.maxVisits === undefined) return `${t.minVisits}+ visitas`;
+            if (t.minVisits >= t.maxVisits) return `${t.minVisits} ${t.minVisits === 1 ? 'visita' : 'visitas'}`;
+            return `${t.minVisits}-${t.maxVisits} visitas`;
+        } else {
+            if (t.maxPoints === Infinity || t.maxPoints === undefined) return `${t.minPoints}+ pts`;
+            if (t.minPoints >= t.maxPoints) return `${t.minPoints} pts`;
+            return `${t.minPoints}-${t.maxPoints} pts`;
+        }
+    };
+
+    let tiersStructureHtml = '';
+    if (discountType === 'NONE') {
+        tiersStructureHtml = `
+            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
+                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles:</h4>
+                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
+                    <li>🟫 <strong>Bronce</strong> (${formatReq(businessTiers.BRONCE)}): Nivel inicial.</li>
+                    <li>⬜ <strong>Plata</strong> (${formatReq(businessTiers.PLATA)}): Nivel distintivo.</li>
+                    <li>🟨 <strong>Oro</strong> (${formatReq(businessTiers.ORO)}): Nivel destacado.</li>
+                    <li>🟦 <strong>Platino</strong> (${formatReq(businessTiers.PLATINO)}): Nivel de élite.</li>
+                </ul>
+            </div>
+        `;
+    } else if (discountType === 'ONCE') {
+        tiersStructureHtml = `
+            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
+                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles y Beneficios:</h4>
+                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
+                    <li>🟫 <strong>Bronce</strong> (${formatReq(businessTiers.BRONCE)}): Sin descuento.</li>
+                    <li>⬜ <strong>Plata</strong> (${formatReq(businessTiers.PLATA)}): <strong>${Math.round(businessTiers.PLATA.discount * 100)}% de descuento</strong> de un solo uso en reserva.</li>
+                    <li>🟨 <strong>Oro</strong> (${formatReq(businessTiers.ORO)}): <strong>${Math.round(businessTiers.ORO.discount * 100)}% de descuento</strong> de un solo uso en reserva.</li>
+                    <li>🟦 <strong>Platino</strong> (${formatReq(businessTiers.PLATINO)}): <strong>${Math.round(businessTiers.PLATINO.discount * 100)}% de descuento</strong> de un solo uso en reserva.</li>
+                </ul>
+            </div>
+        `;
+    } else {
+        tiersStructureHtml = `
+            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
+                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles y Beneficios:</h4>
+                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
+                    <li>🟫 <strong>Bronce</strong> (${formatReq(businessTiers.BRONCE)}): Sin descuento.</li>
+                    <li>⬜ <strong>Plata</strong> (${formatReq(businessTiers.PLATA)}): <strong>${Math.round(businessTiers.PLATA.discount * 100)}% de descuento</strong> automático en reservas.</li>
+                    <li>🟨 <strong>Oro</strong> (${formatReq(businessTiers.ORO)}): <strong>${Math.round(businessTiers.ORO.discount * 100)}% de descuento</strong> automático en reservas.</li>
+                    <li>🟦 <strong>Platino</strong> (${formatReq(businessTiers.PLATINO)}): <strong>${Math.round(businessTiers.PLATINO.discount * 100)}% de descuento</strong> automático en reservas.</li>
+                </ul>
+            </div>
+        `;
     }
 
     container.innerHTML = `
@@ -571,22 +624,7 @@ export async function renderClientProfileView(container) {
                                 </div>
                             `}
 
-                            <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px; margin-top:6px;">
-                                <h4 style="margin:0 0 6px 0; color:#fff; font-size:0.85rem;">Estructura de Niveles y Beneficios:</h4>
-                                <ul style="margin:0; padding-left:16px; display:flex; flex-direction:column; gap:4px; list-style-type:square;">
-                                    ${activeMode === 'VISITS' ? `
-                                        <li>🟫 <strong>Bronce</strong> (0-9 visitas): Sin descuento.</li>
-                                        <li>⬜ <strong>Plata</strong> (10-29 visitas): <strong>5% de descuento</strong> automático en reservas.</li>
-                                        <li>🟨 <strong>Oro</strong> (30-59 visitas): <strong>10% de descuento</strong> automático en reservas.</li>
-                                        <li>🟦 <strong>Platino</strong> (60+ visitas): <strong>15% de descuento</strong> automático en reservas.</li>
-                                    ` : `
-                                        <li>🟫 <strong>Bronce</strong> (0-99 pts): Sin descuento.</li>
-                                        <li>⬜ <strong>Plata</strong> (100-299 pts): <strong>5% de descuento</strong> automático en reservas.</li>
-                                        <li>🟨 <strong>Oro</strong> (300-599 pts): <strong>10% de descuento</strong> automático en reservas.</li>
-                                        <li>🟦 <strong>Platino</strong> (600+ pts): <strong>15% de descuento</strong> automático en reservas.</li>
-                                    `}
-                                </ul>
-                            </div>
+                            ${tiersStructureHtml}
                         </div>
 
                         <!-- Columna Derecha: Canjes -->
