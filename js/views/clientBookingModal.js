@@ -111,13 +111,6 @@ export function openBookingModal({ machineId = null, date = null, startTime = nu
         }
         return format12Hour(timeStr);
     };
-
-    const getSlotLabel = (timeStr) => {
-        if (isOvernight && timeToMinutes(timeStr) < openMinutes) {
-            return `${format12Hour(timeStr)} (Sig. día)`;
-        }
-        return format12Hour(timeStr);
-    };
     // 🛡️ CANDADO FRONTEND: Obtener reservaciones activas del día para esta máquina
     const dayReservations = store.getReservations({ date: defaultDate, machineId: defaultMachineId, excludeRejectedCancelled: true });
 
