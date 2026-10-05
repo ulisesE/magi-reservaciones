@@ -11,24 +11,21 @@ import {
     getDocs, 
     query, 
     where,
+    orderBy,
     limit,
     canMakeFirestoreRead,
     markQuotaExhausted
 } from '../firebaseConfig.js';
 import { formatDateKey } from '../core/timeUtils.js';
 import { toast } from '../components/toast.js';
-import { auditLogger } from '../core/auditLogger.js';
 
-// Estado local de la vista con escudo zero-read contra ráfagas de lectura
+// Estado local de la vista con caché inteligente por rango de fechas (Zero-Read shield)
 let currentPreset = 'THIS_MONTH'; // 'TODAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_30_DAYS', 'ALL', 'CUSTOM'
 let filterStartDate = '';
 let filterEndDate = '';
-let cachedReservations = [];
-let cachedAuditLogs = [];
-let cachedBizId = null;
-let lastAnalyticsFetch = 0;
+const analyticsRangeCache = new Map(); // key: `${bizId}_${filterStartDate}_${filterEndDate}_${currentPreset}` -> { timestamp, data }
 let chartInstances = {};
-const ANALYTICS_CACHE_TTL = 180000; // 3 minutos de caché en memoria
+const ANALYTICS_CACHE_TTL = 180000; // 3 minutos de caché en memoria por rango
 
 export async function renderTenantAnalyticsView(container) {
     const business = store.currentBusiness || tenantManager.getActiveBusiness();
@@ -151,64 +148,97 @@ async function loadAndRenderAnalyticsData(container, business, force = false) {
 
     try {
         const bizId = business?.id;
+        const cacheKey = `${bizId}_${filterStartDate}_${filterEndDate}_${currentPreset}`;
+        const cached = analyticsRangeCache.get(cacheKey);
         const now = Date.now();
-        const isCacheValid = !force && 
-            cachedBizId === bizId && 
-            cachedReservations.length > 0 && 
-            (now - lastAnalyticsFetch < ANALYTICS_CACHE_TTL);
+        const isCacheValid = !force && cached && (now - cached.timestamp < ANALYTICS_CACHE_TTL);
 
-        let allReservations = isCacheValid ? [...cachedReservations] : [];
+        let allReservations = isCacheValid ? [...cached.data] : [];
 
-        // Consultar reservas de Firestore (solo si la caché expiró o se forzó recarga)
+        // Consultar reservas de Firestore enfocadas en el rango de fechas activo
         if (!isCacheValid && isFirebaseAvailable && db && bizId && canMakeFirestoreRead()) {
             try {
-                const q = query(
-                    collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", bizId),
-                    limit(200)
-                );
-                const snap = await getDocs(q);
-                allReservations = [];
-                snap.forEach(d => {
-                    allReservations.push({ id: d.id, ...d.data() });
-                });
-                cachedReservations = [...allReservations];
-                cachedBizId = bizId;
-                lastAnalyticsFetch = now;
+                let q;
+                if (currentPreset === 'ALL') {
+                    q = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId),
+                        limit(300)
+                    );
+                } else if (filterStartDate === filterEndDate) {
+                    q = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId),
+                        where("date", "==", filterStartDate)
+                    );
+                } else {
+                    // Consulta con filtro compuesto de fechas en Firestore
+                    q = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId),
+                        where("date", ">=", filterStartDate),
+                        where("date", "<=", filterEndDate)
+                    );
+                }
+
+                try {
+                    const snap = await getDocs(q);
+                    allReservations = [];
+                    snap.forEach(d => {
+                        allReservations.push({ id: d.id, ...d.data() });
+                    });
+                } catch (errRange) {
+                    console.warn("Fallo consulta con rango de fechas en Firestore, usando fallback por businessId:", errRange);
+                    const fallbackQ = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId),
+                        limit(300)
+                    );
+                    const fallbackSnap = await getDocs(fallbackQ);
+                    allReservations = [];
+                    fallbackSnap.forEach(d => {
+                        allReservations.push({ id: d.id, ...d.data() });
+                    });
+                }
             } catch (err) {
                 if (err?.code === 'resource-exhausted') {
                     markQuotaExhausted();
                 }
-                console.warn("Fallo lectura directa Firestore en Analytics, usando store local:", err);
+                console.warn("Fallo lectura directa Firestore en Analytics, usando fallback local:", err);
             }
         }
 
-        // Fallback a reservas locales si Firestore no devolvió datos
-        if (allReservations.length === 0) {
-            allReservations = [...store.reservations, ...store.pendingReservations];
+        // Fusionar con reservaciones locales en memoria y localStorage (para que reservas recién hechas aparezcan)
+        const localSources = [
+            ...(store.reservations || []),
+            ...(store.pendingReservations || [])
+        ];
+        try {
             const localData = localStorage.getItem(`piu_reservations_${bizId}`);
             if (localData) {
-                try {
-                    const parsed = JSON.parse(localData);
-                    parsed.forEach(p => {
-                        if (!allReservations.some(item => item.id === p.id)) {
-                            allReservations.push(p);
-                        }
-                    });
-                } catch(e) {}
+                localSources.push(...JSON.parse(localData));
             }
-            if (cachedReservations.length === 0) {
-                cachedReservations = [...allReservations];
-                cachedBizId = bizId;
-                lastAnalyticsFetch = now;
-            }
-        }
+        } catch (e) {}
 
-        // Filtrar por rango de fechas en memoria (Zero-Read)
+        localSources.forEach(p => {
+            if (!p || !p.id) return;
+            if (p.businessId && p.businessId !== bizId) return;
+            if (!allReservations.some(item => item.id === p.id)) {
+                allReservations.push(p);
+            }
+        });
+
+        // Filtrar por rango de fechas
         const filteredReservations = allReservations.filter(r => {
             if (currentPreset === 'ALL') return true;
             if (!r.date) return false;
             return r.date >= filterStartDate && r.date <= filterEndDate;
+        });
+
+        // Guardar en la caché por rango para lecturas zero-read
+        analyticsRangeCache.set(cacheKey, {
+            timestamp: Date.now(),
+            data: allReservations
         });
 
         // Obtener catálogo de máquinas del local
@@ -223,22 +253,11 @@ async function loadAndRenderAnalyticsData(container, business, force = false) {
             }
         }
 
-        // Obtener logs de auditoría inmutables del local (usando caché de memoria)
-        let auditLogs = (isCacheValid && cachedAuditLogs.length > 0 && !force) ? cachedAuditLogs : [];
-        if (auditLogs.length === 0 || force) {
-            try {
-                auditLogs = await auditLogger.getLogs(bizId, { maxResults: 50 }, force);
-                cachedAuditLogs = auditLogs;
-            } catch (e) {
-                console.warn("No se pudieron cargar logs de auditoría:", e);
-            }
-        }
-
         // Calcular Estadísticas y Métricas
         const stats = calculateAnalyticsMetrics(filteredReservations, machines, business, filterStartDate, filterEndDate, allPlayers, allReservations);
 
-        // Renderizar el contenido completo
-        renderAnalyticsDashboard(dynamicContent, stats, business, filteredReservations, auditLogs);
+        // Renderizar el contenido completo (sin tabla de auditoría pesada)
+        renderAnalyticsDashboard(dynamicContent, stats, business, filteredReservations);
 
     } catch (error) {
         console.error("Error cargando analítica:", error);
@@ -471,7 +490,7 @@ function calculateAnalyticsMetrics(reservations, machines, business, startStr, e
     };
 }
 
-function renderAnalyticsDashboard(container, stats, business, filteredReservations, auditLogs = []) {
+function renderAnalyticsDashboard(container, stats, business, filteredReservations) {
     const currency = business?.currencySymbol || '$';
     const currencyCode = business?.currency || 'MXN';
 
@@ -850,80 +869,6 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                 </table>
             </div>
         </div>
-
-        <!-- TABLA DE AUDITORÍA Y TRAZABILIDAD INMUTABLE (piu_audit_logs) -->
-        <div class="analytics-table-card" style="margin-top:20px; border-left:4px solid var(--color-neon-cyan);">
-            <div class="chart-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                <h3 class="chart-title" style="display:flex; align-items:center; gap:8px;">
-                    <span>🛡️ Auditoría y Trazabilidad Financiera Inmutable</span>
-                    <span class="badge badge-outline" style="font-size:0.75rem; font-family:var(--font-mono); color:var(--color-neon-lime); font-weight:700;">🔒 Inmutable</span>
-                </h3>
-                <small style="color:#cbd5e1; font-size:0.82rem; font-weight:600;">${auditLogs.length} eventos registrados</small>
-            </div>
-            <div style="overflow-x:auto; max-height:420px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-sm);">
-                <table class="cyber-analytics-table">
-                    <thead>
-                        <tr>
-                            <th>Fecha y Hora</th>
-                            <th>Responsable</th>
-                            <th>Acción</th>
-                            <th>Detalle / Concepto</th>
-                            <th style="text-align:right;">Importe</th>
-                            <th style="text-align:center;">Seguridad</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${auditLogs.length > 0 ? auditLogs.map(l => {
-                            const dateObj = new Date(l.createdAt);
-                            const formattedDate = dateObj.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
-                            const formattedTime = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-                            
-                            let actionBadge = `<span class="badge badge-dark" style="font-size:0.78rem; font-weight:700;">${l.action}</span>`;
-                            if (l.action === 'SALE_RECORDED') {
-                                actionBadge = `<span class="badge badge-primary" style="font-size:0.78rem; font-weight:700;">🛒 VENTA</span>`;
-                            } else if (l.action === 'PAYMENT_RECORDED' || l.action === 'DEBT_LIQUIDATED') {
-                                actionBadge = `<span class="badge badge-success" style="font-size:0.78rem; font-weight:700;">💵 ABONO</span>`;
-                            } else if (l.action === 'TRANSACTION_VOIDED') {
-                                actionBadge = `<span class="badge badge-danger" style="font-size:0.78rem; font-weight:700;">🚫 ANULACIÓN</span>`;
-                            } else if (l.action.includes('PRODUCT') || l.action.includes('PRICE')) {
-                                actionBadge = `<span class="badge badge-warning" style="font-size:0.78rem; font-weight:700;">🏷️ CATÁLOGO</span>`;
-                            } else if (l.action.includes('STAFF')) {
-                                actionBadge = `<span class="badge badge-info" style="font-size:0.78rem; font-weight:700;">👤 STAFF</span>`;
-                            }
-
-                            return `
-                                <tr>
-                                    <td style="font-family:var(--font-mono); font-size:0.84rem;">
-                                        <strong style="color:#ffffff;">${formattedDate}</strong>
-                                        <small style="display:block; color:#cbd5e1;">${formattedTime}</small>
-                                    </td>
-                                    <td>
-                                        <strong style="color:#ffffff; font-size:0.92rem;">${l.actor?.name || 'Sistema'}</strong>
-                                        <small style="display:block; color:var(--color-neon-cyan); font-size:0.78rem; font-weight:700;">${l.actor?.role || 'STAFF'}</small>
-                                    </td>
-                                    <td>${actionBadge}</td>
-                                    <td style="font-size:0.88rem; color:#f1f5f9; max-width:320px; line-height:1.4;">${l.details || 'Operación registrada'}</td>
-                                    <td style="text-align:right; font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:${l.financialData?.amount ? 'var(--color-neon-lime)' : '#94a3b8'};">
-                                        ${l.financialData?.amount ? `${currency}${Number(l.financialData.amount).toFixed(2)}` : '-'}
-                                    </td>
-                                    <td style="text-align:center;">
-                                        <span class="badge badge-outline" style="font-size:0.72rem; color:var(--color-neon-lime); font-weight:700;" title="Registro criptográficamente inmutable">
-                                            🔒 Inmutable
-                                        </span>
-                                    </td>
-                                </tr>
-                            `;
-                        }).join('') : `
-                            <tr>
-                                <td colspan="6" style="text-align:center; color:#94a3b8; padding:32px; font-size:0.92rem;">
-                                    Sin registros de auditoría recientes en esta sucursal.
-                                </td>
-                            </tr>
-                        `}
-                    </tbody>
-                </table>
-            </div>
-        </div>
     `;
 
     // Renderizar Gráficas con Chart.js
@@ -1205,10 +1150,8 @@ function setupEventListeners(container, business) {
     container.querySelector('#btn-refresh-analytics')?.addEventListener('click', async () => {
         const btn = container.querySelector('#btn-refresh-analytics');
         if (btn) btn.disabled = true;
-        toast.info("Actualizando datos desde Firestore...");
-        lastAnalyticsFetch = 0;
-        cachedReservations = [];
-        cachedAuditLogs = [];
+        toast.info("Actualizando métricas desde Firestore...");
+        analyticsRangeCache.clear();
         await loadAndRenderAnalyticsData(container, business, true);
         toast.success("Métricas actualizadas.");
         if (btn) btn.disabled = false;
@@ -1216,8 +1159,10 @@ function setupEventListeners(container, business) {
 
     // Botón de exportación a CSV
     container.querySelector('#btn-export-analytics-csv')?.addEventListener('click', () => {
-        const reservationsToExport = (cachedReservations && cachedReservations.length > 0)
-            ? cachedReservations
+        const cacheKey = `${business?.id}_${filterStartDate}_${filterEndDate}_${currentPreset}`;
+        const cached = analyticsRangeCache.get(cacheKey);
+        const reservationsToExport = (cached?.data && cached.data.length > 0)
+            ? cached.data
             : [...(store.reservations || []), ...(store.pendingReservations || [])];
         exportAnalyticsToCSV(reservationsToExport, business);
     });

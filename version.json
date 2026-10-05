@@ -1,7 +1,7 @@
 {
-  "version": "1.9.6",
-  "buildTime": 1790938000000,
+  "version": "1.9.7",
+  "buildTime": 1790939000000,
   "releaseDate": "2026-10-05",
-  "releaseNotes": "Optimización crítica de lecturas en Firestore (escudo anti-ráfagas en aprobación de reservas y auditoría) y alta legibilidad con encabezados fijos en analítica v1.9.6",
+  "releaseNotes": "Carga real y precisa de reservaciones por rango de fechas en Firestore, eliminación de auditoría en vista de analítica para cero lecturas innecesarias v1.9.7",
   "forceUpdate": false
 }

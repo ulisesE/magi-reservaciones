@@ -5,10 +5,35 @@ import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.9.7',
+        date: '5 de Octubre de 2026',
+        badge: '🚀 Versión Actual (Carga Precisa por Rango de Fechas & Cero Lecturas Innecesarias)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '📅 Consulta Directa por Rango de Fechas en Analítica',
+                icon: '🎯',
+                items: [
+                    'Las consultas a Firestore ahora filtran exactamente por el periodo seleccionado (ej. Este Mes: 1 al 31 de Octubre) usando el índice compuesto nativo.',
+                    'Solucionado el problema donde locales con muchas reservas (como X-Games) no mostraban las reservas del mes actual.',
+                    'Caché inteligente por rango (analyticsRangeCache) que almacena en memoria cada intervalo consultado evitando lecturas duplicadas.'
+                ]
+            },
+            {
+                title: '⚡ Eliminación de Auditoría en la Vista de Reportes',
+                icon: '🛡️',
+                items: [
+                    'Removida la tabla de Auditoría y Trazabilidad Financiera Inmutable de la vista de analítica, ahorrando 50 lecturas de piu_audit_logs por carga.',
+                    'Mayor velocidad de renderizado y enfoque 100% en las métricas de juego, ocupación de máquinas e ingresos del local.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.9.6',
         date: '5 de Octubre de 2026',
-        badge: '🚀 Versión Actual (Escudo Anti-Ráfagas Firestore & Alta Legibilidad)',
-        isCurrent: true,
+        badge: 'Escudo Anti-Ráfagas Firestore & Alta Legibilidad',
+        isCurrent: false,
         highlights: [
             {
                 title: '⚡ Escudo de Lecturas y Optimización Firestore',
