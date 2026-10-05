@@ -1,7 +1,7 @@
 {
-  "version": "1.9.4",
-  "buildTime": 1790936000000,
+  "version": "1.9.5",
+  "buildTime": 1790937000000,
   "releaseDate": "2026-10-05",
-  "releaseNotes": "Corrección de sintaxis en modal de reservaciones (getSlotLabel) y purga de caché PWA v1.9.4",
+  "releaseNotes": "Corrección de sintaxis en perfil de cliente (isVisitsMode) y unificación de fecha en cuentas v1.9.5",
   "forceUpdate": false
 }

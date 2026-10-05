@@ -5,10 +5,27 @@ import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.9.5',
+        date: '5 de Octubre de 2026',
+        badge: '🚀 Versión Actual (Estabilidad Perfil & Limpieza de Ámbitos)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '👤 Estabilidad en Perfil de Jugador y Cuentas',
+                icon: '🛠️',
+                items: [
+                    'Eliminada redeclaración de isVisitsMode en la vista de perfil de cliente.',
+                    'Optimización de variable temporal de fecha en el gestor de estados de cuenta.',
+                    'Actualización a v1.9.5 con purga de caché automática para clientes activos.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.9.4',
         date: '5 de Octubre de 2026',
-        badge: '🚀 Versión Actual (Estabilidad en Reservas & PWA)',
-        isCurrent: true,
+        badge: 'Estabilidad en Reservas & PWA',
+        isCurrent: false,
         highlights: [
             {
                 title: '🎟️ Estabilidad del Modal de Reservaciones',

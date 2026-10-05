@@ -193,7 +193,6 @@ export async function renderClientProfileView(container) {
         }
     }
 
-    const isVisitsMode = activeMode === 'VISITS';
     const formatReq = (t) => {
         if (isVisitsMode) {
             if (t.maxVisits === Infinity || t.maxVisits === undefined) return `${t.minVisits}+ visitas`;

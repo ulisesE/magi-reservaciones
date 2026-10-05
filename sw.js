@@ -1,6 +1,6 @@
 // sw.js
-// Service Worker PWA & Notificaciones — Pump It Up Hub (v1.9.4)
-const CACHE_NAME = 'piu-hub-pwa-v1.9.4';
+// Service Worker PWA & Notificaciones — Pump It Up Hub (v1.9.5)
+const CACHE_NAME = 'piu-hub-pwa-v1.9.5';
 
 const PRECACHE_ASSETS = [
     '/',

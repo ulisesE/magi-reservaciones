@@ -1093,15 +1093,14 @@ class AccountManager {
             list = list.filter(t => t.status === 'CANCELLED' || t.status === 'VOIDED');
         }
 
+        const now = new Date();
         if (dateFilter === 'TODAY') {
-            const todayStr = new Date().toISOString().slice(0, 10);
+            const todayStr = now.toISOString().slice(0, 10);
             list = list.filter(t => (t.createdAt || '').slice(0, 10) === todayStr);
         } else if (dateFilter === 'WEEK') {
-            const now = new Date();
             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
             list = list.filter(t => new Date(t.createdAt) >= weekAgo);
         } else if (dateFilter === 'MONTH') {
-            const now = new Date();
             const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
             list = list.filter(t => new Date(t.createdAt) >= monthAgo);
         }
