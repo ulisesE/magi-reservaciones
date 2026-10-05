@@ -2,7 +2,7 @@
 // Gestor Centralizado de Actualizaciones Forzadas y Control de Versión PWA — Pump It Up Hub (v1.9.0)
 import { toast } from '../components/toast.js';
 
-export const CURRENT_APP_VERSION = '1.9.1';
+export const CURRENT_APP_VERSION = '1.9.4';
 
 class UpdateManager {
     constructor() {

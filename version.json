@@ -1,7 +1,7 @@
 {
-  "version": "1.9.3",
-  "buildTime": 1790935000000,
-  "releaseDate": "2026-10-03",
-  "releaseNotes": "Corrección en módulo de Rendimiento y Reportes: importación de funciones canMakeFirestoreRead y limit, y descarga atómica de reportes CSV v1.9.3",
+  "version": "1.9.4",
+  "buildTime": 1790936000000,
+  "releaseDate": "2026-10-05",
+  "releaseNotes": "Corrección de sintaxis en modal de reservaciones (getSlotLabel) y purga de caché PWA v1.9.4",
   "forceUpdate": false
 }

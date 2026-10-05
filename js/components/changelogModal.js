@@ -5,10 +5,27 @@ import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.9.4',
+        date: '5 de Octubre de 2026',
+        badge: '🚀 Versión Actual (Estabilidad en Reservas & PWA)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🎟️ Estabilidad del Modal de Reservaciones',
+                icon: '🛠️',
+                items: [
+                    'Eliminada declaración duplicada de identificador getSlotLabel en el módulo de reservas para evitar SyntaxError.',
+                    'Garantizada la apertura inmediata del modal de agendado desde cualquier celda horaria del calendario diario.',
+                    'Actualización y purga de caché del Service Worker v1.9.4 para refresco automático sin bloqueos.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.9.3',
         date: '3 de Octubre de 2026',
-        badge: '🚀 Versión Actual (Rendimiento & Generación de Reportes)',
-        isCurrent: true,
+        badge: 'Rendimiento & Generación de Reportes',
+        isCurrent: false,
         highlights: [
             {
                 title: '📊 Generación y Exportación de Reportes Financieros',
