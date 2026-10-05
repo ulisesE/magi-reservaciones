@@ -600,68 +600,100 @@ class Store {
         }, (error) => console.warn('Error de sincronización de reservas por rango:', error));
     }
 
-    async loadReservationsForTray() {
+    async loadReservationsForTray(force = false) {
         if (!this.currentBusiness) return [];
         const bizId = this.currentBusiness.id;
-        
-        let loaded = [];
-        if (isFirebaseAvailable && db) {
-            try {
-                // Cargar hasta 250 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
-                const q = query(
-                    collection(db, COLLECTIONS.RESERVATIONS),
-                    where("businessId", "==", bizId),
-                    limit(250)
-                );
-                const snap = await getDocs(q);
-                snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
-            } catch (err) {
-                console.warn("Error cargando bandeja de reservas de Firestore, usando local:", err);
-            }
+
+        // 1. Deduplicar promesas concurrentes
+        if (this._trayLoadPromise && this._trayLoadBizId === bizId) {
+            return this._trayLoadPromise;
         }
 
-        // Fusionar con reservaciones en memoria local
-        if (this.reservations && this.reservations.length > 0) {
-            this.reservations.forEach(r => {
-                if (r.businessId === bizId && !loaded.some(item => item.id === r.id)) {
-                    loaded.push(r);
-                }
-            });
+        // 2. Caché en memoria con TTL de 90 segundos
+        const now = Date.now();
+        if (!force && this._trayCache && this._trayCache.bizId === bizId && (now - this._trayCache.timestamp < 90000)) {
+            const list = [...this._trayCache.data];
+            this._mergeRealtimeIntoTray(list, bizId);
+            return list;
         }
-        
-        // Fusionar con caché de LocalStorage
-        try {
-            const localData = localStorage.getItem(`piu_reservations_${bizId}`);
-            if (localData) {
-                const parsed = JSON.parse(localData);
-                parsed.forEach(r => {
-                    if (!loaded.some(item => item.id === r.id)) {
+
+        this._trayLoadBizId = bizId;
+        this._trayLoadPromise = (async () => {
+            let loaded = [];
+            if (isFirebaseAvailable && db && canMakeFirestoreRead()) {
+                try {
+                    // Cargar hasta 250 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
+                    const q = query(
+                        collection(db, COLLECTIONS.RESERVATIONS),
+                        where("businessId", "==", bizId),
+                        limit(250)
+                    );
+                    const snap = await getDocs(q);
+                    snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                } catch (err) {
+                    if (err?.code === 'resource-exhausted') markQuotaExhausted();
+                    console.warn("Error cargando bandeja de reservas de Firestore, usando local:", err);
+                }
+            }
+
+            // Fusionar con reservaciones en memoria local
+            if (this.reservations && this.reservations.length > 0) {
+                this.reservations.forEach(r => {
+                    if (r.businessId === bizId && !loaded.some(item => item.id === r.id)) {
                         loaded.push(r);
                     }
                 });
             }
-        } catch (e) {
-            console.warn("Error fusionando localStorage en bandeja:", e);
-        }
+            
+            // Fusionar con caché de LocalStorage
+            try {
+                const localData = localStorage.getItem(`piu_reservations_${bizId}`);
+                if (localData) {
+                    const parsed = JSON.parse(localData);
+                    parsed.forEach(r => {
+                        if (!loaded.some(item => item.id === r.id)) {
+                            loaded.push(r);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn("Error fusionando localStorage en bandeja:", e);
+            }
 
-        // Asegurar que las pendientes del listener en tiempo real estén incluidas
+            this._mergeRealtimeIntoTray(loaded, bizId);
+            loaded.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+            
+            // Guardar en caché con marca de tiempo
+            this._trayCache = {
+                bizId,
+                timestamp: Date.now(),
+                data: [...loaded]
+            };
+
+            // Sincronizar memoria del store y caché local con todas las reservaciones cargadas del local
+            this.reservations = loaded;
+            this.saveLocalReservations(bizId, loaded);
+            return loaded;
+        })().finally(() => {
+            this._trayLoadPromise = null;
+        });
+
+        return this._trayLoadPromise;
+    }
+
+    _mergeRealtimeIntoTray(list, bizId) {
         if (this.pendingReservations && this.pendingReservations.length > 0) {
             this.pendingReservations.forEach(p => {
-                const existingIdx = loaded.findIndex(item => item.id === p.id);
-                if (existingIdx !== -1) {
-                    loaded[existingIdx] = p;
-                } else {
-                    loaded.push(p);
+                if (p.businessId === bizId) {
+                    const existingIdx = list.findIndex(item => item.id === p.id);
+                    if (existingIdx !== -1) {
+                        list[existingIdx] = p;
+                    } else {
+                        list.push(p);
+                    }
                 }
             });
         }
-
-        loaded.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
-        
-        // Sincronizar memoria del store y caché local con todas las reservaciones cargadas del local
-        this.reservations = loaded;
-        this.saveLocalReservations(bizId, loaded);
-        return loaded;
     }
 
     async syncMachinesToFirebase(machines) {
@@ -1475,6 +1507,13 @@ class Store {
         } else if (res.date === this.selectedDate) {
             this.reservations.push(res);
         }
+        if (this.pendingReservations) {
+            this.pendingReservations = this.pendingReservations.filter(p => p.id !== reservationId);
+        }
+        if (this._trayCache?.data) {
+            const trayItem = this._trayCache.data.find(r => r.id === reservationId);
+            if (trayItem) Object.assign(trayItem, res);
+        }
         if (this.currentBusiness?.id) {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
         }
@@ -1543,6 +1582,17 @@ class Store {
             inMemory.status = 'REJECTED';
             inMemory.rejectionReason = res.rejectionReason;
             inMemory.updatedAt = nowIso;
+        }
+        if (this.pendingReservations) {
+            this.pendingReservations = this.pendingReservations.filter(p => p.id !== reservationId);
+        }
+        if (this._trayCache?.data) {
+            const trayItem = this._trayCache.data.find(r => r.id === reservationId);
+            if (trayItem) {
+                trayItem.status = 'REJECTED';
+                trayItem.rejectionReason = res.rejectionReason;
+                trayItem.updatedAt = nowIso;
+            }
         }
         if (this.currentBusiness?.id) {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);
@@ -1875,6 +1925,9 @@ class Store {
         this.reservations = this.reservations.filter(r => r.id !== reservationId);
         if (this.pendingReservations) {
             this.pendingReservations = this.pendingReservations.filter(r => r.id !== reservationId);
+        }
+        if (this._trayCache?.data) {
+            this._trayCache.data = this._trayCache.data.filter(r => r.id !== reservationId);
         }
         if (this.currentBusiness?.id) {
             this.saveLocalReservations(this.currentBusiness.id, this.reservations);

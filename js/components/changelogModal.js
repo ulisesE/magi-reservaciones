@@ -5,10 +5,37 @@ import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.9.6',
+        date: '5 de Octubre de 2026',
+        badge: '🚀 Versión Actual (Escudo Anti-Ráfagas Firestore & Alta Legibilidad)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '⚡ Escudo de Lecturas y Optimización Firestore',
+                icon: '🛡️',
+                items: [
+                    'Implementado debounce de 60ms en renderizado reactivo para evitar ejecuciones concurrentes de getDocs en ráfagas de snapshots.',
+                    'Caché en memoria con deduplicación de promesas en loadReservationsForTray y auditLogger.getLogs.',
+                    'Eliminadas relecturas masivas al aceptar, rechazar o eliminar solicitudes de reservación.',
+                    'Transición zero-read instantánea al cambiar filtros por periodo en el módulo de analítica.'
+                ]
+            },
+            {
+                title: '📈 Alta Legibilidad y Encabezados Fijos en Analítica',
+                icon: '👁️',
+                items: [
+                    'Encabezados de tabla pegajosos (sticky) que permanecen visibles durante el desplazamiento vertical.',
+                    'Aumento de tamaño tipográfico y contraste mejorado con paleta slate (#f8fafc / #cbd5e1) en tablas y tarjetas financieras.',
+                    'Cálculo y desglose nítido en tarjetas de comisiones y auditoría de reservaciones.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.9.5',
         date: '5 de Octubre de 2026',
-        badge: '🚀 Versión Actual (Estabilidad Perfil & Limpieza de Ámbitos)',
-        isCurrent: true,
+        badge: 'Estabilidad Perfil & Limpieza de Ámbitos',
+        isCurrent: false,
         highlights: [
             {
                 title: '👤 Estabilidad en Perfil de Jugador y Cuentas',

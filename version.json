@@ -1,7 +1,7 @@
 {
-  "version": "1.9.5",
-  "buildTime": 1790937000000,
+  "version": "1.9.6",
+  "buildTime": 1790938000000,
   "releaseDate": "2026-10-05",
-  "releaseNotes": "Corrección de sintaxis en perfil de cliente (isVisitsMode) y unificación de fecha en cuentas v1.9.5",
+  "releaseNotes": "Optimización crítica de lecturas en Firestore (escudo anti-ráfagas en aprobación de reservas y auditoría) y alta legibilidad con encabezados fijos en analítica v1.9.6",
   "forceUpdate": false
 }

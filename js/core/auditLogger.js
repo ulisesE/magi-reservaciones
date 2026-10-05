@@ -59,6 +59,11 @@ export const AUDIT_ACTIONS = {
 };
 
 class AuditLogger {
+    constructor() {
+        this._logsCache = new Map(); // bizId -> { timestamp: number, data: Array }
+        this._pendingFetch = new Map(); // bizId -> Promise
+    }
+
     /**
      * Construye un objeto de log estandarizado e inmutable.
      * La identidad del actor se ancla criptográficamente a Firebase Auth (auth.currentUser.uid).
@@ -148,6 +153,13 @@ class AuditLogger {
             cachedLogs.unshift(logPayload);
             if (cachedLogs.length > 200) cachedLogs.length = 200; // Limitar tamaño de caché visual
             localStorage.setItem(localKey, JSON.stringify(cachedLogs));
+            
+            // Actualizar caché en memoria directa para lecturas zero-read
+            if (this._logsCache.has(logPayload.businessId)) {
+                const mem = this._logsCache.get(logPayload.businessId);
+                mem.data.unshift(logPayload);
+                if (mem.data.length > 200) mem.data.length = 200;
+            }
         } catch (e) {
             console.warn("Advertencia actualizando caché visual de auditoría:", e);
         }
@@ -169,57 +181,91 @@ class AuditLogger {
     }
 
     /**
-     * Obtiene los logs de auditoría para una sucursal con filtros.
+     * Obtiene los logs de auditoría para una sucursal con filtros y protección de caché.
      */
-    async getLogs(businessId, { action = null, staffId = null, maxResults = 100 } = {}) {
+    async getLogs(businessId, { action = null, staffId = null, maxResults = 100 } = {}, force = false) {
         if (!businessId) return [];
-        let list = [];
 
-        if (isFirebaseAvailable && db) {
-            try {
-                const q = query(
-                    collection(db, COLLECTIONS.AUDIT_LOGS),
-                    where("businessId", "==", businessId),
-                    orderBy("createdAt", "desc"),
-                    firestoreLimit(maxResults)
-                );
-                const snap = await getDocs(q);
-                snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-            } catch (err) {
-                // Si falla por índice o red, intentar consulta simple
+        const now = Date.now();
+        const cached = this._logsCache.get(businessId);
+
+        // Si tenemos caché en memoria fresco (menos de 2 minutos) y no se fuerza recarga, reutilizar
+        if (!force && cached && (now - cached.timestamp < 120000) && cached.data.length > 0) {
+            let list = [...cached.data];
+            if (action && action !== 'ALL') {
+                list = list.filter(l => l.action === action);
+            }
+            if (staffId && staffId !== 'ALL') {
+                list = list.filter(l => l.actor?.id === staffId);
+            }
+            return list.slice(0, maxResults);
+        }
+
+        // Deduplicar llamadas en vuelo concurrentes
+        if (this._pendingFetch.has(businessId)) {
+            const rawList = await this._pendingFetch.get(businessId);
+            let list = [...rawList];
+            if (action && action !== 'ALL') list = list.filter(l => l.action === action);
+            if (staffId && staffId !== 'ALL') list = list.filter(l => l.actor?.id === staffId);
+            return list.slice(0, maxResults);
+        }
+
+        const fetchPromise = (async () => {
+            let list = [];
+            if (isFirebaseAvailable && db) {
                 try {
-                    const fallbackQ = query(
+                    const q = query(
                         collection(db, COLLECTIONS.AUDIT_LOGS),
                         where("businessId", "==", businessId),
+                        orderBy("createdAt", "desc"),
                         firestoreLimit(maxResults)
                     );
-                    const snap = await getDocs(fallbackQ);
+                    const snap = await getDocs(q);
                     snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-                    list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                } catch (fallbackErr) {
-                    handleAppError(fallbackErr, { context: "Error consultando logs de auditoría", showToast: false });
+                } catch (err) {
+                    // Si falla por índice o red, intentar consulta simple
+                    try {
+                        const fallbackQ = query(
+                            collection(db, COLLECTIONS.AUDIT_LOGS),
+                            where("businessId", "==", businessId),
+                            firestoreLimit(maxResults)
+                        );
+                        const snap = await getDocs(fallbackQ);
+                        snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+                        list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                    } catch (fallbackErr) {
+                        handleAppError(fallbackErr, { context: "Error consultando logs de auditoría", showToast: false });
+                    }
                 }
             }
-        }
 
-        if (list.length === 0) {
-            const localKey = `piu_audit_logs_${businessId}`;
-            try {
-                list = JSON.parse(localStorage.getItem(localKey) || '[]');
-            } catch (e) {
-                list = [];
+            if (list.length === 0) {
+                const localKey = `piu_audit_logs_${businessId}`;
+                try {
+                    list = JSON.parse(localStorage.getItem(localKey) || '[]');
+                } catch (e) {
+                    list = [];
+                }
             }
-        }
 
-        // Aplicar filtros en memoria
-        if (action && action !== 'ALL') {
-            list = list.filter(l => l.action === action);
-        }
-        if (staffId && staffId !== 'ALL') {
-            list = list.filter(l => l.actor?.id === staffId);
-        }
+            this._logsCache.set(businessId, { timestamp: Date.now(), data: list });
+            return list;
+        })();
 
-        return list;
+        this._pendingFetch.set(businessId, fetchPromise);
+        try {
+            const rawList = await fetchPromise;
+            let list = [...rawList];
+            if (action && action !== 'ALL') {
+                list = list.filter(l => l.action === action);
+            }
+            if (staffId && staffId !== 'ALL') {
+                list = list.filter(l => l.actor?.id === staffId);
+            }
+            return list.slice(0, maxResults);
+        } finally {
+            this._pendingFetch.delete(businessId);
+        }
     }
 }
 

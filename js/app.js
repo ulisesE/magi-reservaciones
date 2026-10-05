@@ -106,9 +106,18 @@ class App {
         // 5. Renderizar Header y Vista Activa
         this.render();
 
-        // 6. Suscripciones para reactividad
-        store.subscribe(() => this.render());
-        tenantManager.subscribe(() => this.render());
+        // 6. Suscripciones para reactividad con Debounce Anti-Bucle / Zero-Leak
+        let renderDebounceTimer = null;
+        const debouncedRender = () => {
+            if (renderDebounceTimer) clearTimeout(renderDebounceTimer);
+            renderDebounceTimer = setTimeout(() => {
+                renderDebounceTimer = null;
+                this.render();
+            }, 60);
+        };
+
+        store.subscribe(debouncedRender);
+        tenantManager.subscribe(debouncedRender);
         authManager.subscribe(async () => {
             const current = authManager.getCurrentUser();
             if (current) {

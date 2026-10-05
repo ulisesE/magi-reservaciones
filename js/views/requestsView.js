@@ -295,11 +295,15 @@ export function renderRequestsView(container) {
             tbody.querySelectorAll('.btn-approve-res').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const id = btn.dataset.id;
+                    if (btn.disabled) return;
+                    btn.disabled = true;
+                    btn.textContent = '⏳ Aprobando...';
                     try {
                         await store.approveReservation(id);
                         toast.success("Reservación aprobada.");
-                        renderRequestsView(container);
                     } catch (err) {
+                        btn.disabled = false;
+                        btn.textContent = '✅ Aprobar';
                         toast.error(err.message);
                     }
                 });
@@ -326,10 +330,11 @@ export function renderRequestsView(container) {
                     const id = btn.dataset.id;
                     if (confirm("¿Estás seguro de eliminar permanentemente esta reservación de la base de datos? Esta acción la quitará por completo de todos los reportes e historiales.")) {
                         try {
+                            btn.disabled = true;
                             await store.deleteReservation(id);
                             toast.success("Reservación eliminada permanentemente de la base de datos.");
-                            renderRequestsView(container);
                         } catch (e) {
+                            btn.disabled = false;
                             toast.error(e.message || "Error al eliminar la reservación.");
                         }
                     }

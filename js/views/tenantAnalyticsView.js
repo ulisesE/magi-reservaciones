@@ -19,12 +19,16 @@ import { formatDateKey } from '../core/timeUtils.js';
 import { toast } from '../components/toast.js';
 import { auditLogger } from '../core/auditLogger.js';
 
-// Estado local de la vista
+// Estado local de la vista con escudo zero-read contra ráfagas de lectura
 let currentPreset = 'THIS_MONTH'; // 'TODAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_30_DAYS', 'ALL', 'CUSTOM'
 let filterStartDate = '';
 let filterEndDate = '';
 let cachedReservations = [];
+let cachedAuditLogs = [];
+let cachedBizId = null;
+let lastAnalyticsFetch = 0;
 let chartInstances = {};
+const ANALYTICS_CACHE_TTL = 180000; // 3 minutos de caché en memoria
 
 export async function renderTenantAnalyticsView(container) {
     const business = store.currentBusiness || tenantManager.getActiveBusiness();
@@ -80,9 +84,9 @@ export async function renderTenantAnalyticsView(container) {
                 </div>
 
                 <div class="analytics-date-custom-group">
-                    <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">Rango:</span>
+                    <span style="font-size:0.85rem; color:#cbd5e1; font-weight:700;">Rango:</span>
                     <input type="date" id="analytics-date-from" class="analytics-date-input" value="${filterStartDate}" ${currentPreset === 'ALL' ? 'disabled' : ''}>
-                    <span style="color:var(--text-dimmed);">al</span>
+                    <span style="color:#cbd5e1; font-weight:700;">al</span>
                     <input type="date" id="analytics-date-to" class="analytics-date-input" value="${filterEndDate}" ${currentPreset === 'ALL' ? 'disabled' : ''}>
                     <button type="button" id="btn-apply-custom-dates" class="btn btn-secondary btn-xs" ${currentPreset === 'ALL' ? 'disabled' : ''}>
                         Aplicar
@@ -141,16 +145,22 @@ function setDatesByPreset(preset) {
     }
 }
 
-async function loadAndRenderAnalyticsData(container, business) {
+async function loadAndRenderAnalyticsData(container, business, force = false) {
     const dynamicContent = container.querySelector('#analytics-dynamic-content');
     if (!dynamicContent) return;
 
     try {
         const bizId = business?.id;
-        let allReservations = cachedReservations.length > 0 ? [...cachedReservations] : [];
+        const now = Date.now();
+        const isCacheValid = !force && 
+            cachedBizId === bizId && 
+            cachedReservations.length > 0 && 
+            (now - lastAnalyticsFetch < ANALYTICS_CACHE_TTL);
 
-        // Consultar reservas de Firestore (solo si no están en caché en memoria)
-        if (allReservations.length === 0 && isFirebaseAvailable && db && bizId && canMakeFirestoreRead()) {
+        let allReservations = isCacheValid ? [...cachedReservations] : [];
+
+        // Consultar reservas de Firestore (solo si la caché expiró o se forzó recarga)
+        if (!isCacheValid && isFirebaseAvailable && db && bizId && canMakeFirestoreRead()) {
             try {
                 const q = query(
                     collection(db, COLLECTIONS.RESERVATIONS),
@@ -158,10 +168,13 @@ async function loadAndRenderAnalyticsData(container, business) {
                     limit(200)
                 );
                 const snap = await getDocs(q);
+                allReservations = [];
                 snap.forEach(d => {
                     allReservations.push({ id: d.id, ...d.data() });
                 });
                 cachedReservations = [...allReservations];
+                cachedBizId = bizId;
+                lastAnalyticsFetch = now;
             } catch (err) {
                 if (err?.code === 'resource-exhausted') {
                     markQuotaExhausted();
@@ -184,11 +197,14 @@ async function loadAndRenderAnalyticsData(container, business) {
                     });
                 } catch(e) {}
             }
+            if (cachedReservations.length === 0) {
+                cachedReservations = [...allReservations];
+                cachedBizId = bizId;
+                lastAnalyticsFetch = now;
+            }
         }
 
-        cachedReservations = allReservations;
-
-        // Filtrar por rango de fechas
+        // Filtrar por rango de fechas en memoria (Zero-Read)
         const filteredReservations = allReservations.filter(r => {
             if (currentPreset === 'ALL') return true;
             if (!r.date) return false;
@@ -207,13 +223,15 @@ async function loadAndRenderAnalyticsData(container, business) {
             }
         }
 
-
-        // Obtener logs de auditoría inmutables del local
-        let auditLogs = [];
-        try {
-            auditLogs = await auditLogger.getLogs(bizId, { maxResults: 50 });
-        } catch (e) {
-            console.warn("No se pudieron cargar logs de auditoría:", e);
+        // Obtener logs de auditoría inmutables del local (usando caché de memoria)
+        let auditLogs = (isCacheValid && cachedAuditLogs.length > 0 && !force) ? cachedAuditLogs : [];
+        if (auditLogs.length === 0 || force) {
+            try {
+                auditLogs = await auditLogger.getLogs(bizId, { maxResults: 50 }, force);
+                cachedAuditLogs = auditLogs;
+            } catch (e) {
+                console.warn("No se pudieron cargar logs de auditoría:", e);
+            }
         }
 
         // Calcular Estadísticas y Métricas
@@ -591,31 +609,31 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
             </div>
 
             <!-- FILA DE REPARTO DE COMISIONES (CONFIDENCIAL LOCATARIO) -->
-            <div style="grid-column: 1 / -1; background:linear-gradient(135deg, rgba(20,24,35,0.98), rgba(12,15,22,0.98)); border:1px solid rgba(255, 193, 7, 0.4); border-radius:var(--radius-sm); padding:14px 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; box-shadow:0 4px 20px rgba(0,0,0,0.4);">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <span style="font-size:1.6rem; background:rgba(255,193,7,0.1); padding:6px; border-radius:var(--radius-sm);">🤝</span>
+            <div style="grid-column: 1 / -1; background:linear-gradient(135deg, rgba(6, 26, 23, 0.98), rgba(3, 16, 14, 0.98)); border:1px solid rgba(255, 193, 7, 0.45); border-radius:var(--radius-md); padding:16px 20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; box-shadow:0 6px 24px rgba(0,0,0,0.5);">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="font-size:1.8rem; background:rgba(255,193,7,0.15); border:1px solid rgba(255,193,7,0.3); padding:8px; border-radius:var(--radius-sm);">🤝</span>
                     <div>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <strong style="color:#fff; font-size:0.95rem;">Reparto Financiero por Máquinas Comisionadas</strong>
-                            <span class="badge ${stats.commissionMachinesCount > 0 ? 'badge-warning' : 'badge-dark'}" style="font-size:0.7rem;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <strong style="color:#ffffff; font-size:1.05rem;">Reparto Financiero por Máquinas Comisionadas</strong>
+                            <span class="badge ${stats.commissionMachinesCount > 0 ? 'badge-warning' : 'badge-dark'}" style="font-size:0.78rem; font-weight:700; padding:4px 10px;">
                                 ${stats.commissionMachinesCount > 0 ? `${stats.commissionMachinesCount} comisionada(s)` : '100% máquinas propias'}
                             </span>
                         </div>
-                        <p style="color:var(--text-muted); font-size:0.76rem; margin:2px 0 0 0;">Cálculo confidencial según porcentaje pactado con socios operadores de cada gabinete.</p>
+                        <p style="color:#cbd5e1; font-size:0.84rem; margin:3px 0 0 0;">Cálculo confidencial según porcentaje pactado con socios operadores de cada gabinete.</p>
                     </div>
                 </div>
                 <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
-                    <div style="text-align:right; background:rgba(255,255,255,0.03); padding:6px 12px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
-                        <small style="color:var(--text-muted); font-size:0.72rem; display:block;">Facturación Bruta</small>
-                        <strong style="color:#fff; font-family:var(--font-mono); font-size:1.05rem;">${currency}${stats.totalRevenue.toLocaleString()}</strong>
+                    <div style="text-align:right; background:rgba(255,255,255,0.05); padding:8px 14px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.12);">
+                        <small style="color:#cbd5e1; font-size:0.80rem; display:block; font-weight:600;">Facturación Bruta</small>
+                        <strong style="color:#ffffff; font-family:var(--font-mono); font-size:1.15rem;">${currency}${stats.totalRevenue.toLocaleString()}</strong>
                     </div>
-                    <div style="text-align:right; background:rgba(255,193,7,0.06); padding:6px 12px; border-radius:var(--radius-sm); border:1px solid rgba(255,193,7,0.3);">
-                        <small style="color:#FFC107; font-size:0.72rem; display:block; font-weight:700;">- Pago a Socios (${stats.commissionMachinesCount})</small>
-                        <strong style="color:#FFC107; font-family:var(--font-mono); font-size:1.05rem;">-${currency}${stats.totalCommissionsPayout.toLocaleString()}</strong>
+                    <div style="text-align:right; background:rgba(255,193,7,0.1); padding:8px 14px; border-radius:var(--radius-sm); border:1px solid rgba(255,193,7,0.35);">
+                        <small style="color:#FFC107; font-size:0.80rem; display:block; font-weight:700;">- Pago a Socios (${stats.commissionMachinesCount})</small>
+                        <strong style="color:#FFC107; font-family:var(--font-mono); font-size:1.15rem;">-${currency}${stats.totalCommissionsPayout.toLocaleString()}</strong>
                     </div>
-                    <div style="text-align:right; background:rgba(104,242,5,0.1); border:1px solid rgba(104,242,5,0.4); padding:6px 14px; border-radius:var(--radius-sm);">
-                        <small style="color:var(--color-neon-lime); font-size:0.72rem; display:block; font-weight:700;">= Ingreso Neto Local</small>
-                        <strong style="color:var(--color-neon-lime); font-family:var(--font-mono); font-size:1.25rem;">${currency}${stats.totalLocalNetRevenue.toLocaleString()}</strong>
+                    <div style="text-align:right; background:rgba(104,242,5,0.12); border:1px solid rgba(104,242,5,0.45); padding:8px 16px; border-radius:var(--radius-sm);">
+                        <small style="color:var(--color-neon-lime); font-size:0.82rem; display:block; font-weight:800;">= Ingreso Neto Local</small>
+                        <strong style="color:var(--color-neon-lime); font-family:var(--font-mono); font-size:1.35rem;">${currency}${stats.totalLocalNetRevenue.toLocaleString()}</strong>
                     </div>
                 </div>
             </div>
@@ -683,7 +701,7 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                     <h3 class="chart-title">
                         <span>🕹️ Detalle de Ocupación y Reparto por Máquina</span>
                     </h3>
-                    <small style="color:var(--text-muted); font-size:0.75rem;">Confidencial Staff</small>
+                    <small style="color:#cbd5e1; font-size:0.80rem; font-weight:600;">Confidencial Staff</small>
                 </div>
                 <div style="overflow-x:auto;">
                     <table class="cyber-analytics-table">
@@ -701,32 +719,32 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                             ${stats.machineStats.map(m => `
                                 <tr>
                                     <td>
-                                        <strong style="color:#fff;">${m.name}</strong><br>
-                                        <small style="color:var(--text-dimmed); font-size:0.72rem;">${m.model} • ${m.version}</small>
+                                        <strong style="color:#ffffff; font-size:0.95rem;">${m.name}</strong><br>
+                                        <small style="color:#cbd5e1; font-size:0.82rem;">${m.model} • ${m.version}</small>
                                     </td>
                                     <td>
                                         ${m.ownershipType === 'COMMISSION' ? `
-                                            <span class="badge badge-warning" style="font-size:0.7rem; display:inline-block;" title="Socio: ${m.partnerName || 'Sin asignar'}">
+                                            <span class="badge badge-warning" style="font-size:0.75rem; font-weight:700; display:inline-block;" title="Socio: ${m.partnerName || 'Sin asignar'}">
                                                 🤝 ${m.partnerPercentage}% Socio
                                             </span><br>
-                                            <small style="color:var(--text-muted); font-size:0.68rem;">${m.partnerName || 'Socio'}</small>
+                                            <small style="color:#fbbf24; font-size:0.78rem; font-weight:600;">${m.partnerName || 'Socio'}</small>
                                         ` : `
-                                            <span class="badge badge-success" style="font-size:0.7rem;">
+                                            <span class="badge badge-success" style="font-size:0.75rem; font-weight:700;">
                                                 🏢 100% Propia
                                             </span>
                                         `}
                                     </td>
-                                    <td><strong>${m.hours} hrs</strong> (${m.bookingsCount} res)</td>
-                                    <td><strong style="color:#fff; font-family:var(--font-mono);">${currency}${m.revenue.toLocaleString()}</strong></td>
+                                    <td><strong style="color:#f8fafc; font-size:0.90rem;">${m.hours} hrs</strong> <span style="color:#cbd5e1; font-size:0.80rem;">(${m.bookingsCount} res)</span></td>
+                                    <td><strong style="color:#ffffff; font-family:var(--font-mono); font-size:0.95rem;">${currency}${m.revenue.toLocaleString()}</strong></td>
                                     <td>
                                         ${m.partnerPayout > 0 ? `
-                                            <strong style="color:#FFC107; font-family:var(--font-mono);">-${currency}${m.partnerPayout.toLocaleString()}</strong>
+                                            <strong style="color:#FFC107; font-family:var(--font-mono); font-size:0.95rem;">-${currency}${m.partnerPayout.toLocaleString()}</strong>
                                         ` : `
-                                            <span style="color:var(--text-muted); font-size:0.8rem;">$0</span>
+                                            <span style="color:#94a3b8; font-size:0.85rem;">$0</span>
                                         `}
                                     </td>
                                     <td>
-                                        <strong style="color:var(--color-neon-lime); font-family:var(--font-mono); font-size:0.95rem;">${currency}${m.localNet.toLocaleString()}</strong>
+                                        <strong style="color:var(--color-neon-lime); font-family:var(--font-mono); font-size:1.05rem;">${currency}${m.localNet.toLocaleString()}</strong>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -756,21 +774,21 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                             ${stats.topClients.length > 0 ? stats.topClients.map((c, i) => `
                                 <tr>
                                     <td>
-                                        <div style="display:flex; align-items:center; gap:8px;">
-                                            <span style="font-size:1.1rem;">${i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : '🎮'))}</span>
+                                        <div style="display:flex; align-items:center; gap:10px;">
+                                            <span style="font-size:1.25rem;">${i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : '🎮'))}</span>
                                             <div>
-                                                <strong style="color:#fff;">${c.name}</strong><br>
-                                                <small style="color:var(--text-dimmed); font-size:0.75rem;">${c.phone || 'Sin tel'}</small>
+                                                <strong style="color:#ffffff; font-size:0.95rem;">${c.name}</strong><br>
+                                                <small style="color:#cbd5e1; font-size:0.82rem;">${c.phone || 'Sin teléfono'}</small>
                                             </div>
                                         </div>
                                     </td>
-                                    <td><span class="badge badge-dark">${c.bookings}</span></td>
-                                    <td><strong>${c.hours.toFixed(1)} hrs</strong></td>
-                                    <td><strong style="color:var(--color-chartreuse); font-family:var(--font-mono);">${currency}${c.spent.toLocaleString()}</strong></td>
+                                    <td><span class="badge badge-dark" style="font-size:0.85rem; padding:4px 8px; font-weight:700;">${c.bookings}</span></td>
+                                    <td><strong style="color:#f8fafc; font-size:0.90rem;">${c.hours.toFixed(1)} hrs</strong></td>
+                                    <td><strong style="color:var(--color-chartreuse); font-family:var(--font-mono); font-size:1rem;">${currency}${c.spent.toLocaleString()}</strong></td>
                                 </tr>
                             `).join('') : `
                                 <tr>
-                                    <td colspan="4" style="text-align:center; color:var(--text-muted); padding:20px;">
+                                    <td colspan="4" style="text-align:center; color:#94a3b8; padding:24px; font-size:0.90rem;">
                                         No hay suficientes datos de jugadores en este rango.
                                     </td>
                                 </tr>
@@ -788,7 +806,7 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                     <span>📋 Auditoría de Reservaciones del Periodo (${filteredReservations.length})</span>
                 </h3>
             </div>
-            <div style="overflow-x:auto; max-height:400px; overflow-y:auto;">
+            <div style="overflow-x:auto; max-height:420px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-sm);">
                 <table class="cyber-analytics-table">
                     <thead>
                         <tr>
@@ -803,27 +821,27 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                         ${filteredReservations.length > 0 ? filteredReservations.map(r => {
                             const mach = stats.machineStats.find(m => m.id === r.machineId);
                             const statusBadge = r.status === 'CONFIRMED' || r.status === 'COMPLETED'
-                                ? `<span class="badge badge-success">Confirmada</span>`
-                                : (r.status === 'PENDING' ? `<span class="badge badge-warning">Pendiente</span>` : `<span class="badge badge-danger">Cancelada</span>`);
+                                ? `<span class="badge badge-success" style="font-size:0.80rem; font-weight:700;">Confirmada</span>`
+                                : (r.status === 'PENDING' ? `<span class="badge badge-warning" style="font-size:0.80rem; font-weight:700;">Pendiente</span>` : `<span class="badge badge-danger" style="font-size:0.80rem; font-weight:700;">Cancelada</span>`);
 
                             return `
                                 <tr>
                                     <td>
-                                        <strong style="color:#fff;">${r.date || 'N/A'}</strong><br>
-                                        <small style="color:var(--text-muted); font-family:var(--font-mono);">${r.startTime} - ${r.endTime}</small>
+                                        <strong style="color:#ffffff; font-size:0.90rem;">${r.date || 'N/A'}</strong><br>
+                                        <small style="color:#cbd5e1; font-family:var(--font-mono); font-size:0.82rem;">${r.startTime} - ${r.endTime}</small>
                                     </td>
                                     <td>
-                                        <strong style="color:#fff;">${r.clientName || 'Cliente'}</strong><br>
-                                        <small style="color:var(--text-dimmed);">${r.clientPhone || ''}</small>
+                                        <strong style="color:#ffffff; font-size:0.92rem;">${r.clientName || 'Cliente'}</strong><br>
+                                        <small style="color:#94a3b8; font-size:0.82rem;">${r.clientPhone || 'Sin tel'}</small>
                                     </td>
-                                    <td>${mach?.name || r.machineId || 'Máquina'}</td>
+                                    <td><strong style="color:#e2e8f0; font-size:0.90rem;">${mach?.name || r.machineId || 'Máquina'}</strong></td>
                                     <td>${statusBadge}</td>
-                                    <td><strong style="color:var(--color-neon-lime); font-family:var(--font-mono);">${currency}${r.totalCost || 0}</strong></td>
+                                    <td><strong style="color:var(--color-neon-lime); font-family:var(--font-mono); font-size:1rem;">${currency}${r.totalCost || 0}</strong></td>
                                 </tr>
                             `;
                         }).join('') : `
                             <tr>
-                                <td colspan="5" style="text-align:center; color:var(--text-muted); padding:30px;">
+                                <td colspan="5" style="text-align:center; color:#94a3b8; padding:32px; font-size:0.92rem;">
                                     No se encontraron reservaciones en el periodo seleccionado.
                                 </td>
                             </tr>
@@ -838,11 +856,11 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
             <div class="chart-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                 <h3 class="chart-title" style="display:flex; align-items:center; gap:8px;">
                     <span>🛡️ Auditoría y Trazabilidad Financiera Inmutable</span>
-                    <span class="badge badge-outline" style="font-size:0.7rem; font-family:var(--font-mono); color:var(--color-neon-lime);">🔒 Inmutable</span>
+                    <span class="badge badge-outline" style="font-size:0.75rem; font-family:var(--font-mono); color:var(--color-neon-lime); font-weight:700;">🔒 Inmutable</span>
                 </h3>
-                <small style="color:var(--text-muted); font-size:0.75rem;">${auditLogs.length} eventos registrados en Firestore</small>
+                <small style="color:#cbd5e1; font-size:0.82rem; font-weight:600;">${auditLogs.length} eventos registrados</small>
             </div>
-            <div style="overflow-x:auto; max-height:420px; overflow-y:auto;">
+            <div style="overflow-x:auto; max-height:420px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-sm);">
                 <table class="cyber-analytics-table">
                     <thead>
                         <tr>
@@ -860,36 +878,36 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                             const formattedDate = dateObj.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
                             const formattedTime = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
                             
-                            let actionBadge = `<span class="badge badge-dark">${l.action}</span>`;
+                            let actionBadge = `<span class="badge badge-dark" style="font-size:0.78rem; font-weight:700;">${l.action}</span>`;
                             if (l.action === 'SALE_RECORDED') {
-                                actionBadge = `<span class="badge badge-primary">🛒 VENTA</span>`;
+                                actionBadge = `<span class="badge badge-primary" style="font-size:0.78rem; font-weight:700;">🛒 VENTA</span>`;
                             } else if (l.action === 'PAYMENT_RECORDED' || l.action === 'DEBT_LIQUIDATED') {
-                                actionBadge = `<span class="badge badge-success">💵 ABONO</span>`;
+                                actionBadge = `<span class="badge badge-success" style="font-size:0.78rem; font-weight:700;">💵 ABONO</span>`;
                             } else if (l.action === 'TRANSACTION_VOIDED') {
-                                actionBadge = `<span class="badge badge-danger">🚫 ANULACIÓN</span>`;
+                                actionBadge = `<span class="badge badge-danger" style="font-size:0.78rem; font-weight:700;">🚫 ANULACIÓN</span>`;
                             } else if (l.action.includes('PRODUCT') || l.action.includes('PRICE')) {
-                                actionBadge = `<span class="badge badge-warning">🏷️ CATÁLOGO</span>`;
+                                actionBadge = `<span class="badge badge-warning" style="font-size:0.78rem; font-weight:700;">🏷️ CATÁLOGO</span>`;
                             } else if (l.action.includes('STAFF')) {
-                                actionBadge = `<span class="badge badge-info">👤 STAFF</span>`;
+                                actionBadge = `<span class="badge badge-info" style="font-size:0.78rem; font-weight:700;">👤 STAFF</span>`;
                             }
 
                             return `
                                 <tr>
-                                    <td style="font-family:var(--font-mono); font-size:0.8rem;">
+                                    <td style="font-family:var(--font-mono); font-size:0.84rem;">
                                         <strong style="color:#ffffff;">${formattedDate}</strong>
-                                        <small style="display:block; color:var(--text-muted);">${formattedTime}</small>
+                                        <small style="display:block; color:#cbd5e1;">${formattedTime}</small>
                                     </td>
                                     <td>
-                                        <strong style="color:#ffffff; font-size:0.85rem;">${l.actor?.name || 'Sistema'}</strong>
-                                        <small style="display:block; color:var(--color-neon-cyan); font-size:0.72rem;">${l.actor?.role || 'STAFF'}</small>
+                                        <strong style="color:#ffffff; font-size:0.92rem;">${l.actor?.name || 'Sistema'}</strong>
+                                        <small style="display:block; color:var(--color-neon-cyan); font-size:0.78rem; font-weight:700;">${l.actor?.role || 'STAFF'}</small>
                                     </td>
                                     <td>${actionBadge}</td>
-                                    <td style="font-size:0.85rem; color:#ffffff; max-width:320px;">${l.details || 'Operación registrada'}</td>
-                                    <td style="text-align:right; font-family:var(--font-mono); font-weight:700; color:${l.financialData?.amount ? 'var(--color-neon-lime)' : 'var(--text-muted)'};">
+                                    <td style="font-size:0.88rem; color:#f1f5f9; max-width:320px; line-height:1.4;">${l.details || 'Operación registrada'}</td>
+                                    <td style="text-align:right; font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:${l.financialData?.amount ? 'var(--color-neon-lime)' : '#94a3b8'};">
                                         ${l.financialData?.amount ? `${currency}${Number(l.financialData.amount).toFixed(2)}` : '-'}
                                     </td>
                                     <td style="text-align:center;">
-                                        <span class="badge badge-outline" style="font-size:0.65rem; color:var(--color-neon-lime);" title="Registro criptográficamente inmutable">
+                                        <span class="badge badge-outline" style="font-size:0.72rem; color:var(--color-neon-lime); font-weight:700;" title="Registro criptográficamente inmutable">
                                             🔒 Inmutable
                                         </span>
                                     </td>
@@ -897,7 +915,7 @@ function renderAnalyticsDashboard(container, stats, business, filteredReservatio
                             `;
                         }).join('') : `
                             <tr>
-                                <td colspan="6" style="text-align:center; color:var(--text-muted); padding:30px;">
+                                <td colspan="6" style="text-align:center; color:#94a3b8; padding:32px; font-size:0.92rem;">
                                     Sin registros de auditoría recientes en esta sucursal.
                                 </td>
                             </tr>
@@ -1139,17 +1157,33 @@ function renderCharts(stats, currency) {
 }
 
 function setupEventListeners(container, business) {
-    // Botones de presets de periodo
+    // Botones de presets de periodo (Zero-Read: re-procesa datos en memoria instantáneamente)
     container.querySelectorAll('.analytics-preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const preset = btn.dataset.preset;
             setDatesByPreset(preset);
-            renderTenantAnalyticsView(container);
+            container.querySelectorAll('.analytics-preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const fromInput = container.querySelector('#analytics-date-from');
+            const toInput = container.querySelector('#analytics-date-to');
+            const applyBtn = container.querySelector('#btn-apply-custom-dates');
+            if (fromInput) {
+                fromInput.value = filterStartDate;
+                fromInput.disabled = (preset === 'ALL');
+            }
+            if (toInput) {
+                toInput.value = filterEndDate;
+                toInput.disabled = (preset === 'ALL');
+            }
+            if (applyBtn) applyBtn.disabled = (preset === 'ALL');
+
+            await loadAndRenderAnalyticsData(container, business, false);
         });
     });
 
-    // Botón de aplicar fechas personalizadas
-    container.querySelector('#btn-apply-custom-dates')?.addEventListener('click', () => {
+    // Botón de aplicar fechas personalizadas (Zero-Read: re-procesa datos en memoria instantáneamente)
+    container.querySelector('#btn-apply-custom-dates')?.addEventListener('click', async () => {
         const fromVal = container.querySelector('#analytics-date-from')?.value;
         const toVal = container.querySelector('#analytics-date-to')?.value;
         if (!fromVal || !toVal) {
@@ -1163,14 +1197,21 @@ function setupEventListeners(container, business) {
         currentPreset = 'CUSTOM';
         filterStartDate = fromVal;
         filterEndDate = toVal;
-        renderTenantAnalyticsView(container);
+        container.querySelectorAll('.analytics-preset-btn').forEach(b => b.classList.remove('active'));
+        await loadAndRenderAnalyticsData(container, business, false);
     });
 
-    // Botón de refresco manual
+    // Botón de refresco manual explícito
     container.querySelector('#btn-refresh-analytics')?.addEventListener('click', async () => {
+        const btn = container.querySelector('#btn-refresh-analytics');
+        if (btn) btn.disabled = true;
         toast.info("Actualizando datos desde Firestore...");
-        await renderTenantAnalyticsView(container);
+        lastAnalyticsFetch = 0;
+        cachedReservations = [];
+        cachedAuditLogs = [];
+        await loadAndRenderAnalyticsData(container, business, true);
         toast.success("Métricas actualizadas.");
+        if (btn) btn.disabled = false;
     });
 
     // Botón de exportación a CSV
