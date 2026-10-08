@@ -71,6 +71,7 @@ class AuthManager {
         this.clientUsers = [];
         this.listeners = [];
         this.unsubscribeStaff = null;
+        this._staffLoadedFromFirestore = false;
     }
 
     async init() {
@@ -85,10 +86,23 @@ class AuthManager {
         // 1. Cargar caché local y semillas
         const localStaff = localStorage.getItem('piu_staff_users_cache');
         if (localStaff) {
-            try { this.staffUsers = JSON.parse(localStaff); } catch (e) { this.staffUsers = []; }
+            try {
+                const parsed = JSON.parse(localStaff);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.staffUsers = parsed;
+                    if (parsed.some(u => u.id && u.id.startsWith('usr_178'))) {
+                        this._staffLoadedFromFirestore = true;
+                    }
+                }
+            } catch (e) { this.staffUsers = []; }
         }
         if (this.staffUsers.length === 0) {
             this.staffUsers = [...DEFAULT_STAFF_USERS];
+        }
+
+        // Sincronizar encargados reales en segundo plano si hay conexión
+        if (canMakeFirestoreRead()) {
+            this.loadStaffUsers(true).catch(e => console.warn("[AuthManager] Sync inicial de staff diferido:", e));
         }
 
         const localClients = localStorage.getItem('piu_registered_players_cache');
@@ -160,7 +174,7 @@ class AuthManager {
     }
 
     async loadStaffUsers(forceRefresh = false) {
-        if (!forceRefresh && this.staffUsers && this.staffUsers.length > 0) {
+        if (!forceRefresh && this._staffLoadedFromFirestore && this.staffUsers && this.staffUsers.length > 0) {
             return this.staffUsers;
         }
 
@@ -174,7 +188,9 @@ class AuthManager {
                     const snap = await getDocs(collection(db, COLLECTIONS.STAFF_USERS));
                     if (!snap.empty) {
                         this.staffUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        this._staffLoadedFromFirestore = true;
                         localStorage.setItem('piu_staff_users_cache', JSON.stringify(this.staffUsers));
+                        console.log(`✅ [AuthManager] Sincronizadas ${this.staffUsers.length} cuentas de staff/encargados desde Firestore.`);
                     }
                 } catch (e) {
                     console.warn("Error cargando staff de Firestore:", e);
