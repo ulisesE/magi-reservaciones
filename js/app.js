@@ -143,7 +143,7 @@ class App {
         if (!user || !canMakeFirestoreRead()) return;
         try {
             if (user.role === 'SUPERADMIN' || user.role === 'MANAGER') {
-                await authManager.loadStaffUsers();
+                await authManager.loadStaffUsers(true);
                 await tenantManager.syncFromFirestore();
             }
         } catch (e) {

@@ -40,7 +40,7 @@ export function invalidateSuperadminCache() {
 
 export async function renderSuperadminView(container) {
     const businesses = tenantManager.getAllBusinesses();
-    const staffUsers = cachedStaffUsers || await authManager.loadStaffUsers();
+    const staffUsers = await authManager.loadStaffUsers(true);
     cachedStaffUsers = staffUsers;
     const managers = staffUsers.filter(u => u.role === 'MANAGER');
     const cabinetModels = catalogsManager.getCabinetModels();
