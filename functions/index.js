@@ -7,7 +7,7 @@ exports.serveLocalMetadata = functions.https.onRequest(async (req, res) => {
     const pathParts = req.path.split('/');
     const localId = pathParts[pathParts.length - 1] || req.query.local;
 
-    let title = "SKY GAMES • Pump It Up Hub";
+    let title = "SKY GAMES • RevelVO Play";
     let description = "Reserva tu sesión de Pump It Up en nuestros gabinetes profesionales. ¡Únete a la comunidad!";
     let imageUrl = "https://magi-suite.web.app/images/default-share.jpg"; // URL por defecto para previsualizaciones
 

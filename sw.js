@@ -1,5 +1,5 @@
-// Service Worker PWA & Notificaciones — Pump It Up Hub (v1.9.7)
-const CACHE_NAME = 'piu-hub-pwa-v1.9.7';
+// Service Worker PWA & Notificaciones — RevelVO Play (v1.9.8)
+const CACHE_NAME = 'revelvo-play-pwa-v1.9.8';
 
 const PRECACHE_ASSETS = [
     '/',
@@ -8,6 +8,9 @@ const PRECACHE_ASSETS = [
     '/css/styles.css',
     '/css/components.css',
     '/css/views.css',
+    '/icons/logo.png',
+    '/icons/favicon-64.png',
+    '/icons/favicon-32.png',
     '/icons/icon.svg',
     '/icons/icon-192.png',
     '/icons/icon-512.png',
@@ -174,11 +177,11 @@ self.addEventListener('message', (event) => {
     }
 
     if (type === 'SHOW_NOTIFICATION') {
-        const notifTitle = title || 'Pump It Up Hub';
+        const notifTitle = title || 'RevelVO Play';
         const notifOptions = {
             body: body || '',
-            icon: icon || 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f579.png',
-            badge: badge || 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f579.png',
+            icon: icon || '/icons/icon-192.png',
+            badge: badge || '/icons/favicon-64.png',
             tag: tag || `piu-notif-${Date.now()}`,
             data: {
                 url: url || '/',
@@ -204,7 +207,7 @@ self.addEventListener('message', (event) => {
  */
 self.addEventListener('push', (event) => {
     let payload = {
-        title: 'Pump It Up Hub',
+        title: 'RevelVO Play',
         body: 'Tienes una nueva notificación.',
         url: '/'
     };
@@ -219,8 +222,8 @@ self.addEventListener('push', (event) => {
 
     const notifOptions = {
         body: payload.body || '',
-        icon: payload.icon || 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f579.png',
-        badge: payload.badge || 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f579.png',
+        icon: payload.icon || '/icons/icon-192.png',
+        badge: payload.badge || '/icons/favicon-64.png',
         tag: payload.tag || `push-${Date.now()}`,
         data: {
             url: payload.url || '/',
@@ -231,7 +234,7 @@ self.addEventListener('push', (event) => {
     };
 
     event.waitUntil(
-        self.registration.showNotification(payload.title || 'Pump It Up Hub', notifOptions)
+        self.registration.showNotification(payload.title || 'RevelVO Play', notifOptions)
     );
 });
 

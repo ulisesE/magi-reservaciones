@@ -45,19 +45,21 @@ export function renderHeader(container) {
             <header class="app-header">
                 <div class="header-top-row">
                     <div class="header-brand">
-                        <div class="brand-badge-icon pulse-glow">🕹️</div>
+                        <div class="brand-badge-icon pulse-glow" style="display:inline-flex; align-items:center; justify-content:center; overflow:hidden; border-radius:10px; background:rgba(0, 240, 255, 0.08); border:1px solid rgba(0, 240, 255, 0.3); width:38px; height:38px;">
+                            <img src="/icons/favicon-64.png" alt="RevelVO Play" style="width:32px; height:32px; object-fit:contain; border-radius:7px; filter:drop-shadow(0 0 8px rgba(0, 240, 255, 0.6));">
+                        </div>
                         <div class="brand-text">
                             <div class="brand-title">
-                                <span class="piu-highlight">PUMP IT UP</span> HUB
+                                <span class="brand-revelvo-container"><span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">Play</span></span>
                             </div>
                             <div class="brand-subtitle">
-                                <span>Plataforma Modular de Reservaciones</span>
+                                <span>Plataforma de Reservaciones & Arcade</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="header-actions">
-                        <button class="btn btn-outline btn-xs btn-pwa-install" style="display:none; border-radius:var(--radius-full); padding:4px 9px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:bold; align-items:center; gap:4px;" title="Instalar Pump It Up Hub en tu celular o PC">
+                        <button class="btn btn-outline btn-xs btn-pwa-install" style="display:none; border-radius:var(--radius-full); padding:4px 9px; font-size:0.75rem; border-color:var(--color-neon-cyan); color:var(--color-neon-cyan); font-weight:bold; align-items:center; gap:4px;" title="Instalar RevelVO Play en tu celular o PC">
                             <span>📲 Instalar App</span>
                         </button>
                         ${currentUser ? `
@@ -108,7 +110,7 @@ export function renderHeader(container) {
                     <div class="brand-badge-icon">${business?.logoIcon || '🕹️'}</div>
                     <div class="brand-text">
                         <div class="brand-title" style="font-size:1.15rem;">
-                            <span class="piu-highlight">${business?.name || 'Pump It Up'}</span>
+                            <span class="piu-highlight">${business?.name || 'RevelVO Play'}</span>
                         </div>
                         <div class="brand-subtitle">
                             <span>${business?.city || 'Arcade'}</span>
@@ -477,7 +479,7 @@ export function renderHeader(container) {
                 modalEl.querySelector('#btn-close-notif-modal').onclick = () => modal.close();
                 modalEl.querySelector('#btn-send-test-notif').onclick = async () => {
                     await notificationManager.sendNotification({
-                        title: '⚔️ Pump It Up Hub (Test)',
+                        title: '🎮 RevelVO Play (Test)',
                         body: '¡El Service Worker intermediario está funcionando al 100%!',
                         tag: 'test-sw-notification'
                     });
@@ -741,7 +743,7 @@ export function openLoginModal(initialTab = 'login') {
     `;
 
     const modalEl = modal.open({
-        title: 'Acceso a Pump It Up Hub',
+        title: 'Acceso a RevelVO Play',
         icon: '🕹️',
         contentHtml,
         maxWidth: '520px'

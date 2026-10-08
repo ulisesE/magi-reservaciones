@@ -104,9 +104,11 @@
   <line x1="56" y1="256" x2="90" y2="256" stroke="#00F0FF" stroke-width="4" stroke-linecap="round" filter="url(#neonCyan)" />
   <line x1="422" y1="256" x2="456" y2="256" stroke="#00F0FF" stroke-width="4" stroke-linecap="round" filter="url(#neonCyan)" />
 
-  <!-- Bottom Text Banner: PIU HUB -->
-  <g filter="url(#neonLime)">
-    <rect x="156" y="434" width="200" height="38" rx="10" fill="#080e14" stroke="#68F205" stroke-width="3" />
-    <text x="256" y="460" font-family="'Impact', 'Rajdhani', 'Arial Black', sans-serif" font-size="22" font-weight="900" fill="#68F205" text-anchor="middle" letter-spacing="4">PIU HUB</text>
+  <!-- Bottom Text Banner: REVELVO PLAY -->
+  <g>
+    <rect x="136" y="434" width="240" height="38" rx="10" fill="#080e14" stroke="#00F0FF" stroke-width="2" filter="url(#neonCyan)" />
+    <text x="256" y="460" font-family="'Impact', 'Rajdhani', 'Arial Black', sans-serif" font-size="20" font-weight="900" text-anchor="middle" letter-spacing="2">
+      <tspan fill="#68F205">REVEL</tspan><tspan fill="#00F0FF">VO</tspan> <tspan fill="#FFFFFF" font-style="italic">PLAY</tspan>
+    </text>
   </g>
 </svg>

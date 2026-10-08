@@ -52,6 +52,73 @@
     line-height: 1.1;
 }
 
+/* ==========================================================================
+   TIPOGRAFÍA Y ESTILO DE IDENTIDAD REVELVO PLAY
+   ========================================================================== */
+.brand-revelvo-container {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 1px;
+    font-family: var(--font-heading);
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: 0.5px;
+}
+
+.brand-revel {
+    color: var(--brand-revel);
+    text-shadow: 0 0 14px var(--brand-revel-glow), 0 0 25px rgba(104, 242, 5, 0.35);
+    font-weight: 900;
+    letter-spacing: 1.5px;
+}
+
+.brand-vo {
+    color: var(--brand-vo);
+    text-shadow: 0 0 14px var(--brand-vo-glow), 0 0 25px rgba(0, 240, 255, 0.45);
+    font-weight: 900;
+    letter-spacing: 1.5px;
+}
+
+.brand-play {
+    color: var(--brand-play);
+    font-style: italic;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-shadow: 0 0 10px var(--brand-play-glow);
+    margin-left: 5px;
+}
+
+.brand-revelvo-splash {
+    display: inline-flex;
+    align-items: baseline;
+    font-family: var(--font-heading);
+    font-size: 3.2rem;
+    font-weight: 900;
+    letter-spacing: 3px;
+    gap: 1px;
+    margin: 0;
+    text-transform: uppercase;
+    filter: drop-shadow(0 0 20px rgba(0, 240, 255, 0.25));
+    animation: pulse-neon 2.5s infinite ease-in-out;
+}
+
+.brand-revelvo-splash .brand-revel {
+    font-size: 1em;
+}
+
+.brand-revelvo-splash .brand-vo {
+    font-size: 1.04em;
+}
+
+.brand-revelvo-splash .brand-play {
+    font-size: 0.88em;
+    margin-left: 10px;
+    background: linear-gradient(135deg, #ffffff 0%, var(--brand-vo) 50%, var(--brand-revel) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.5));
+}
+
 .piu-highlight {
     color: var(--color-neon-lime);
     text-shadow: 0 0 12px rgba(104, 242, 5, 0.6);

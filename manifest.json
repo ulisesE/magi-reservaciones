@@ -1,8 +1,8 @@
 {
-  "name": "Pump It Up Hub • Reservaciones & Arcade",
-  "short_name": "PIU Hub",
+  "name": "RevelVO Play • Reservaciones & Arcade",
+  "short_name": "RevelVO Play",
   "id": "/?source=pwa",
-  "description": "Sistema profesional de reservaciones de maquinitas Pump It Up (PIU), retas Versus PVP, pases digitales y cuenta fácil de mostrador.",
+  "description": "Sistema profesional de reservaciones de maquinitas y videojuegos, retas Versus PVP, pases digitales y cuenta fácil de mostrador.",
   "start_url": "/index.html",
   "scope": "/",
   "display": "standalone",

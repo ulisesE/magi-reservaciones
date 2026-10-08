@@ -71,7 +71,7 @@ class NotificationManager {
                 toast.success("🔔 ¡Notificaciones activadas! Recibirás alertas de retas y reservaciones.");
                 // Enviar notificación de bienvenida
                 await this.sendNotification({
-                    title: '🎮 Pump It Up Hub',
+                    title: '🎮 RevelVO Play',
                     body: '¡Notificaciones activadas con éxito! Te avisaremos cuando recibas retos o tus reservas sean confirmadas.',
                     tag: 'welcome-notification'
                 });
@@ -92,10 +92,10 @@ class NotificationManager {
      * Envía una petición al Service Worker intermediario para desplegar cualquier tipo de notificación.
      */
     async sendNotification({
-        title = 'Pump It Up Hub',
+        title = 'RevelVO Play',
         body = '',
-        icon = 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f579.png',
-        badge = 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f579.png',
+        icon = '/icons/icon-192.png',
+        badge = '/icons/favicon-64.png',
         tag = `piu-${Date.now()}`,
         url = '/',
         data = {},

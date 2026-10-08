@@ -17,6 +17,20 @@
     --color-neon-lime: #68F205;
     --color-chartreuse: #C3D91E;
 
+    /* ==========================================================================
+       IDENTIDAD OFICIAL REVELVO PLAY:
+       REVEL (Reveles): Verde Lima Neón #68F205
+       VO (Evolución): Cyan Neón #00F0FF
+       Play (Gaming): Blanco Neón / Chartreuse #FFFFFF / #C3D91E
+       ========================================================================== */
+    --brand-revel: #68F205;
+    --brand-revel-glow: rgba(104, 242, 5, 0.7);
+    --brand-vo: #00F0FF;
+    --brand-vo-glow: rgba(0, 240, 255, 0.7);
+    --brand-play: #FFFFFF;
+    --brand-play-glow: rgba(255, 255, 255, 0.6);
+    --brand-play-accent: #C3D91E;
+
     /* Variables de Tema Globales (Valores de fallback por si falla JS) */
     --theme-bg-dark: #011816;
     --theme-bg-medium: #012623;

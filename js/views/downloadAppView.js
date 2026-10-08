@@ -265,7 +265,7 @@ export function renderDownloadAppView(container) {
                             <div class="step-number">2</div>
                             <div class="step-icon">➕</div>
                             <h4>Clic en icono de Instalar</h4>
-                            <p>En el extremo derecho de la barra de direcciones URL, haz clic en el icono <strong>🖥️ Instalar</strong> o en menú ⋮ -> <strong>Instalar Pump It Up Hub</strong>.</p>
+                            <p>En el extremo derecho de la barra de direcciones URL, haz clic en el icono <strong>🖥️ Instalar</strong> o en menú ⋮ -> <strong>Instalar RevelVO Play</strong>.</p>
                         </div>
                         <div class="step-card">
                             <div class="step-number">3</div>

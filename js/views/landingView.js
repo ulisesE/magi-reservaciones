@@ -21,7 +21,7 @@ export function renderLandingView(container) {
             <!-- Hero Header -->
             <div class="landing-header-banner">
                 <div class="landing-badge-pill">
-                    <span class="neon-arrow">◆</span> SISTEMA MULTI-NEGOCIO PUMP IT UP
+                    <span class="neon-arrow">◆</span> PLATAFORMA MULTI-LOCAL <span class="brand-revelvo-container" style="font-size:0.95em;"><span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">PLAY</span></span>
                 </div>
                 <h1 class="landing-hero-title">
                     ¿A QUÉ <span class="piu-highlight">LOCAL / SUCURSAL</span> DESEAS INGRESAR?

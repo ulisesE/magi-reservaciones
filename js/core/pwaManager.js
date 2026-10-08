@@ -1,5 +1,5 @@
 // js/core/pwaManager.js
-// Gestor de Instalación PWA (Progressive Web App) — Pump It Up Hub (v1.9.0)
+// Gestor de Instalación PWA (Progressive Web App) — RevelVO Play (v1.9.7)
 import { modal } from '../components/modal.js';
 import { toast } from '../components/toast.js';
 
@@ -36,7 +36,7 @@ class PWAManager {
         window.addEventListener('appinstalled', () => {
             this.deferredPrompt = null;
             console.log("🎉 [PWA] Aplicación instalada exitosamente en el dispositivo.");
-            toast.success("¡Pump It Up Hub instalado exitosamente en tu dispositivo! 🕹️");
+            toast.success("¡RevelVO Play instalado exitosamente en tu dispositivo! 🕹️");
             this.notify();
         });
     }
@@ -111,7 +111,7 @@ class PWAManager {
                 const choiceResult = await this.deferredPrompt.userChoice;
                 if (choiceResult.outcome === 'accepted') {
                     console.log("✅ [PWA] El usuario aceptó la instalación.");
-                    toast.success("¡Instalando Pump It Up Hub! En unos segundos aparecerá en tu dispositivo. 🕹️");
+                    toast.success("¡Instalando RevelVO Play! En unos segundos aparecerá en tu dispositivo. 🕹️");
                 } else {
                     console.log("ℹ️ [PWA] El usuario canceló la instalación.");
                     toast.info("Instalación cancelada. Puedes volver a intentarlo cuando desees.");
@@ -149,7 +149,7 @@ class PWAManager {
                 <div style="text-align:center;">
                     <div style="font-size:3rem; margin-bottom:6px;">🤖</div>
                     <h3 style="color:#ffffff; margin:0 0 6px 0; font-family:var(--font-heading); font-size:1.25rem;">Instalar en tu Android</h3>
-                    <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">Disfruta de Pump It Up Hub como una App rápida, a pantalla completa y con acceso directo.</p>
+                    <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">Disfruta de RevelVO Play como una App rápida, a pantalla completa y con acceso directo.</p>
                 </div>
 
                 ${inApp ? `
@@ -224,7 +224,7 @@ class PWAManager {
                         <span style="background:var(--bg-dark-700); border:1px solid var(--color-neon-lime); color:var(--color-neon-lime); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:0.85rem; flex-shrink:0;">2</span>
                         <div>
                             <strong style="color:#ffffff; font-size:0.9rem; display:block;">O usa el menú del navegador (⋮)</strong>
-                            <small style="color:var(--text-muted); font-size:0.8rem;">Haz clic en los tres puntos (⋮) de la esquina superior derecha > <strong>Guardar y compartir</strong> > <strong style="color:var(--color-neon-lime);">Instalar Pump It Up Hub...</strong></small>
+                            <small style="color:var(--text-muted); font-size:0.8rem;">Haz clic en los tres puntos (⋮) de la esquina superior derecha > <strong>Guardar y compartir</strong> > <strong style="color:var(--color-neon-lime);">Instalar RevelVO Play...</strong></small>
                         </div>
                     </div>
 
@@ -257,7 +257,7 @@ class PWAManager {
                 <div style="text-align:center;">
                     <div style="font-size:3rem; margin-bottom:6px;">📲</div>
                     <h3 style="color:#ffffff; margin:0 0 6px 0; font-family:var(--font-heading); font-size:1.25rem;">Instalar en tu iPhone o iPad</h3>
-                    <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">Disfruta de Pump It Up Hub en pantalla completa sin barra de navegación.</p>
+                    <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">Disfruta de RevelVO Play en pantalla completa sin barra de navegación.</p>
                 </div>
 
                 <div style="background:var(--bg-dark-900); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:16px; display:flex; flex-direction:column; gap:14px;">
@@ -301,7 +301,7 @@ class PWAManager {
      * Modal informativo cuando el usuario ya tiene la app abierta en modo standalone
      */
     showAlreadyInstalledModal(business) {
-        const cleanName = business?.name || 'Pump It Up Hub';
+        const cleanName = business?.name || 'RevelVO Play';
         const contentHtml = `
             <div style="display:flex; flex-direction:column; gap:16px; padding:6px 2px; text-align:center;">
                 <div style="font-size:3rem; margin-bottom:4px;">🕹️</div>
@@ -349,11 +349,11 @@ class PWAManager {
                 manifestEl.setAttribute('href', '/manifest.json');
             }
 
-            const cleanBizName = business.name || 'PIU Hub';
+            const cleanBizName = business.name || 'RevelVO Play';
             const shortBizName = cleanBizName.length > 14 ? cleanBizName.substring(0, 14) : cleanBizName;
 
             // Actualizar título del documento y meta tags de Apple / Web App
-            document.title = `${cleanBizName} • Pump It Up Hub`;
+            document.title = `${cleanBizName} • RevelVO Play`;
 
             let appleTitleEl = document.querySelector('meta[name="apple-mobile-web-app-title"]');
             if (appleTitleEl) {

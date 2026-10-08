@@ -11,16 +11,17 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="PIU Hub">
-    <title>Pump It Up Hub • Sistema de Reservaciones de Maquinitas</title>
-    <meta property="og:title" content="Pump It Up Hub" />
-    <meta property="og:description" content="Sistema de Reservaciones de Maquinitas" />
+    <meta name="apple-mobile-web-app-title" content="RevelVO Play">
+    <title>RevelVO Play • Sistema de Reservaciones de Maquinitas</title>
+    <meta property="og:title" content="RevelVO Play" />
+    <meta property="og:description" content="Sistema de Reservaciones de Maquinitas & Arcade" />
     <meta property="og:image" content="https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=600" />
 
     <!-- Web App Manifest (PWA) -->
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 
     <!-- Hojas de Estilo Cyberpunk / Arcade -->
@@ -32,8 +33,6 @@
     <!-- Chart.js Library for Dashboard Analytics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 
-    <link rel="icon"
-        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕹️</text></svg>">
 </head>
 
 <body>
@@ -104,14 +103,12 @@
             <div class="piu-splash-screen"
                 style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; text-align:center; padding: 40px 20px;">
                 <div class="splash-logo-container" style="position:relative; margin-bottom:20px;">
-                    <div
-                        style="font-size: 5rem; line-height: 1; filter: drop-shadow(0 0 20px #68F205); animation: blink-neon 1.5s infinite alternate; margin-bottom: 10px;">
-                        🕹️</div>
+                    <img src="/icons/logo.png" alt="RevelVO Play" 
+                        style="width: 120px; height: 120px; border-radius: 26px; object-fit: contain; filter: drop-shadow(0 0 25px rgba(0, 240, 255, 0.7)) drop-shadow(0 0 50px rgba(0, 102, 255, 0.45)); animation: pulse-neon 2.5s infinite ease-in-out;">
                 </div>
 
-                <h1
-                    style="font-family: 'Rajdhani', sans-serif; font-size: 3rem; font-weight: 900; letter-spacing: 5px; margin: 0; text-transform: uppercase; background: linear-gradient(135deg, #68F205 0%, #C3D91E 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 15px rgba(104,242,5,0.35)); animation: pulse-neon 2s infinite ease-in-out;">
-                    PUMP IT UP HUB
+                <h1 class="brand-revelvo-splash">
+                    <span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">PLAY</span>
                 </h1>
 
                 <p
@@ -130,7 +127,7 @@
                 <div
                     style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #52756a; display:flex; flex-direction:column; gap:4px; letter-spacing:1px;">
                     <span>[CARGANDO MÓDULOS DEL MOTOR...]</span>
-                    <span style="color:#68F205;">SINCRONIZANDO CON EL SERVIDOR</span>
+                    <span style="color:#00F0FF;">SINCRONIZANDO CON EL SERVIDOR</span>
                 </div>
             </div>
         </main>
@@ -141,7 +138,7 @@
             <div
                 style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
-                    <strong>PUMP IT UP HUB</strong> • © 2026 Todos los derechos reservados • Desarrollado por <a
+                    <strong class="brand-revelvo-container"><span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">Play</span></strong> • © 2026 Todos los derechos reservados • Desarrollado por <a
                         href="https://www.facebook.com/link149/" target="_blank" rel="noopener noreferrer"
                         style="color: #68F205; text-decoration: none; font-weight: bold; border-bottom: 1px dashed rgba(104, 242, 5, 0.4); padding-bottom: 1px;">megajefelink</a>
                 </div>
@@ -153,8 +150,8 @@
                     </div>
 
                     <!-- Botón Novedades y Versión (Reubicado desde el Header) -->
-                    <button type="button" id="btn-open-changelog-footer" class="btn-open-changelog-footer" style="background: rgba(104,242,5,0.12); color: var(--color-neon-lime); border: 1px solid rgba(104,242,5,0.3); border-radius: var(--radius-full); font-size: 0.72rem; padding: 4px 10px; font-weight: 700; cursor: pointer; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s;" title="Ver novedades de la versión v1.9.7">
-                        <span>📜 v1.9.7 Novedades</span>
+                    <button type="button" id="btn-open-changelog-footer" class="btn-open-changelog-footer" style="background: rgba(104,242,5,0.12); color: var(--color-neon-lime); border: 1px solid rgba(104,242,5,0.3); border-radius: var(--radius-full); font-size: 0.72rem; padding: 4px 10px; font-weight: 700; cursor: pointer; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s;" title="Ver novedades de la versión v1.9.8">
+                        <span>📜 v1.9.8 Novedades</span>
                     </button>
                 </div>
             </div>
@@ -166,7 +163,7 @@
     <div id="toast-container"></div>
 
     <!-- Entrada Principal JavaScript (ES Modules) -->
-    <script type="module" src="/js/app.js?v=1.9.2"></script>
+    <script type="module" src="/js/app.js?v=1.9.8"></script>
 </body>
 
 </html>

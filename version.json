@@ -1,7 +1,7 @@
 {
-  "version": "1.9.7",
-  "buildTime": 1790939000000,
-  "releaseDate": "2026-10-05",
-  "releaseNotes": "Carga real y precisa de reservaciones por rango de fechas en Firestore, eliminación de auditoría en vista de analítica para cero lecturas innecesarias v1.9.7",
+  "version": "1.9.8",
+  "buildTime": 1791440600000,
+  "releaseDate": "2026-10-08",
+  "releaseNotes": "Lanzamiento de la nueva identidad oficial RevelVO Play: Logotipo oficial 'R' cibernética, iconos PWA y diseño neón v1.9.8",
   "forceUpdate": false
 }

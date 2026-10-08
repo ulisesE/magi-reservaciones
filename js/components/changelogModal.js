@@ -584,7 +584,7 @@ export function openChangelogModal() {
     const footerHtml = `
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:10px;">
-                <small style="color:var(--text-muted); font-size:0.75rem;">Pump It Up Hub • v1.9.0</small>
+                <small style="color:var(--text-muted); font-size:0.75rem;"><span class="brand-revelvo-container" style="font-size:0.95em;"><span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">Play</span></span> • v1.9.7</small>
                 <button type="button" class="btn btn-outline btn-sm" id="btn-check-updates-changelog" style="font-size:0.75rem; padding:3px 8px;">
                     🔄 Buscar Actualizaciones
                 </button>

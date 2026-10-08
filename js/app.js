@@ -48,7 +48,7 @@ class App {
     }
 
     async init() {
-        console.log("🎮 Inicializando Pump It Up Hub v1.9.0 (Versus & Notifications)...");
+        console.log("🎮 Inicializando RevelVO Play v1.9.7...");
 
         // 1. Inicializar Gestor de Negocios (Zero-Read: Caché / Semillas)
         await tenantManager.init();
@@ -206,9 +206,9 @@ class App {
 
             // Actualizar título de la pestaña dinámicamente en el navegador
             if (activeBusiness && isLocalSelected) {
-                document.title = `${activeBusiness.name} • Pump It Up Hub`;
+                document.title = `${activeBusiness.name} • RevelVO Play`;
             } else {
-                document.title = "Pump It Up Hub • Sistema de Reservaciones de Maquinitas";
+                document.title = "RevelVO Play • Sistema de Reservaciones de Maquinitas";
             }
 
             if (!isLocalSelected && (!isSuperAdmin || currentView !== 'SUPERADMIN')) {

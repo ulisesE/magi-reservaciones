@@ -1,8 +1,8 @@
 // js/core/updateManager.js
-// Gestor Centralizado de Actualizaciones Forzadas y Control de Versión PWA — Pump It Up Hub (v1.9.0)
+// Gestor Centralizado de Actualizaciones Forzadas y Control de Versión PWA — RevelVO Play (v1.9.8)
 import { toast } from '../components/toast.js';
 
-export const CURRENT_APP_VERSION = '1.9.7';
+export const CURRENT_APP_VERSION = '1.9.8';
 
 class UpdateManager {
     constructor() {

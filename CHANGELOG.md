@@ -1,8 +1,20 @@
-# 📜 Registro de Cambios (Changelog) — Pump It Up Hub
+# 📜 Registro de Cambios (Changelog) — RevelVO Play
 
 Todos los cambios notables, mejoras y correcciones de este proyecto se documentan en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+
+---
+
+## [1.9.8] - 2026-10-08
+
+### 🚀 Identidad Oficial de Marca — RevelVO Play
+- **Lanzamiento de RevelVO Play**:
+  - Oficialización del nombre e identidad del sistema: **REVEL** (de Reveles), **VO** (de Evolución) y **Play** (videojuegos & arcade).
+  - Integración del nuevo logotipo oficial: diseño 3D cibernético de la "R" con halo luminiscente neón en tonos cyan y azul eléctrico.
+  - Paquete completo de iconos PWA generados en alta resolución: `logo.png` (1024x1024), `icon-512.png`, `icon-maskable.png`, `icon-192.png`, `apple-touch-icon.png` (180x180) y favicons en 64x64 y 32x32.
+  - Nuevo sistema tipográfico de acento neón: `REVEL` en Lima Neón (`#68F205`), `VO` en Cyan Neón (`#00F0FF`) y `Play` en blanco neón cursiva.
+  - Actualización integral de la plataforma: Splash screen animado, encabezado principal, pie de página, PWA Manifest, alertas push y caché de Service Worker.
 
 ---
 
