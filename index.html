@@ -3,167 +3,613 @@
 
 <head>
     <meta charset="UTF-8">
-    <base href="/">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RevelVO Play • La Plataforma Oficial de Reservaciones & Arcade</title>
     <meta name="description"
-        content="Sistema de gestión y reservación de maquinitas de baile Pump It Up (PIU) con vistas de Mes, Semana y Día (Grid Horas x Máquinas), perfiles de cliente y encargado, y soporte Multi-Negocio.">
+        content="Bienvenido a RevelVO Play (REVEL de Reveles, VO de Evolución, Play de videojuegos). Sistema oficial de reservaciones de maquinitas Pump It Up, arena Versus y pases digitales.">
     <meta name="theme-color" content="#080a0f">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="RevelVO Play">
-    <title>RevelVO Play • Sistema de Reservaciones de Maquinitas</title>
-    <meta property="og:title" content="RevelVO Play" />
-    <meta property="og:description" content="Sistema de Reservaciones de Maquinitas & Arcade" />
-    <meta property="og:image" content="https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=600" />
 
-    <!-- Web App Manifest (PWA) -->
-    <link rel="manifest" href="/manifest.json">
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
-    <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+    <!-- Redirección Automática opcional por Meta Refresh (6 segundos) -->
+    <meta http-equiv="refresh" content="7; url=https://magi-suite.web.app/">
 
-    <!-- Hojas de Estilo Cyberpunk / Arcade -->
-    <link rel="stylesheet" href="/css/styles.css">
-    <link rel="stylesheet" href="/css/components.css">
-    <link rel="stylesheet" href="/css/views.css">
-    <!-- QR Code Scanner Library -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <!-- Chart.js Library for Dashboard Analytics -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <!-- Favicons de la nueva identidad -->
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="icons/favicon-64.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
+    <!-- Open Graph / Redes Sociales -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://magi-suite.web.app/">
+    <meta property="og:title" content="RevelVO Play • Plataforma Oficial de Reservaciones & Arcade">
+    <meta property="og:description"
+        content="REVEL de Reveles, VO de Evolución, Play de Videojuegos. Descubre la plataforma arcade definitiva.">
+    <meta property="og:image" content="https://magi-suite.web.app/icons/logo.png">
+
+    <!-- Tipografía Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;600;700;800;900&family=Rajdhani:wght@600;700;800;900&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --brand-revel: #68F205;
+            --brand-revel-glow: rgba(104, 242, 5, 0.6);
+            --brand-vo: #00F0FF;
+            --brand-vo-glow: rgba(0, 240, 255, 0.6);
+            --brand-play: #FFFFFF;
+            --color-blue-deep: #023859;
+            --color-teal-obsidian: #011816;
+            --bg-base: #06090e;
+            --card-glass: rgba(10, 18, 28, 0.78);
+            --border-neon: rgba(0, 240, 255, 0.22);
+            --text-main: #f0fdf4;
+            --text-muted: #8ea6a0;
+            --font-head: 'Rajdhani', 'Outfit', sans-serif;
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            background-image:
+                radial-gradient(circle at 50% 15%, rgba(0, 240, 255, 0.12) 0%, transparent 60%),
+                radial-gradient(circle at 85% 80%, rgba(104, 242, 5, 0.08) 0%, transparent 50%),
+                linear-gradient(rgba(0, 240, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+            color: var(--text-main);
+            font-family: var(--font-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Ambient Glow Blobs */
+        .glow-orb {
+            position: absolute;
+            width: 450px;
+            height: 450px;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(120px);
+            z-index: 0;
+        }
+
+        .glow-orb-top {
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: radial-gradient(circle, rgba(0, 240, 255, 0.25) 0%, rgba(0, 102, 255, 0.1) 70%, transparent 100%);
+        }
+
+        .glow-orb-bottom {
+            bottom: -150px;
+            right: 10%;
+            background: radial-gradient(circle, rgba(104, 242, 5, 0.15) 0%, transparent 70%);
+        }
+
+        /* Top Navigation Header */
+        header {
+            position: relative;
+            z-index: 10;
+            padding: 20px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(16px);
+            background: rgba(6, 9, 14, 0.65);
+        }
+
+        .brand-logo-badge {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .brand-logo-img {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            object-fit: contain;
+            filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.6));
+            border: 1px solid rgba(0, 240, 255, 0.35);
+            background: #020912;
+            padding: 3px;
+        }
+
+        .brand-name {
+            font-family: var(--font-head);
+            font-size: 1.6rem;
+            font-weight: 900;
+            letter-spacing: 1px;
+            line-height: 1;
+        }
+
+        .brand-revel {
+            color: var(--brand-revel);
+            text-shadow: 0 0 14px var(--brand-revel-glow);
+            font-weight: 900;
+        }
+
+        .brand-vo {
+            color: var(--brand-vo);
+            text-shadow: 0 0 14px var(--brand-vo-glow);
+            font-weight: 900;
+        }
+
+        .brand-play {
+            color: var(--brand-play);
+            font-style: italic;
+            font-weight: 800;
+            letter-spacing: 2px;
+            margin-left: 4px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.76rem;
+            font-family: var(--font-mono);
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(104, 242, 5, 0.1);
+            border: 1px solid rgba(104, 242, 5, 0.35);
+            color: var(--brand-revel);
+            font-weight: 700;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--brand-revel);
+            box-shadow: 0 0 10px var(--brand-revel);
+            animation: pulse-dot 1.6s infinite ease-in-out;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.6; }
+        }
+
+        /* Hero Content */
+        main {
+            position: relative;
+            z-index: 5;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 48px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            flex: 1;
+            justify-content: center;
+        }
+
+        .hero-logo-large {
+            width: 150px;
+            height: 150px;
+            border-radius: 36px;
+            object-fit: contain;
+            margin-bottom: 24px;
+            filter: drop-shadow(0 0 35px rgba(0, 240, 255, 0.8)) drop-shadow(0 0 65px rgba(0, 102, 255, 0.45));
+            border: 2px solid rgba(0, 240, 255, 0.4);
+            animation: float 4s ease-in-out infinite alternate;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px) scale(1); }
+            100% { transform: translateY(-10px) scale(1.02); }
+        }
+
+        .hero-title-main {
+            font-family: var(--font-head);
+            font-size: clamp(3rem, 7vw, 4.8rem);
+            font-weight: 900;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            line-height: 1.05;
+            margin-bottom: 14px;
+        }
+
+        .hero-tagline {
+            font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+            color: #d1e7dd;
+            font-weight: 400;
+            max-width: 760px;
+            line-height: 1.5;
+            margin-bottom: 28px;
+        }
+
+        /* Identity Meaning Cards */
+        .identity-trio {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 36px;
+            width: 100%;
+            max-width: 880px;
+        }
+
+        .id-badge {
+            flex: 1;
+            min-width: 220px;
+            background: rgba(10, 22, 34, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 14px 18px;
+            backdrop-filter: blur(12px);
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            transition: transform 0.25s, border-color 0.25s;
+        }
+
+        .id-badge:hover {
+            transform: translateY(-3px);
+            border-color: rgba(0, 240, 255, 0.35);
+        }
+
+        .id-badge-head {
+            font-family: var(--font-head);
+            font-size: 1.25rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .id-desc {
+            font-size: 0.84rem;
+            color: var(--text-muted);
+            line-height: 1.35;
+        }
+
+        /* CTA Redirection Box */
+        .redirect-cta-box {
+            background: linear-gradient(135deg, rgba(2, 56, 89, 0.45) 0%, rgba(1, 24, 22, 0.65) 100%);
+            border: 2px solid rgba(0, 240, 255, 0.4);
+            border-radius: 24px;
+            padding: 32px 36px;
+            max-width: 680px;
+            width: 100%;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(0, 240, 255, 0.15);
+            backdrop-filter: blur(20px);
+        }
+
+        .btn-enter-platform {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            padding: 18px 28px;
+            font-family: var(--font-head);
+            font-size: 1.45rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-decoration: none;
+            color: #011816;
+            background: linear-gradient(135deg, #68F205 0%, #00F0FF 100%);
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.6), 0 4px 15px rgba(0, 0, 0, 0.4);
+            transition: all 0.25s ease;
+        }
+
+        .btn-enter-platform:hover {
+            transform: scale(1.025);
+            box-shadow: 0 0 35px rgba(104, 242, 5, 0.75), 0 0 50px rgba(0, 240, 255, 0.5);
+            color: #000;
+        }
+
+        .timer-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 18px;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .progress-bar-wrap {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 14px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #68F205, #00F0FF);
+            border-radius: 999px;
+            animation: drain 7s linear forwards;
+        }
+
+        @keyframes drain {
+            0% { width: 100%; }
+            100% { width: 0%; }
+        }
+
+        .btn-pause-redirect {
+            background: transparent;
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            color: var(--text-muted);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            transition: all 0.2s;
+        }
+
+        .btn-pause-redirect:hover {
+            color: #fff;
+            border-color: var(--brand-vo);
+        }
+
+        /* Features Section */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px;
+            width: 100%;
+            max-width: 1100px;
+            margin-bottom: 24px;
+        }
+
+        .feature-card {
+            background: var(--card-glass);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 18px;
+            padding: 24px;
+            text-align: left;
+            transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(0, 240, 255, 0.4);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 240, 255, 0.12);
+        }
+
+        .feat-icon {
+            font-size: 2.2rem;
+            margin-bottom: 12px;
+            display: inline-block;
+        }
+
+        .feat-title {
+            font-family: var(--font-head);
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .feat-desc {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+
+        /* Footer */
+        footer {
+            position: relative;
+            z-index: 10;
+            padding: 24px 32px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(6, 9, 14, 0.85);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+            font-size: 0.84rem;
+            color: var(--text-muted);
+        }
+
+        .footer-link {
+            color: var(--brand-vo);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+
+        .footer-link:hover {
+            color: var(--brand-revel);
+        }
+    </style>
 </head>
 
 <body>
-    <div id="app">
-        <!-- Barra de Encabezado Superior (Renderizada dinámicamente) -->
-        <div id="header-container"></div>
+    <!-- Fondos Lumínicos Neón -->
+    <div class="glow-orb glow-orb-top"></div>
+    <div class="glow-orb glow-orb-bottom"></div>
 
-        <!-- Contenedor Principal de Vistas -->
-        <main id="main-content" class="main-content-container" role="main">
-            <!-- Splash Screen Animado con la paleta de PIU Phoenix -->
-            <style>
-                @keyframes progress-sim {
-                    0% {
-                        left: -50%;
-                        width: 30%;
-                    }
+    <!-- Encabezado Superior -->
+    <header>
+        <a href="https://magi-suite.web.app/" class="brand-logo-badge" title="Ir a la App RevelVO Play">
+            <img src="icons/logo.png" alt="RevelVO Play Logo" class="brand-logo-img">
+            <div class="brand-name">
+                <span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">PLAY</span>
+            </div>
+        </a>
 
-                    50% {
-                        left: 30%;
-                        width: 60%;
-                    }
+        <div class="status-pill">
+            <span class="pulse-dot"></span>
+            <span>SERVIDOR ACTIVO EN FIREBASE</span>
+        </div>
+    </header>
 
-                    100% {
-                        left: 110%;
-                        width: 20%;
-                    }
-                }
+    <!-- Contenido Principal de Presentación -->
+    <main>
+        <!-- Logotipo Flotante 3D -->
+        <img src="icons/logo.png" alt="RevelVO Play" class="hero-logo-large">
 
-                @keyframes blink {
+        <!-- Título Monumental -->
+        <h1 class="hero-title-main">
+            <span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">PLAY</span>
+        </h1>
 
-                    0%,
-                    100% {
-                        opacity: 0;
-                    }
+        <p class="hero-tagline">
+            La plataforma arcade definitiva para gestión de salas, reservaciones de maquinitas de baile <strong>Pump It Up</strong>, arena <strong>Versus PVP</strong> y pases digitales.
+        </p>
 
-                    50% {
-                        opacity: 1;
-                    }
-                }
-
-                @keyframes blink-neon {
-                    0% {
-                        filter: drop-shadow(0 0 10px rgba(104, 242, 5, 0.4));
-                        opacity: 0.85;
-                    }
-
-                    100% {
-                        filter: drop-shadow(0 0 25px rgba(104, 242, 5, 0.9));
-                        opacity: 1;
-                    }
-                }
-
-                @keyframes pulse-neon {
-
-                    0%,
-                    100% {
-                        transform: scale(1);
-                        filter: drop-shadow(0 0 12px rgba(104, 242, 5, 0.3));
-                    }
-
-                    50% {
-                        transform: scale(1.03);
-                        filter: drop-shadow(0 0 22px rgba(195, 217, 30, 0.5));
-                    }
-                }
-            </style>
-
-            <div class="piu-splash-screen"
-                style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; text-align:center; padding: 40px 20px;">
-                <div class="splash-logo-container" style="position:relative; margin-bottom:20px;">
-                    <img src="/icons/logo.png" alt="RevelVO Play" 
-                        style="width: 120px; height: 120px; border-radius: 26px; object-fit: contain; filter: drop-shadow(0 0 25px rgba(0, 240, 255, 0.7)) drop-shadow(0 0 50px rgba(0, 102, 255, 0.45)); animation: pulse-neon 2.5s infinite ease-in-out;">
+        <!-- Desglose de la Identidad -->
+        <div class="identity-trio">
+            <div class="id-badge">
+                <div class="id-badge-head" style="color: var(--brand-revel);">
+                    <span>⚡ REVEL</span>
                 </div>
-
-                <h1 class="brand-revelvo-splash">
-                    <span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">PLAY</span>
-                </h1>
-
-                <p
-                    style="font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: #9bb7ad; letter-spacing: 3px; margin: 14px 0 24px 0; text-transform: uppercase;">
-                    INICIALIZANDO SISTEMA <span style="color:#68F205; animation: blink 0.8s infinite;">_</span>
-                </p>
-
-                <!-- Simulador de barra de carga arcade -->
-                <div
-                    style="width: 260px; height: 5px; background: rgba(1, 38, 35, 0.6); border: 1px solid rgba(104, 242, 5, 0.2); border-radius: 999px; overflow: hidden; position: relative; margin-bottom: 20px; box-shadow: 0 0 10px rgba(104,242,5,0.1);">
-                    <div
-                        style="position: absolute; left: 0; top: 0; height: 100%; width: 40%; background: linear-gradient(90deg, #088C4F, #68F205); border-radius: 999px; animation: progress-sim 1.8s infinite ease-in-out;">
-                    </div>
-                </div>
-
-                <div
-                    style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #52756a; display:flex; flex-direction:column; gap:4px; letter-spacing:1px;">
-                    <span>[CARGANDO MÓDULOS DEL MOTOR...]</span>
-                    <span style="color:#00F0FF;">SINCRONIZANDO CON EL SERVIDOR</span>
+                <div class="id-desc">
+                    De <strong>Reveles</strong>: La raíz, la pasión comunitaria y el compromiso con los jugadores.
                 </div>
             </div>
-        </main>
 
-        <!-- Pie de página con estado de conexión y novedades -->
-        <footer class="app-footer"
-            style="padding: 16px 24px; text-align: center; font-size: 0.78rem; color: var(--text-dimmed); border-top: 1px solid var(--border-color); background: var(--bg-dark-900);">
-            <div
-                style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                <div>
-                    <strong class="brand-revelvo-container"><span class="brand-revel">REVEL</span><span class="brand-vo">VO</span> <span class="brand-play">Play</span></strong> • © 2026 Todos los derechos reservados • Desarrollado por <a
-                        href="https://www.facebook.com/link149/" target="_blank" rel="noopener noreferrer"
-                        style="color: #68F205; text-decoration: none; font-weight: bold; border-bottom: 1px dashed rgba(104, 242, 5, 0.4); padding-bottom: 1px;">megajefelink</a>
+            <div class="id-badge">
+                <div class="id-badge-head" style="color: var(--brand-vo);">
+                    <span>🚀 VO</span>
                 </div>
-                <div class="footer-status-bar" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <!-- Estado de Conexión a Firestore (Reubicado desde el Header) -->
-                    <div id="footer-network-status" class="network-status-badge online" style="display: flex; align-items: center; gap: 6px; font-size: 0.72rem; padding: 4px 10px; border-radius: 12px; background: rgba(104,242,5,0.1); border: 1px solid rgba(104,242,5,0.3); color: var(--color-neon-lime); font-weight: 700;" title="Conectado en tiempo real a Firebase / Firestore">
-                        <span class="status-indicator-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #68F205; box-shadow: 0 0 8px #68F205;"></span>
-                        <span class="network-status-text">Conectado a Firestore</span>
-                    </div>
-
-                    <!-- Botón Novedades y Versión (Reubicado desde el Header) -->
-                    <button type="button" id="btn-open-changelog-footer" class="btn-open-changelog-footer" style="background: rgba(104,242,5,0.12); color: var(--color-neon-lime); border: 1px solid rgba(104,242,5,0.3); border-radius: var(--radius-full); font-size: 0.72rem; padding: 4px 10px; font-weight: 700; cursor: pointer; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s;" title="Ver novedades de la versión v1.9.8">
-                        <span>📜 v1.9.8 Novedades</span>
-                    </button>
+                <div class="id-desc">
+                    De <strong>Evolución</strong>: Tecnología en tiempo real, cero lecturas innecesarias y velocidad PWA.
                 </div>
             </div>
-        </footer>
-    </div>
 
-    <!-- Modales y Notificaciones Toast -->
-    <div id="modal-root"></div>
-    <div id="toast-container"></div>
+            <div class="id-badge">
+                <div class="id-badge-head" style="color: #ffffff;">
+                    <span>🎮 PLAY</span>
+                </div>
+                <div class="id-desc">
+                    De <strong>Videojuegos</strong>: Retas Versus, torneos, rankings y la experiencia arcade integral.
+                </div>
+            </div>
+        </div>
 
-    <!-- Entrada Principal JavaScript (ES Modules) -->
-    <script type="module" src="/js/app.js?v=1.9.8"></script>
+        <!-- Caja de Redirección y Acceso Inmediato -->
+        <div class="redirect-cta-box">
+            <a href="https://magi-suite.web.app/" class="btn-enter-platform" id="btn-enter" title="Entrar a RevelVO Play en magi-suite.web.app">
+                <span>🚀 ENTRAR A REVELVO PLAY</span>
+                <span>➔</span>
+            </a>
+
+            <div class="timer-info">
+                <span>Redirigiendo a <strong>magi-suite.web.app</strong> en <strong id="countdown-text" style="color:var(--brand-vo); font-size:1.05rem;">7</strong>s...</span>
+                <button type="button" class="btn-pause-redirect" id="btn-pause" title="Detener cuenta regresiva">⏸️ Pausar</button>
+            </div>
+
+            <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" id="progress-bar"></div>
+            </div>
+        </div>
+
+        <!-- Módulos y Capacidades del Sistema -->
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feat-icon">📅</div>
+                <h3 class="feat-title">Reservaciones de Maquinitas</h3>
+                <p class="feat-desc">Aparta turnos y máquinas en tiempo real por fecha y hora con sincronización directa en la nube.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feat-icon">⚔️</div>
+                <h3 class="feat-title">Arena Versus PVP</h3>
+                <p class="feat-desc">Busca retadores, desafía a duelos directos por ligas y registra victorias y puntajes oficiales.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feat-icon">🪪</div>
+                <h3 class="feat-title">Pase Digital QR</h3>
+                <p class="feat-desc">Credencial de jugador con lector de código QR para check-in instantáneo y registro de visitas.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feat-icon">🏢</div>
+                <h3 class="feat-title">Ecosistema Multi-Local</h3>
+                <p class="feat-desc">Soporte centralizado para múltiples sucursales: Sky Games, Eugenia Games, Nieves Games y más.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Pie de Página -->
+    <footer>
+        <div>
+            <strong>RevelVO Play</strong> • © 2026 Todos los derechos reservados • Desarrollado por <a href="https://www.facebook.com/link149/" target="_blank" rel="noopener noreferrer" style="color:var(--brand-revel); text-decoration:none; font-weight:bold;">megajefelink</a>
+        </div>
+        <div>
+            Servidor Oficial: <a href="https://magi-suite.web.app/" class="footer-link">magi-suite.web.app</a>
+        </div>
+    </footer>
+
+    <!-- Script de Cuenta Regresiva y Redirección -->
+    <script>
+        (function () {
+            const targetUrl = "https://magi-suite.web.app/";
+            let secondsLeft = 7;
+            let isPaused = false;
+            const countdownEl = document.getElementById("countdown-text");
+            const btnPause = document.getElementById("btn-pause");
+            const progressBar = document.getElementById("progress-bar");
+
+            const interval = setInterval(function () {
+                if (isPaused) return;
+
+                secondsLeft--;
+                if (countdownEl) {
+                    countdownEl.textContent = secondsLeft;
+                }
+
+                if (secondsLeft <= 0) {
+                    clearInterval(interval);
+                    window.location.href = targetUrl;
+                }
+            }, 1000);
+
+            if (btnPause) {
+                btnPause.addEventListener("click", function () {
+                    isPaused = !isPaused;
+                    if (isPaused) {
+                        btnPause.textContent = "▶️ Reanudar";
+                        btnPause.style.borderColor = "var(--brand-revel)";
+                        btnPause.style.color = "var(--brand-revel)";
+                        if (progressBar) progressBar.style.animationPlayState = "paused";
+                    } else {
+                        btnPause.textContent = "⏸️ Pausar";
+                        btnPause.style.borderColor = "rgba(255, 255, 255, 0.2)";
+                        btnPause.style.color = "var(--text-muted)";
+                        if (progressBar) progressBar.style.animationPlayState = "running";
+                    }
+                });
+            }
+        })();
+    </script>
 </body>
 
 </html>
