@@ -1,5 +1,5 @@
-// Service Worker PWA & Notificaciones — RevelVO Play (v1.9.8)
-const CACHE_NAME = 'revelvo-play-pwa-v1.9.8';
+// Service Worker PWA & Notificaciones — RevelVO Play (v1.9.9)
+const CACHE_NAME = 'revelvo-play-pwa-v1.9.9';
 
 const PRECACHE_ASSETS = [
     '/',

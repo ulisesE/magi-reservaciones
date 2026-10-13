@@ -23,7 +23,7 @@ import {
 } from '../firebaseConfig.js';
 import { tenantManager } from './tenantManager.js';
 import { authManager } from './authManager.js';
-import { formatDateKey, isOverlapping, getBusinessHoursForDate, calculateBookingCost, isReservationPast } from './timeUtils.js';
+import { formatDateKey, isOverlapping, getBusinessHoursForDate, calculateBookingCost, isReservationPast, getCurrentMonthRange } from './timeUtils.js';
 import { loyaltyManager } from './loyaltyManager.js';
 import { auditLogger, AUDIT_ACTIONS } from './auditLogger.js';
 import { handleAppError, assertFinancialOnline } from './errorHandler.js';
@@ -462,14 +462,16 @@ class Store {
                 loadedFromFirestore = true;
             }
 
-            // B. Reservaciones: Suscribirse con onSnapshot DIRECTO (sin getDocs previo para evitar doble cobro)
-            const todayStr = this.selectedDate || formatDateKey(new Date());
-            this.currentSubscriptionRange = { start: todayStr, end: todayStr };
+            // B. Reservaciones: Suscribirse con onSnapshot DIRECTO al MES EN CURSO (evita cargar históricos y evita re-suscripciones constantes)
+            const targetDate = this.selectedDate || formatDateKey(new Date());
+            const monthRange = getCurrentMonthRange(targetDate);
+            this.currentSubscriptionRange = { start: monthRange.startDate, end: monthRange.endDate };
 
             const resQuery = query(
                 collection(db, COLLECTIONS.RESERVATIONS),
                 where("businessId", "==", bizId),
-                where("date", "==", todayStr)
+                where("date", ">=", monthRange.startDate),
+                where("date", "<=", monthRange.endDate)
             );
 
             this.unsubscribeReservations = onSnapshot(resQuery, (snapshot) => {
@@ -482,7 +484,7 @@ class Store {
                 this.notify();
             }, (error) => {
                 if (error?.code === 'resource-exhausted') markQuotaExhausted();
-                console.warn('Error en listener de reservas:', error);
+                console.warn('Error en listener de reservas del mes:', error);
             });
 
             // C. Solicitudes PENDING: Solo para Encargados y Staff
@@ -562,32 +564,36 @@ class Store {
 
     updateReservationsSubscription(startDateStr, endDateStr) {
         if (!isFirebaseAvailable || !db || !this.currentBusiness) return;
-        if (this.currentSubscriptionRange?.start === startDateStr && this.currentSubscriptionRange?.end === endDateStr) {
-            return; // Rango sin cambios
-        }
         
-        this.currentSubscriptionRange = { start: startDateStr, end: endDateStr };
+        // 1. Si el rango pedido está completamente comprendido dentro de la suscripción activa (ej. un día o semana dentro del mes cargado),
+        // evitamos recrear el listener: CERO lecturas adicionales a Firestore y visualización instantánea.
+        if (this.currentSubscriptionRange && 
+            this.currentSubscriptionRange.start <= startDateStr && 
+            this.currentSubscriptionRange.end >= endDateStr) {
+            return;
+        }
+
+        // 2. Si el usuario navegó a otro mes o rango exterior, calculamos el rango mensual correspondiente
+        const targetMonthRange = getCurrentMonthRange(startDateStr);
+        const subStart = startDateStr < targetMonthRange.startDate ? startDateStr : targetMonthRange.startDate;
+        const subEnd = endDateStr > targetMonthRange.endDate ? endDateStr : targetMonthRange.endDate;
+
+        if (this.currentSubscriptionRange?.start === subStart && this.currentSubscriptionRange?.end === subEnd) {
+            return;
+        }
+
+        this.currentSubscriptionRange = { start: subStart, end: subEnd };
         const bizId = this.currentBusiness.id;
         
         this.unsubscribeReservations?.();
         this.unsubscribeReservations = null;
 
-        let q;
-        if (startDateStr === endDateStr) {
-            q = query(
-                collection(db, COLLECTIONS.RESERVATIONS), 
-                where("businessId", "==", bizId),
-                where("date", "==", startDateStr)
-            );
-        } else {
-            // Rango de fechas: filtramos por local e intervalo de fechas en Firestore
-            q = query(
-                collection(db, COLLECTIONS.RESERVATIONS), 
-                where("businessId", "==", bizId),
-                where("date", ">=", startDateStr),
-                where("date", "<=", endDateStr)
-            );
-        }
+        const q = query(
+            collection(db, COLLECTIONS.RESERVATIONS), 
+            where("businessId", "==", bizId),
+            where("date", ">=", subStart),
+            where("date", "<=", subEnd)
+        );
 
         this.unsubscribeReservations = onSnapshot(q, (snapshot) => {
             const realtimeRes = [];
@@ -597,7 +603,7 @@ class Store {
             this.reservations = realtimeRes;
             this.saveLocalReservations(bizId, realtimeRes);
             this.notify();
-        }, (error) => console.warn('Error de sincronización de reservas por rango:', error));
+        }, (error) => console.warn('Error de sincronización de reservas por rango mensual:', error));
     }
 
     async loadReservationsForTray(force = false) {
@@ -622,18 +628,29 @@ class Store {
             let loaded = [];
             if (isFirebaseAvailable && db && canMakeFirestoreRead()) {
                 try {
-                    // Cargar hasta 250 reservaciones del local sin ordenar en firestore para evitar requerir índices compuestos
+                    // Cargar exclusivamente reservaciones del mes en curso para evitar traer históricos pesados
+                    const monthRange = getCurrentMonthRange(this.selectedDate || new Date());
                     const q = query(
                         collection(db, COLLECTIONS.RESERVATIONS),
                         where("businessId", "==", bizId),
-                        limit(250)
+                        where("date", ">=", monthRange.startDate),
+                        where("date", "<=", monthRange.endDate)
                     );
                     const snap = await getDocs(q);
                     snap.forEach(d => loaded.push({ id: d.id, ...d.data() }));
                 } catch (err) {
                     if (err?.code === 'resource-exhausted') markQuotaExhausted();
-                    console.warn("Error cargando bandeja de reservas de Firestore, usando local:", err);
+                    console.warn("Error cargando bandeja de reservas del mes en Firestore, usando local:", err);
                 }
+            }
+
+            // Fusionar con solicitudes pendientes (las pendientes siempre deben estar visibles sin importar la fecha)
+            if (this.pendingReservations && this.pendingReservations.length > 0) {
+                this.pendingReservations.forEach(r => {
+                    if (r.businessId === bizId && !loaded.some(item => item.id === r.id)) {
+                        loaded.push(r);
+                    }
+                });
             }
 
             // Fusionar con reservaciones en memoria local
@@ -822,7 +839,26 @@ class Store {
         const biz = (tenantManager.getBusinessById && bizId) ? (tenantManager.getBusinessById(bizId) || this.currentBusiness) : this.currentBusiness;
         const { openingTime, closingTime } = getBusinessHoursForDate(biz, date);
 
-        // 1. Consultar directamente en Firestore sobre COLLECTIONS.RESERVATIONS (fuente autoritativa real)
+        // 1. Candado Optimizado Zero-Read: Si la fecha está dentro de la suscripción activa en tiempo real,
+        // la memoria reactiva del store ya contiene exactamente todas las reservaciones actualizadas por onSnapshot.
+        const isDateSubscribed = this.reservations && this.currentSubscriptionRange &&
+            this.currentSubscriptionRange.start <= date && this.currentSubscriptionRange.end >= date;
+
+        if (isDateSubscribed) {
+            this.reservations.forEach(r => {
+                if (excludeReservationId && r.id === excludeReservationId) return;
+                if (r.businessId !== bizId || r.machineId !== machineId || r.date !== date) return;
+                if (r.status === 'CANCELLED' || r.status === 'REJECTED') return;
+                if (onlyConfirmed && r.status !== 'CONFIRMED') return;
+
+                if (isOverlapping(startTime, endTime, r.startTime, r.endTime, openingTime, closingTime)) {
+                    conflicts.push(r);
+                }
+            });
+            return conflicts;
+        }
+
+        // 2. Si no estaba en memoria (fecha fuera del rango suscrito), consultar directamente en Firestore
         if (isFirebaseAvailable && db && bizId) {
             try {
                 let snap = null;

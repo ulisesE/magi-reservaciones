@@ -29,6 +29,26 @@ export function formatDateKey(date) {
 }
 
 /**
+ * Retorna el rango de fechas [inicio, fin] del mes en curso correspondiente a una fecha de referencia
+ * Formato: { startDate: 'YYYY-MM-01', endDate: 'YYYY-MM-DD', year: 2026, month: 10 }
+ */
+export function getCurrentMonthRange(refDate = new Date()) {
+    let d;
+    if (typeof refDate === 'string') {
+        const parts = refDate.split('-').map(Number);
+        d = new Date(parts[0], parts[1] - 1, parts[2] || 1);
+    } else {
+        d = new Date(refDate);
+    }
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    return { startDate, endDate, year, month: month + 1 };
+}
+
+/**
  * Formatea una fecha a formato legible en español (ej. 'Miércoles, 12 de Agosto de 2026')
  */
 export function formatFriendlyDate(dateStr) {

@@ -1,8 +1,8 @@
 // js/core/updateManager.js
-// Gestor Centralizado de Actualizaciones Forzadas y Control de Versión PWA — RevelVO Play (v1.9.8)
+// Gestor Centralizado de Actualizaciones Forzadas y Control de Versión PWA — RevelVO Play (v1.9.9)
 import { toast } from '../components/toast.js';
 
-export const CURRENT_APP_VERSION = '1.9.8';
+export const CURRENT_APP_VERSION = '1.9.9';
 
 class UpdateManager {
     constructor() {

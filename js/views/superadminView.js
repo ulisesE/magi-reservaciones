@@ -20,7 +20,7 @@ import {
     limit,
     where 
 } from '../firebaseConfig.js';
-import { formatFriendlyDate, format12Hour } from '../core/timeUtils.js';
+import { formatFriendlyDate, format12Hour, getCurrentMonthRange } from '../core/timeUtils.js';
 import { showReservationTicket } from './clientBookingModal.js';
 import { openModifyModal } from './requestsView.js';
 
@@ -50,11 +50,14 @@ export async function renderSuperadminView(container) {
     const totalBusinesses = businesses.length;
 
     let globalReservations = cachedGlobalReservations || [];
-    // Carga perezosa (Lazy Load): Solo consultar reservaciones si el superadmin está en la pestaña RESERVATIONS
+    // Carga perezosa (Lazy Load): Solo consultar reservaciones del mes en curso si el superadmin está en la pestaña RESERVATIONS
     if (activeSuperTab === 'RESERVATIONS' && !cachedGlobalReservations && isFirebaseAvailable && db) {
         try {
+            const currentMonth = getCurrentMonthRange();
             const q = query(
                 collection(db, COLLECTIONS.RESERVATIONS),
+                where("date", ">=", currentMonth.startDate),
+                where("date", "<=", currentMonth.endDate),
                 limit(150)
             );
             const snap = await getDocs(q);
@@ -62,7 +65,16 @@ export async function renderSuperadminView(container) {
             snap.forEach(d => globalReservations.push({ id: d.id, ...d.data() }));
             cachedGlobalReservations = globalReservations;
         } catch(e) {
-            console.warn("Error cargando reservaciones globales:", e);
+            console.warn("Error cargando reservaciones globales del mes en curso:", e);
+            try {
+                const fallbackQ = query(collection(db, COLLECTIONS.RESERVATIONS), limit(50));
+                const snap = await getDocs(fallbackQ);
+                globalReservations = [];
+                snap.forEach(d => globalReservations.push({ id: d.id, ...d.data() }));
+                cachedGlobalReservations = globalReservations;
+            } catch(e2) {
+                console.warn("Fallback de reservaciones globales también falló:", e2);
+            }
         }
     }
     globalReservations.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));

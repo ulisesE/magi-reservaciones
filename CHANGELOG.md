@@ -6,6 +6,21 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.9.9] - 2026-10-12
+
+### ⚡ Optimización de Firestore y Sincronización Exclusiva del Mes en Curso
+- **Carga Exclusiva del Mes en Curso (Anti-Históricos)**:
+  - Las suscripciones reactivas (`onSnapshot`) de reservaciones ahora se limitan por defecto al mes en curso (`where("date", ">=", startDate)`, `where("date", "<=", endDate)`), impidiendo la descarga de historiales de meses pasados y reduciendo drásticamente la factura de lecturas en Firestore.
+  - Reutilización inteligente de listeners: Cambiar de día, alternar a la vista semanal o ver el calendario dentro del mismo mes ya no destruye ni recrea el escucha, reutilizando la memoria reactiva local con 0 lecturas adicionales a Firestore.
+  - Al cambiar de mes, la consulta se expande de forma controlada únicamente para el mes seleccionado.
+- **Bandeja de Solicitudes y Consola Global Optimizadas**:
+  - `loadReservationsForTray()` ahora consulta exclusivamente el mes en curso en Firestore, fusionando en memoria las solicitudes `PENDING` para que el personal nunca pierda de vista solicitudes pendientes fuera del mes.
+  - La consola de Superadministrador en la pestaña de reservaciones globales filtra por el rango del mes en curso con límite defensivo de 150 documentos.
+- **Candado de Conflictos Fast-Path Zero-Read**:
+  - `getAuthoritativeConflicts()` verifica en primer lugar si la fecha solicitada ya está cubierta por la suscripción en memoria en tiempo real, omitiendo peticiones de red `getDocs` innecesarias y manteniendo al mismo tiempo la validación atómica en `runTransaction`.
+
+---
+
 ## [1.9.8] - 2026-10-08
 
 ### 🚀 Identidad Oficial de Marca — RevelVO Play

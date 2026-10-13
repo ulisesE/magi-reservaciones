@@ -1,7 +1,7 @@
 {
-  "version": "1.9.8",
-  "buildTime": 1791440600000,
-  "releaseDate": "2026-10-08",
-  "releaseNotes": "Lanzamiento de la nueva identidad oficial RevelVO Play: Logotipo oficial 'R' cibernética, iconos PWA y diseño neón v1.9.8",
+  "version": "1.9.9",
+  "buildTime": 1791800000000,
+  "releaseDate": "2026-10-12",
+  "releaseNotes": "Optimización integral de consumo Firestore: Suscripción reactiva exclusiva al mes en curso, blindaje contra lecturas de históricos antiguos y fast-path de conflictos en memoria.",
   "forceUpdate": false
 }

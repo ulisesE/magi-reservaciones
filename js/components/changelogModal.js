@@ -5,10 +5,51 @@ import { updateManager } from '../core/updateManager.js';
 
 export const CHANGELOG_DATA = [
     {
+        version: 'v1.9.9',
+        date: '12 de Octubre de 2026',
+        badge: '🚀 Versión Actual (Carga Exclusiva del Mes en Curso & Escudo Anti-Históricos)',
+        isCurrent: true,
+        highlights: [
+            {
+                title: '🗓️ Sincronización Exclusiva del Mes en Curso',
+                icon: '⚡',
+                items: [
+                    'El sistema ahora solo consulta y suscribe las reservaciones del mes en curso, blindando a la app de descargar históricos de meses o años pasados.',
+                    'Navegar entre días o vistas semanal/mensual del mismo mes reutiliza la memoria reactiva local con 0 lecturas adicionales a Firestore.',
+                    'La bandeja de solicitudes de staff y la consola global de superadministrador se limitan automáticamente al mes en curso preservando siempre solicitudes pendientes.'
+                ]
+            },
+            {
+                title: '🛡️ Candado de Conflictos Fast-Path Zero-Read',
+                icon: '🔒',
+                items: [
+                    'Al aprobar o validar reservas en fechas ya cubiertas por el mes activo, el sistema comprueba solapamientos directamente en memoria sin realizar peticiones de red redundantes.',
+                    'Se mantiene la validación atómica en runTransaction protegiendo contra doble reserva concurrente.'
+                ]
+            }
+        ]
+    },
+    {
+        version: 'v1.9.8',
+        date: '8 de Octubre de 2026',
+        badge: 'Identidad Oficial de Marca — RevelVO Play',
+        isCurrent: false,
+        highlights: [
+            {
+                title: '🎮 Marca e Identidad RevelVO Play',
+                icon: '✨',
+                items: [
+                    'Oficialización de RevelVO Play con nueva paleta neón lima y cyan.',
+                    'Logotipo cibernético 3D y suite completa de iconos PWA de alta definición.'
+                ]
+            }
+        ]
+    },
+    {
         version: 'v1.9.7',
         date: '5 de Octubre de 2026',
-        badge: '🚀 Versión Actual (Carga Precisa por Rango de Fechas & Cero Lecturas Innecesarias)',
-        isCurrent: true,
+        badge: 'Carga Precisa por Rango de Fechas & Cero Lecturas Innecesarias',
+        isCurrent: false,
         highlights: [
             {
                 title: '📅 Consulta Directa por Rango de Fechas en Analítica',
