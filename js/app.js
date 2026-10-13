@@ -25,7 +25,7 @@ import { renderDownloadAppView } from './views/downloadAppView.js';
 import { notificationManager } from './core/notificationManager.js';
 import { pwaManager } from './core/pwaManager.js';
 import { openChangelogModal } from './components/changelogModal.js';
-import { updateManager } from './core/updateManager.js';
+import { updateManager, CURRENT_APP_VERSION } from './core/updateManager.js';
 import { isFirebaseAvailable, isQuotaExhausted, canMakeFirestoreRead, onReadCountChange, getTotalSessionReads } from './firebaseConfig.js';
 import './core/financialTests.js';
 
@@ -48,7 +48,7 @@ class App {
     }
 
     async init() {
-        console.log("🎮 Inicializando RevelVO Play v1.9.7...");
+        console.log(`🎮 Inicializando RevelVO Play v${CURRENT_APP_VERSION}...`);
 
         // 1. Inicializar Gestor de Negocios (Zero-Read: Caché / Semillas)
         await tenantManager.init();
@@ -164,12 +164,12 @@ class App {
             } else if (isFirebaseAvailable) {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#68F205; box-shadow: 0 0 8px #68F205;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Conexión Segura (v1.9.0${readPill} • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Conexión Segura (v${CURRENT_APP_VERSION}${readPill} • Novedades 📜)</span>
                 `;
             } else {
                 this.syncStatusEl.innerHTML = `
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#C3D91E; box-shadow: 0 0 8px #C3D91E;"></span>
-                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Modo Local (v1.9.0${readPill} • Novedades 📜)</span>
+                    <span style="color:var(--text-muted); border-bottom: 1px dotted rgba(255,255,255,0.3); cursor:pointer;">Modo Local (v${CURRENT_APP_VERSION}${readPill} • Novedades 📜)</span>
                 `;
             }
         }

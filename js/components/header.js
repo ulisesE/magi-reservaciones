@@ -10,7 +10,7 @@ import { toast } from './toast.js';
 import { navShortcutsManager } from '../core/navShortcutsManager.js';
 import { notificationManager } from '../core/notificationManager.js';
 import { pwaManager } from '../core/pwaManager.js';
-import { updateManager } from '../core/updateManager.js';
+import { updateManager, CURRENT_APP_VERSION } from '../core/updateManager.js';
 
 export function renderHeader(container) {
     const isLocalSelected = tenantManager.isLocalSelected;
@@ -201,7 +201,7 @@ export function renderHeader(container) {
                                 <button class="dropdown-item btn-open-changelog-menu" type="button">
                                     <span class="item-icon">📜</span>
                                     <div class="item-info">
-                                        <strong>Novedades (v1.9.0)</strong>
+                                        <strong>Novedades (v${CURRENT_APP_VERSION})</strong>
                                         <small>Ver registro de cambios</small>
                                     </div>
                                 </button>
